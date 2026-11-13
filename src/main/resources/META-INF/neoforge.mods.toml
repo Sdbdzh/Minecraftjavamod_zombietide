@@ -1,0 +1,26 @@
+# 1.21.1 (NeoForge 21.1.x) must explicitly declare modLoader / loaderVersion; license is required.
+# Placeholders are expanded by build.gradle processResources at build time (values from gradle.properties).
+# Note: do not write "dollar+brace" example text in this file, it will be evaluated as an expression by the Groovy template engine and fail the build.
+modLoader="javafml"
+loaderVersion="[1,)"
+mixins = [
+  "enik_zombietide.mixins"
+]
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+authors="${mod_authors}"
+description="${mod_description}"
+
+[[dependencies.${mod_id}]]
+modId="neoforge"
+versionRange="${neo_version_range}"
+mandatory=true
+
+[[dependencies.${mod_id}]]
+modId="minecraft"
+versionRange="${minecraft_version_range}"
+mandatory=true

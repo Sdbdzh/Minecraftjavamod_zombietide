@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.enik.zombietide.mixin",
+  "mixins": [
+    "DaylightBurnMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
