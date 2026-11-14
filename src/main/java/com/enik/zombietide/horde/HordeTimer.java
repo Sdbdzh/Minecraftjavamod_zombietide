@@ -259,7 +259,7 @@ public class HordeTimer {
             // 触发尸潮
             int hordeSize = config.playerCount();
             if (config.playerCountRandom()) {
-                hordeSize = config.playerCountMin() + new java.util.Random().nextInt(config.playerCountMax() - config.playerCountMin() + 1);
+                hordeSize = HordeSpawner.rollHordeSize(config.playerCountMin(), config.playerCountMax());
             }
             int totalHorde = hordeSize + hordeData.bloodDebt();
 
@@ -319,7 +319,7 @@ public class HordeTimer {
 
             int hordeSize = config.villagerCount();
             if (config.villagerCountRandom()) {
-                hordeSize = config.villagerCountMin() + new java.util.Random().nextInt(config.villagerCountMax() - config.villagerCountMin() + 1);
+                hordeSize = HordeSpawner.rollHordeSize(config.villagerCountMin(), config.villagerCountMax());
             }
 
             EnikZombietide.LOGGER.info("checkVillagerHordes: 触发村民 {} 尸潮 modDay={} interval={} hordeSize={}",
@@ -436,7 +436,7 @@ public class HordeTimer {
 
             int hordeSize = config.playerCount();
             if (config.playerCountRandom()) {
-                hordeSize = config.playerCountMin() + new java.util.Random().nextInt(config.playerCountMax() - config.playerCountMin() + 1);
+                hordeSize = HordeSpawner.rollHordeSize(config.playerCountMin(), config.playerCountMax());
             }
             int totalHorde = hordeSize + hordeData.bloodDebt();
 
@@ -481,7 +481,7 @@ public class HordeTimer {
 
             int hordeSize = config.villagerCount();
             if (config.villagerCountRandom()) {
-                hordeSize = config.villagerCountMin() + new java.util.Random().nextInt(config.villagerCountMax() - config.villagerCountMin() + 1);
+                hordeSize = HordeSpawner.rollHordeSize(config.villagerCountMin(), config.villagerCountMax());
             }
 
             VillagerScheduleData.ScheduleEntry newSched = new VillagerScheduleData.ScheduleEntry(
@@ -528,7 +528,7 @@ public class HordeTimer {
 
             int hordeSize = config.playerCount();
             if (config.playerCountRandom()) {
-                hordeSize = config.playerCountMin() + new java.util.Random().nextInt(config.playerCountMax() - config.playerCountMin() + 1);
+                hordeSize = HordeSpawner.rollHordeSize(config.playerCountMin(), config.playerCountMax());
             }
             int totalHorde = hordeSize + hordeData.bloodDebt();
 
@@ -572,7 +572,7 @@ public class HordeTimer {
 
             int hordeSize = config.villagerCount();
             if (config.villagerCountRandom()) {
-                hordeSize = config.villagerCountMin() + new java.util.Random().nextInt(config.villagerCountMax() - config.villagerCountMin() + 1);
+                hordeSize = HordeSpawner.rollHordeSize(config.villagerCountMin(), config.villagerCountMax());
             }
 
             VillagerScheduleData.ScheduleEntry newSched = new VillagerScheduleData.ScheduleEntry(

@@ -22,7 +22,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.Villager;
 
-import java.util.Random;
 import java.util.List;
 import java.util.UUID;
 import java.util.Collection;
@@ -142,12 +141,13 @@ public class ZombietideCommands {
                 PlayerHordeData data = ModAttachments.getPlayerHordeData(player);
                 int hordeSize = config.playerCount();
                 if (config.playerCountRandom()) {
-                    hordeSize = config.playerCountMin() + new Random().nextInt(config.playerCountMax() - config.playerCountMin() + 1);
+                    hordeSize = HordeSpawner.rollHordeSize(config.playerCountMin(), config.playerCountMax());
                 }
                 int totalHorde = hordeSize + data.bloodDebt();
 
+                // 血债已并入 totalHorde，这里必须清零，否则结算时会重复计债（与常规触发一致）
                 player.setData(ModAttachments.PLAYER_HORDE.get(),
-                        new PlayerHordeData(data.modDay(), data.modDay(), data.bloodDebt(), data.waveCount() + 1, true));
+                        new PlayerHordeData(data.modDay(), data.modDay(), 0, data.waveCount() + 1, true));
 
                 HordeWarning.triggerPlayerHorde(player.serverLevel(), player, config);
                 HordeSpawner.startHorde(player.serverLevel(), player.getUUID(), player, totalHorde, config, false, config.playerRadius());
@@ -168,12 +168,19 @@ public class ZombietideCommands {
                 VillagerHordeData data = ModAttachments.getVillagerHordeData(villager);
                 int actualHordeSize = config.villagerCount();
                 if (config.villagerCountRandom()) {
-                    actualHordeSize = config.villagerCountMin() + new Random().nextInt(config.villagerCountMax() - config.villagerCountMin() + 1);
+                    actualHordeSize = HordeSpawner.rollHordeSize(config.villagerCountMin(), config.villagerCountMax());
                 }
                 final int finalHordeSize = actualHordeSize;
 
                 villager.setData(ModAttachments.VILLAGER_HORDE.get(),
                         new VillagerHordeData(data.modDay(), data.modDay(), data.waveCount() + 1, true));
+                // 同步权威调度表：HUD / 对账 / 区块重载都以调度表为准。
+                // 不写调度表的话，调试触发的村民尸潮会被 reconcileStaleWaves 当成孤儿在 2 秒内清掉。
+                var schedule = villagerLevel.getDataStorage().computeIfAbsent(
+                        com.enik.zombietide.config.VillagerScheduleData.FACTORY,
+                        com.enik.zombietide.config.VillagerScheduleData.ID);
+                schedule.put(villager.getUUID(), new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
+                        data.modDay(), data.modDay(), data.waveCount() + 1, true));
 
                 HordeWarning.triggerVillagerHorde(villagerLevel, villager, config);
                 HordeSpawner.startHorde(villagerLevel, villager.getUUID(), villager, actualHordeSize, config, true, config.villagerRadius());

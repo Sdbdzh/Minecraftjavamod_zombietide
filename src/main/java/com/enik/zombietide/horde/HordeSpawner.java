@@ -86,6 +86,16 @@ public class HordeSpawner {
     private static final Set<UUID> pendingDebtSettle = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     /**
+     * 随机尸潮数量：对 min/max 做容错（配置可能被改成 min > max）。
+     * 直接 {@code nextInt(max-min+1)} 在 max&lt;min 时会抛 IllegalArgumentException 导致服务端崩溃。
+     */
+    public static int rollHordeSize(int min, int max) {
+        int lo = Math.min(min, max);
+        int hi = Math.max(min, max);
+        return lo + RANDOM.nextInt(hi - lo + 1);
+    }
+
+    /**
      * 启动一场尸潮。
      * @param level 服务器端世界
      * @param targetId 触发尸潮的目标 UUID
