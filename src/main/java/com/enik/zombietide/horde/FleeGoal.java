@@ -33,7 +33,7 @@ public class FleeGoal extends Goal {
         int state = tag.getInt("zombietide_state");
         // 忽略创造/旁观模式玩家
         if (target instanceof Player player) {
-            if (player.getAbilities().mayBuild || !player.isAlive()) return false;
+            if (player.isCreative() || player.isSpectator() || !player.isAlive()) return false;
         }
         return state == 1 && target != null && target.isAlive();
     }
@@ -70,7 +70,7 @@ public class FleeGoal extends Goal {
         int state = tag.getInt("zombietide_state");
         // 忽略创造/旁观模式玩家
         if (target instanceof Player player) {
-            if (player.getAbilities().mayBuild || !player.isAlive()) return false;
+            if (player.isCreative() || player.isSpectator() || !player.isAlive()) return false;
         }
         return state == 1 && target != null && target.isAlive();
     }

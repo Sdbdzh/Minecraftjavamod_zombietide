@@ -62,7 +62,7 @@ public class HordeZombieGoal extends Goal {
 
         // 创造/旁观模式玩家不作为尸潮目标
         if (target instanceof ServerPlayer player) {
-            if (player.getAbilities().mayBuild || !player.isAlive()) {
+            if (player.isCreative() || player.isSpectator() || !player.isAlive()) {
                 return false;
             }
         }
@@ -133,7 +133,7 @@ public class HordeZombieGoal extends Goal {
 
         // 目标变为创造/旁观模式或死亡：停止本 Goal
         if (target instanceof ServerPlayer player) {
-            if (player.getAbilities().mayBuild || !player.isAlive()) {
+            if (player.isCreative() || player.isSpectator() || !player.isAlive()) {
                 stop();
                 return;
             }
@@ -220,7 +220,7 @@ public class HordeZombieGoal extends Goal {
                 if (scanned >= MAX_THREAT_SCAN) break;
                 if (!(e instanceof LivingEntity le) || !le.isAlive()) continue;
                 if (e instanceof ServerPlayer player) {
-                    if (player.getAbilities().mayBuild || !player.isAlive()) continue; // 忽略创造/旁观模式
+                    if (player.isCreative() || player.isSpectator() || !player.isAlive()) continue; // 忽略创造/旁观模式
                 }
                 if (e instanceof ServerPlayer || e instanceof Villager || e instanceof IronGolem) {
                     // 快速距离粗筛（16 格内才算威胁）
