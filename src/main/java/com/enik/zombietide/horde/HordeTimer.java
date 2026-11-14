@@ -22,12 +22,14 @@ import java.util.UUID;
 /**
  * 计时引擎：驱动玩家和村民的模组天数计时，判定尸潮触发时机。
  * <p>
- * 新版核心规则（设计文档 v1.10+）：
+ * 核心规则（以本类实现为准）：
  * - 时间源：主世界 gameDay（dayTime / 24000），所有维度共用
- * - 玩家 modDay：在线时按主世界日历推进；离线冻结；上线不补算
+ * - 玩家 modDay：在线时按主世界日历推进；离线期间不推进；<b>登录/换维度时由
+ *   {@code ZombietideServerEvents.onEntityJoinLevel} 直接对齐当前游戏日</b>（但不补触发错过的尸潮）
  * - 村民 modDay：永远推进（已加载+未加载全量，按调度表）；跨维度不暂停
  * - 尸潮触发/警告/禁睡：仅主世界 + 非和平模式
- * - /time 指令不影响 modDay，仅检测异常跳变触发强制四散
+ * - <b>{@code /time} 指令会改变 modDay</b>：正向跨天逐日补算、反向跳变单次重同步；
+ *   同时检测异常跳变（|Δ|>1000）触发强制四散与 missedDusk 补偿
  */
 public class HordeTimer {
 
