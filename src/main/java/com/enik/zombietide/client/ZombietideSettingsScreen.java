@@ -1,10 +1,13 @@
 package com.enik.zombietide.client;
 
+import com.enik.zombietide.EnikZombietide;
 import com.enik.zombietide.config.ClientHudConfig;
 import com.enik.zombietide.config.ZombietideConfig;
 import com.enik.zombietide.network.ModMessages;
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.Util;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -34,8 +37,9 @@ import java.util.function.IntConsumer;
  *   <li><b>固定区域不参与滚动</b>：标题、标签页、完成按钮不加入 renderable 列表，改为手动渲染与命中。</li>
  *   <li><b>scissor 用固定屏幕坐标</b>：不叠加 scrollOffset，避免裁剪区随滚动漂移。</li>
  *   <li><b>标签只偏移一次</b>：在已平移的 pose 内按原始 y 绘制。</li>
- *   <li><b>背景只画一次</b>：render() 已调用 renderBackground，滚动内容必须手动遍历 renderables 渲染，
- *       不能调用 super.render —— Screen.render 内部会再次绘制背景，在 scissor+translate 下被裁剪并随滚动位移。</li>
+ *   <li><b>背景只画一次</b>：render() 开头用 100% 不透明的壁纸铺满全屏（不再调用 renderBackground）；
+ *       滚动内容必须手动遍历 renderables 渲染，不能调用 super.render —— 它会在 scissor+translate 下重复绘制背景。</li>
+ *   <li><b>壁纸随分页左右滑动</b>：按 currentTab 计算目标水平偏移并平滑插值（类似安卓桌面壁纸）。</li>
  * </ul>
  */
 public class ZombietideSettingsScreen extends Screen {
@@ -102,6 +106,17 @@ public class ZombietideSettingsScreen extends Screen {
     private static final int FIELD_WIDTH = 200;
     private static final int SCROLLBAR_WIDTH = 6;
     private static final int SCROLLBAR_GAP = 4;
+
+    // ==================== 背景壁纸 ====================
+    /** 壁纸纹理（完整资源路径；SimpleTexture 不做前缀/后缀转换）。图片为 rgb24，无 alpha 通道。 */
+    private static final ResourceLocation BG_TEXTURE =
+            ResourceLocation.fromNamespaceAndPath(EnikZombietide.MODID, "textures/gui/settings_bg.png");
+    /** 原始图片尺寸：1376×278 的宽幅长图 */
+    private static final int BG_TEX_W = 1376;
+    private static final int BG_TEX_H = 278;
+    /** 当前水平滚动偏移（屏幕像素），切换分页时向目标平滑插值 */
+    private float bgScroll = 0.0F;
+    private boolean bgScrollReady = false;
 
     private Checkbox playerHordeEnabledCheckbox;
     private EditBox playerIntervalDaysEdit;
@@ -646,9 +661,52 @@ public class ZombietideSettingsScreen extends Screen {
 
     // ==================== 渲染 ====================
 
+    /**
+     * 绘制 100% 不透明背景壁纸。
+     * <ul>
+     *   <li><b>放大铺满（cover）</b>：scale = max(屏宽/图宽, 屏高/图高)，额外 +2px 冗余，
+     *       保证上下左右都不露黑边。图片是 1376×278 的宽幅长图，按高度铺满后宽度远大于屏幕，
+     *       正好留出左右滚动空间。</li>
+     *   <li><b>不透明</b>：不再调用 renderBackground（那是半透明暗色遮罩）；
+     *       整屏由 rgb24 图片覆盖（NativeImage 会把 alpha 填 255），并把 shader color 的 alpha 显式置 1。</li>
+     *   <li><b>随分页左右滑动</b>：按 currentTab.ordinal() 在 [0, maxScroll] 上取目标偏移，
+     *       每帧平滑插值，模拟安卓桌面壁纸跟随页面滑动；首次打开直接停在对应位置。</li>
+     * </ul>
+     */
+    private void renderWallpaper(GuiGraphics g) {
+        int w = this.width;
+        int h = this.height;
+        // +2 像素冗余，避免浮点取整在边缘留下 1px 缝隙
+        float scale = Math.max((float) (w + 2) / BG_TEX_W, (float) (h + 2) / BG_TEX_H);
+        float drawW = BG_TEX_W * scale;
+        float drawH = BG_TEX_H * scale;
+        float maxScroll = Math.max(0.0F, drawW - w);
+
+        int tabCount = Tab.values().length;
+        float target = maxScroll * (this.currentTab.ordinal() / (float) Math.max(1, tabCount - 1));
+        if (!this.bgScrollReady) {
+            this.bgScroll = target;
+            this.bgScrollReady = true;
+        }
+        // 平滑跟随，约十余帧到位；差值小于 0.5px 时直接吸附，避免无休止逼近
+        this.bgScroll += (target - this.bgScroll) * 0.18F;
+        if (Math.abs(target - this.bgScroll) < 0.5F) this.bgScroll = target;
+
+        float scrollX = Math.max(0.0F, Math.min(maxScroll, this.bgScroll));
+        float scrollY = Math.max(0.0F, (drawH - h) / 2.0F); // 垂直居中裁剪
+
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        g.pose().pushPose();
+        g.pose().scale(scale, scale, 1.0F);
+        g.pose().translate(-scrollX / scale, -scrollY / scale, 0.0F);
+        // 整张纹理按 pose 的 scale 放大；blit 的纹理采样与屏幕区域 1:1，缩放由 pose 完成
+        g.blit(BG_TEXTURE, 0, 0, 0, 0.0F, 0.0F, BG_TEX_W, BG_TEX_H, BG_TEX_W, BG_TEX_H);
+        g.pose().popPose();
+    }
+
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
+        this.renderWallpaper(guiGraphics);
 
         guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 6, 0xFFFFFF);
 
