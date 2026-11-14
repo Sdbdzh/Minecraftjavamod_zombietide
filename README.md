@@ -42,7 +42,7 @@ gradlew.bat build
 
 产物：`build/libs/enik_zombietide-<版本号>.jar`
 
-> 版本号只有一个来源：`gradle.properties` 的 `mod_version`。它同时决定 jar 文件名、`neoforge.mods.toml` 的 version 和设置页右下角显示的「版本号」，**不要在别处手写版本号**。
+> 版本号只有一个来源：`gradle.properties` 的 `mod_version`。它同时决定 jar 文件名、`neoforge.mods.toml` 的 version 和设置页左下角显示的「版本号」，**不要在别处手写版本号**。
 
 > `gradle.properties` 里的 `org.gradle.java.home` 指向本机 Java 21 运行时；换机器构建时请改成自己的 JDK 21 路径，或删除该行。
 
