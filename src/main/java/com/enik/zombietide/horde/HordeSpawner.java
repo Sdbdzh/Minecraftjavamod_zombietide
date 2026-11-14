@@ -264,7 +264,7 @@ public class HordeSpawner {
         double radius = isVillager ? villagerHordeRadii.getOrDefault(targetId, (double) config.villagerRadius())
                                    : villagerHordeRadii.getOrDefault(targetId, (double) config.playerRadius());
         // findSpawnPos 已保证绝不返回 null：优先背后，兜底任意安全点，最终兜底目标脚下地表
-        BlockPos spawnPos = findSpawnPos(level, target, radius);
+        BlockPos spawnPos = findSpawnPos(level, target, radius, config);
 
         // 僵尸高 2 格，需要生成位置及上方均为空气/可替换
         BlockPos feetPos = spawnPos.above();      // 僵尸脚部位置（地表方块上方 1 格）
@@ -1153,11 +1153,40 @@ public class HordeSpawner {
      *  3. 最终兜底：目标脚下地表（不再检查空气，由 spawnZombie 做最终校验）
      *  确保无论什么情况都能返回非空刷点，绝不放弃该批次。
      */
-    private static BlockPos findSpawnPos(ServerLevel level, net.minecraft.world.entity.Entity target, double radius) {
-        int attempts = 60;
+    /**
+     * 在目标周围的安全地表点中挑一个刷怪位置。
+     * <p>「生成性能」分页里与刷点相关的参数全部在这里生效，不再有摆设项：
+     * <ul>
+     *   <li>{@code radius}（玩家/村民生成半径）——搜索范围硬上限；</li>
+     *   <li>{@code minSpawnDist} / {@code maxSpawnDist}——实际落点与目标的距离环带，
+     *       外圈再与 {@code radius} 取小；环带内按面积均匀采样（sqrt），不会挤在中心；
+     *       两者任一为 0 或负数时按「无此限制」处理（最大距离 0 → 用 radius）；</li>
+     *   <li>{@code spawnAttempts}——采样次数，越大越容易同时命中「背后 + 有空间 + 高评分」；</li>
+     *   <li>{@code distanceWeight} / {@code darkWeight}——候选点评分权重（越远、越暗得分越高），
+     *       在「背后」和「任意」两个优先级内各取最高分；两者都为 0 时退化为先到先得。</li>
+     * </ul>
+     * 优先级仍是：目标背后 → 任意安全点 → 目标脚下地表，绝不返回 null。
+     */
+    private static BlockPos findSpawnPos(ServerLevel level, net.minecraft.world.entity.Entity target,
+                                         double radius, ZombietideConfig config) {
+        int attempts = config.spawnAttempts() > 0 ? Math.min(500, config.spawnAttempts()) : 60;
+
+        // 距离环带：内圈 = minSpawnDist，外圈 = min(radius, maxSpawnDist)
+        double inner = Math.max(0.0, config.minSpawnDist());
+        int maxCfg = config.maxSpawnDist();
+        double outer = maxCfg > 0 ? Math.min(radius, maxCfg) : radius;
+        if (outer < inner) outer = inner; // 容错：最大 < 最小时退化为同一圈
+        double minSq = inner * inner;
+        double spanSq = Math.max(0.0, outer * outer - minSq);
+
+        double distanceWeight = Math.max(0.0F, config.distanceWeight());
+        double darkWeight = Math.max(0.0F, config.darkWeight());
+        double weightSum = distanceWeight + darkWeight;
 
         BlockPos bestBehind = null;   // 优先：目标背后
+        double bestBehindScore = -1.0;
         BlockPos bestAny = null;      // 兜底：任意安全点
+        double bestAnyScore = -1.0;
 
         double targetYaw = target.getYRot();
         double forwardX = -Math.sin(Math.toRadians(targetYaw));
@@ -1165,7 +1194,8 @@ public class HordeSpawner {
 
         for (int i = 0; i < attempts; i++) {
             double angle = RANDOM.nextDouble() * 2 * Math.PI;
-            double dist = radius * Math.sqrt(RANDOM.nextDouble());
+            // 环带内按面积均匀采样：dist² 均匀 → 不会全都挤在内圈
+            double dist = Math.sqrt(minSq + RANDOM.nextDouble() * spanSq);
             double dx = Math.cos(angle) * dist;
             double dz = Math.sin(angle) * dist;
 
@@ -1180,10 +1210,17 @@ public class HordeSpawner {
             // 检查生成空间：需要 surfacePos.above() 和 surfacePos.above().above() 都是空气/可替换
             BlockPos feetPos = surfacePos.above();
             BlockPos headPos = feetPos.above();
-            boolean spaceOK = level.getBlockState(feetPos).isAir() && level.getBlockState(headPos).canBeReplaced();
+            if (!level.getBlockState(feetPos).isAir() || !level.getBlockState(headPos).canBeReplaced()) {
+                continue;
+            }
 
-            if (spaceOK && bestAny == null) {
-                bestAny = surfacePos;
+            // 评分：距离越远、亮度越低分越高；两个权重都为 0 时全员 0 分，等价于先到先得
+            double score = 0.0;
+            if (weightSum > 0.0) {
+                double distNorm = outer > 0.0 ? Math.min(1.0, dist / outer) : 0.0;
+                int light = Math.max(0, Math.min(15, level.getMaxLocalRawBrightness(surfacePos)));
+                double darkNorm = 1.0 - light / 15.0;
+                score = (distanceWeight * distNorm + darkWeight * darkNorm) / weightSum;
             }
 
             // 计算点积：判断是否在目标背后
@@ -1192,13 +1229,13 @@ public class HordeSpawner {
             double dot = toTargetX * forwardX + toTargetZ * forwardZ;
             boolean behind = dot < 0;
 
-            if (behind && spaceOK && bestBehind == null) {
+            if (behind && score > bestBehindScore) {
+                bestBehindScore = score;
                 bestBehind = surfacePos;
             }
-
-            // 已找到背后点且有兜底点，提前结束
-            if (bestBehind != null && bestAny != null) {
-                break;
+            if (score > bestAnyScore) {
+                bestAnyScore = score;
+                bestAny = surfacePos;
             }
         }
 

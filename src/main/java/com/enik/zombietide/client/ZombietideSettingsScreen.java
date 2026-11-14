@@ -18,6 +18,7 @@ import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.neoforged.fml.ModList;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -120,6 +121,28 @@ public class ZombietideSettingsScreen extends Screen {
     /** 记录上次渲染的窗口尺寸：尺寸变化时重新吸附背景偏移 */
     private int bgLastWidth = -1;
     private int bgLastHeight = -1;
+
+    // ==================== 左下角封面 + 版本号 ====================
+    /**
+     * 3D 标题封面（"Zombie Tide" 字标）。
+     * <p>原始 2310×335 大图在入包前已等比压到 1024×149，避免几 MB 的图直接进 jar；
+     * 背景为透明（RGBA），叠在壁纸上不会出现方形色块。
+     */
+    private static final ResourceLocation COVER_TEXTURE =
+            ResourceLocation.fromNamespaceAndPath(EnikZombietide.MODID, "textures/gui/settings_cover.png");
+    /** 封面贴图的真实像素尺寸：必须与 settings_cover.png 完全一致，否则采样会错位 */
+    private static final int COVER_TEX_W = 1024;
+    private static final int COVER_TEX_H = 149;
+    /** 封面在界面上的高度上下限（GUI 像素）：窗口越窄自动越小，避免压住「完成」按钮 */
+    private static final int COVER_MAX_H = 28;
+    private static final int COVER_MIN_H = 14;
+    /** 封面组距屏幕左边缘 / 下边缘的留白 */
+    private static final int COVER_MARGIN_LEFT = 8;
+    private static final int COVER_MARGIN_BOTTOM = 5;
+    /** 封面与版本号文字之间的间距 */
+    private static final int COVER_TEXT_GAP = 8;
+    /** 运行期缓存：mod 版本号只需从 ModList 取一次 */
+    private static String cachedModVersion;
 
     private Checkbox playerHordeEnabledCheckbox;
     private EditBox playerIntervalDaysEdit;
@@ -492,14 +515,15 @@ public class ZombietideSettingsScreen extends Screen {
                         config.warningTitle(), centerX, y,
                         (cb, v) -> config = config.withWarningTitle(v), false);
                 y += ROW_HEIGHT;
+
+                // 定制音频：4 个音效开关统一放在这一区，不再和「警告开关」混在一起
+                y = addSection("zombietide.settings.common.text16", centerX, y);
                 addCheckbox("zombietide.settings.warning.item3.name", Scope.WORLD,
                         "zombietide.settings.warning.item3.desc",
                         "zombietide.settings.warning.item3.tip",
                         config.warningSound(), centerX, y,
                         (cb, v) -> config = config.withWarningSound(v), false);
                 y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text16", centerX, y);
                 addCheckbox("zombietide.settings.warning.item4.name", Scope.WORLD,
                         "zombietide.settings.warning.item4.desc",
                         "zombietide.settings.warning.item4.tip",
@@ -777,6 +801,78 @@ public class ZombietideSettingsScreen extends Screen {
         if (this.doneBtn != null) {
             this.doneBtn.render(guiGraphics, mouseX, mouseY, partialTick);
         }
+
+        // 左下角：3D 标题封面 + 运行期版本号（固定，不随内容滚动）
+        renderCoverAndVersion(guiGraphics);
+    }
+
+    /**
+     * 读取当前正在运行的 mod 版本号。
+     * <p>来源是构建时由 {@code gradle.properties} 的 {@code mod_version} 注入到
+     * {@code neoforge.mods.toml} 的 version 字段，运行期再从 ModList 读回，
+     * 因此发版只改 gradle.properties，界面会自动跟着变，不需要动界面代码。
+     */
+    private static String modVersion() {
+        if (cachedModVersion == null) {
+            cachedModVersion = ModList.get().getMods().stream()
+                    .filter(info -> EnikZombietide.MODID.equals(info.getModId()))
+                    .map(info -> info.getVersion().toString())
+                    .findFirst()
+                    .orElse("unknown");
+        }
+        return cachedModVersion;
+    }
+
+    /**
+     * 左下角绘制「3D 标题封面 + 版本号：xxx」。
+     * <p>绘制方式与壁纸保持一致：{@code blit} 只按纹理原始像素采样，缩放全部交给 pose，
+     * 这样封面能任意缩小而不会只画出左上角一块（blit 的 width/height 同时参与 UV 计算）。
+     * 尺寸随窗口宽度收缩；横向空间不足时继续等比缩小，小到没有意义就整块不画。
+     */
+    private void renderCoverAndVersion(GuiGraphics g) {
+        String versionText = "版本号：" + modVersion();
+        int textW = this.font.width(versionText);
+
+        int drawH = this.width / 34;
+        if (drawH > COVER_MAX_H) drawH = COVER_MAX_H;
+        if (drawH < COVER_MIN_H) drawH = COVER_MIN_H;
+        int drawW = Math.max(1, Math.round(drawH * (float) COVER_TEX_W / COVER_TEX_H));
+
+        // 整组左对齐：只有「完成」按钮左缘之前才是可用空间，避免窄窗口下压住按钮
+        int doneLeft = this.doneBtn != null
+                ? this.doneBtn.getX()
+                : this.width / 2 - 60;
+        int avail = (doneLeft - 8) - COVER_MARGIN_LEFT;
+        int need = drawW + COVER_TEXT_GAP + textW;
+        if (need > avail) {
+            int maxCoverW = avail - COVER_TEXT_GAP - textW;
+            if (maxCoverW < 24) return; // 窗口太窄，画出来只会糊成一团，直接跳过
+            float k = (float) maxCoverW / drawW;
+            drawW = maxCoverW;
+            drawH = Math.max(1, Math.round(drawH * k));
+            need = drawW + COVER_TEXT_GAP + textW;
+        }
+        if (need > avail) return;
+
+        int coverX = COVER_MARGIN_LEFT;
+        int coverY = this.height - COVER_MARGIN_BOTTOM - drawH;
+
+        // 封面带 alpha 通道，必须开混合，否则透明区域会渲染成黑块
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        g.pose().pushPose();
+        g.pose().translate(coverX, coverY, 0.0F);
+        g.pose().scale((float) drawW / COVER_TEX_W, (float) drawH / COVER_TEX_H, 1.0F);
+        g.blit(COVER_TEXTURE, 0, 0, 0, 0.0F, 0.0F, COVER_TEX_W, COVER_TEX_H, COVER_TEX_W, COVER_TEX_H);
+        g.pose().popPose();
+        RenderSystem.disableBlend();
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+
+        // 版本号在封面右侧，与封面垂直居中对齐
+        int textX = coverX + drawW + COVER_TEXT_GAP;
+        int textY = coverY + (drawH - this.font.lineHeight) / 2;
+        g.drawString(this.font, versionText, textX, textY, 0xFFFFFF, true);
     }
 
     private void drawScrollBar(GuiGraphics guiGraphics) {
