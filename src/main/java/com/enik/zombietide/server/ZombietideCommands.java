@@ -123,7 +123,7 @@ public class ZombietideCommands {
 
     // ========== trigger ==========
 
-    /** 立即触发尸潮：玩家→玩家尸潮，村民→村民尸潮 */
+    /** 立即触发尸潮：玩家→玩家尸潮，村民→村民尸潮。玩家分支【保留血债】（不消耗、不清零） */
     private static int trigger(CommandSourceStack source, Collection<? extends Entity> targets) throws CommandSyntaxException {
         ServerLevel level = overworld(source);
         ZombietideConfig config = ConfigManager.getConfigData(level).getConfig();
@@ -143,11 +143,13 @@ public class ZombietideCommands {
                 if (config.playerCountRandom()) {
                     hordeSize = HordeSpawner.rollHordeSize(config.playerCountMin(), config.playerCountMax());
                 }
-                int totalHorde = hordeSize + data.bloodDebt();
+                // 【保留血债】调试触发不消耗血债：不把血债计入本波，也不清零，
+                // 血债原样保留给下一次常规波次（常规触发才会 hordeSize + bloodDebt 并清零）。
+                // 若这里把血债计入本波又保留，结算时 oldDebt + survivors 会重复计债。
+                int totalHorde = hordeSize;
 
-                // 血债已并入 totalHorde，这里必须清零，否则结算时会重复计债（与常规触发一致）
                 player.setData(ModAttachments.PLAYER_HORDE.get(),
-                        new PlayerHordeData(data.modDay(), data.modDay(), 0, data.waveCount() + 1, true));
+                        new PlayerHordeData(data.modDay(), data.modDay(), data.bloodDebt(), data.waveCount() + 1, true));
 
                 HordeWarning.triggerPlayerHorde(player.serverLevel(), player, config);
                 HordeSpawner.startHorde(player.serverLevel(), player.getUUID(), player, totalHorde, config, false, config.playerRadius());
