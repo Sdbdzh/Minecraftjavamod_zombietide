@@ -38,6 +38,8 @@ public class HordeTimer {
     private static boolean loggedPlayerDuskCheckThisWindow = false;
     private static boolean loggedVillagerDuskCheckThisWindow = false;
     private static long lastDayTime = -1L;
+    /** 跨天残留尸潮对账计时（每 40 tick = 2 秒一次） */
+    private static int reconcileTick = 0;
 
     /** 每 tick 调用，推进所有玩家和村民的模组天数，检测尸潮触发
      * @param level 触发 tick 的世界（可能是任意维度）
@@ -133,6 +135,13 @@ public class HordeTimer {
         if (curPhase >= burnStart && lastBurnSettleDay != currentGameDay) {
             lastBurnSettleDay = currentGameDay;
             HordeSpawner.settleDebtAtBurnTime(overworld, config);
+        }
+
+        // ⑦ 对账：结束跨天残留的尸潮（白天加载存档 / 错过黎明-四散窗口的兜底）
+        reconcileTick++;
+        if (reconcileTick >= 40) {
+            reconcileTick = 0;
+            HordeSpawner.reconcileStaleWaves(overworld, config);
         }
 
         lastDayTime = dayTime;

@@ -1241,6 +1241,114 @@ public class HordeSpawner {
         return countHordeZombies(level);
     }
 
+    /** 构建已加载村民 UUID -> 实体映射（ServerLevel.getEntity 的 UUID 索引对已加载村民不可靠，须遍历实体表） */
+    private static Map<UUID, net.minecraft.world.entity.npc.Villager> buildLoadedVillagerMap(ServerLevel level) {
+        Map<UUID, net.minecraft.world.entity.npc.Villager> map = new HashMap<>();
+        for (var entity : level.getEntities().getAll()) {
+            if (entity instanceof net.minecraft.world.entity.npc.Villager v && v.isAlive()) {
+                map.put(v.getUUID(), v);
+            }
+        }
+        return map;
+    }
+
+    /** 清理某个目标的刷怪/四散内部状态（不触碰附件与调度表） */
+    private static void clearInternalState(UUID targetId) {
+        activeHordes.remove(targetId);
+        spawnedCount.remove(targetId);
+        totalCount.remove(targetId);
+        batchTimer.remove(targetId);
+        villagerHordeRadii.remove(targetId);
+        pendingDebtSettle.remove(targetId);
+    }
+
+    /**
+     * 对账：结束「跨天残留」的尸潮。
+     * <p>
+     * 判定规则：{@code waveActive=true && lastTriggerDay < 当前 modDay} —— 触发日已过，
+     * 说明这波尸潮本应在当天日出前后结束，但服务器当时未运行（或在白天加载存档），
+     * 错过了 {@link #scatterZombies} / {@link #onDawn} 窗口，导致状态一直卡到下一个黎明。
+     * <p>
+     * 同时清理：无主的内部刷怪状态、目标已失效的孤儿尸潮僵尸、已不存在/已死的僵尸 UUID。
+     * 由 {@code HordeTimer} 每 2 秒调用一次，玩家登录时也调用一次。
+     */
+    public static void reconcileStaleWaves(ServerLevel level, ZombietideConfig config) {
+        int currentDay = (int) (level.getDayTime() / 24000L);
+        Set<UUID> stillActive = new HashSet<>();
+
+        // 1) 玩家：跨天残留则结束
+        for (ServerPlayer player : level.getPlayers(p -> true)) {
+            if (player.level().dimension() != Level.OVERWORLD) continue;
+            var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
+            if (!data.waveActive()) continue;
+            if (data.lastTriggerDay() < currentDay) {
+                player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
+                        new com.enik.zombietide.attachments.PlayerHordeData(
+                                data.modDay(), data.lastTriggerDay(), data.bloodDebt(), data.waveCount(), false));
+                clearInternalState(player.getUUID());
+                EnikZombietide.LOGGER.info("对账：玩家 {} 的尸潮为跨天残留（触发日 DAY {} < 当前 DAY {}），已结束",
+                        player.getScoreboardName(), data.lastTriggerDay(), currentDay);
+            } else {
+                stillActive.add(player.getUUID());
+            }
+        }
+
+        // 2) 村民：以调度表（权威数据源）为准
+        VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(
+                VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
+        Map<UUID, net.minecraft.world.entity.npc.Villager> loadedVillagers = buildLoadedVillagerMap(level);
+        for (var entry : schedule.getAllSchedules().entrySet()) {
+            UUID villagerUuid = entry.getKey();
+            var sched = entry.getValue();
+            if (!sched.waveActive()) continue;
+            if (sched.lastTriggerDay() < currentDay) {
+                schedule.put(villagerUuid, new VillagerScheduleData.ScheduleEntry(
+                        sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false));
+                var villager = loadedVillagers.get(villagerUuid);
+                if (villager != null) {
+                    villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
+                            new com.enik.zombietide.attachments.VillagerHordeData(
+                                    sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false));
+                }
+                clearInternalState(villagerUuid);
+                EnikZombietide.LOGGER.info("对账：村民 {} 的尸潮为跨天残留（触发日 DAY {} < 当前 DAY {}），已结束",
+                        villagerUuid, sched.lastTriggerDay(), currentDay);
+            } else {
+                stillActive.add(villagerUuid);
+            }
+        }
+
+        // 3) 清理 activeHordes 中已无活跃目标的条目
+        for (UUID targetId : new ArrayList<>(activeHordes.keySet())) {
+            if (!stillActive.contains(targetId)) {
+                clearInternalState(targetId);
+            }
+        }
+
+        // 4) 丢弃目标已失效的孤儿尸潮僵尸
+        for (var entity : level.getEntities().getAll()) {
+            if (!(entity instanceof net.minecraft.world.entity.monster.Zombie ||
+                  entity instanceof net.minecraft.world.entity.monster.ZombieVillager ||
+                  entity instanceof net.minecraft.world.entity.monster.Husk ||
+                  entity instanceof net.minecraft.world.entity.monster.Drowned ||
+                  entity instanceof net.minecraft.world.entity.monster.Stray)) continue;
+            CompoundTag tag = entity.getPersistentData();
+            if (!tag.hasUUID(HORDE_TARGET_UUID_KEY)) continue;
+            // 已进入四散状态（state=1）的僵尸由 settleDebtAtBurnTime 在 23460 统一清除，不在此提前丢弃
+            if (tag.getInt(HORDE_STATE_KEY) == 1) continue;
+            UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
+            if (!stillActive.contains(targetId)) {
+                hordeZombieUuids.remove(entity.getUUID());
+                scatteringZombies.remove(entity.getUUID());
+                entity.discard();
+            }
+        }
+
+        // 注：不在此清理 hordeZombieUuids —— level.getEntity 对未加载区块的僵尸也返回 null，
+        // 误删会把仍在活跃波次里的僵尸踢出四散/清理跟踪。僵尸 UUID 由 23460 的
+        // settleDebtAtBurnTime 统一移除；未加载的孤儿僵尸会在加载后由第 4 步兜底丢弃。
+    }
+
     /** 将指定目标的 waveActive 重置为 false（尸潮完成/四散结束后调用） */
     private static void resetTargetWaveActive(ServerLevel level, UUID targetId) {
         var target = level.getEntity(targetId);

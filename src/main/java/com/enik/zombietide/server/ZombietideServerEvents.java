@@ -99,6 +99,8 @@ public class ZombietideServerEvents {
         boolean canTrigger = player.level().dimension() == net.minecraft.world.level.Level.OVERWORLD
                 && player.serverLevel().getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL;
         ModMessages.sendModDay(player, playerData.modDay(), canTrigger);
+        // 登录时对账一次：立即结束跨天残留的尸潮（避免白天加载存档后状态卡住）
+        HordeSpawner.reconcileStaleWaves(level, config);
         // 【BUG3 修复】同步附近村民的模组天数给新登录玩家，确保 HUD 立即显示实时村民状态
         for (var entity : level.getEntities().getAll()) {
             if (entity instanceof net.minecraft.world.entity.npc.Villager villager) {
