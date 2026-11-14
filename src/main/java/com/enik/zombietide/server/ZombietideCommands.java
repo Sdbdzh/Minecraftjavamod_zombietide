@@ -34,7 +34,7 @@ import java.util.Collection;
  * - /zombietide status [<targets>]：查看模组天数、血债、波次、触发日
  * - /zombietide trigger <targets>：**手动触发（测试/管理用）**：玩家→玩家尸潮，村民→村民尸潮；
  *   绕过启用开关与黄昏窗口，玩家保留血债（不消耗、不清零），并占用当日触发日（当日黄昏不再自动触发）
- * - /zombietide reset <targets>：**只重置玩家血债**（modDay/波次/触发日/进行中均保留）；清除尸潮请用 debug clear
+ * - /zombietide reset <players>：**只重置玩家血债**（仅玩家；modDay/波次/触发日/进行中均保留）；清除尸潮请用 debug clear
  * - /zombietide debug info：显示完整调试信息
  * - /zombietide debug spawn：脚下生成 1 只测试僵尸
  * - /zombietide debug clear：**清除**所有活跃尸潮与尸潮僵尸（唯一的清除命令）
@@ -59,10 +59,10 @@ public class ZombietideCommands {
                 .then(Commands.literal("trigger")
                         .then(Commands.argument("targets", EntityArgument.entities())
                                 .executes(ctx -> trigger(ctx.getSource(), EntityArgument.getEntities(ctx, "targets")))))
-                // reset
+                // reset（仅玩家：村民没有血债）
                 .then(Commands.literal("reset")
-                        .then(Commands.argument("targets", EntityArgument.entities())
-                                .executes(ctx -> reset(ctx.getSource(), EntityArgument.getEntities(ctx, "targets")))))
+                        .then(Commands.argument("targets", EntityArgument.players())
+                                .executes(ctx -> reset(ctx.getSource(), EntityArgument.getPlayers(ctx, "targets")))))
                 // debug
                 .then(Commands.literal("debug")
                         .then(Commands.literal("info")
@@ -209,37 +209,24 @@ public class ZombietideCommands {
     /**
      * 只重置玩家血债（bloodDebt = 0）。
      * <p>
-     * modDay / 波次 / 上次触发日 / 进行中状态**全部原样保留**；不取消波次、不清僵尸。
-     * 需要清除尸潮与僵尸请使用 {@code /zombietide debug clear}。
-     * 村民没有血债字段，reset 对村民不适用。
+     * 仅接受玩家目标（村民没有血债字段）。modDay / 波次 / 上次触发日 / 进行中状态**全部原样保留**；
+     * 不取消波次、不清僵尸。需要清除尸潮与僵尸请使用 {@code /zombietide debug clear}。
      */
-    private static int reset(CommandSourceStack source, Collection<? extends Entity> targets) throws CommandSyntaxException {
+    private static int reset(CommandSourceStack source, Collection<? extends ServerPlayer> targets) {
         int successCount = 0;
-        int villagerCount = 0;
-        for (Entity entity : targets) {
-            if (entity instanceof ServerPlayer player) {
-                PlayerHordeData data = ModAttachments.getPlayerHordeData(player);
-                // 只把血债归零，其它字段原样保留
-                player.setData(ModAttachments.PLAYER_HORDE.get(),
-                        new PlayerHordeData(data.modDay(), data.lastTriggerDay(), 0, data.waveCount(), data.waveActive()));
-                source.sendSuccess(() -> Component.literal("已重置玩家 " + player.getScoreboardName() + " (UUID=")
-                        .append(clickableUUID(player.getUUID()))
-                        .append(Component.literal(") 的血债为 0（波次/触发日/进行中状态保留；清除尸潮请用 /zombietide debug clear）"))
-                        .withStyle(ChatFormatting.AQUA), false);
-                successCount++;
-            } else if (entity instanceof Villager) {
-                villagerCount++;
-            }
+        for (ServerPlayer player : targets) {
+            PlayerHordeData data = ModAttachments.getPlayerHordeData(player);
+            // 只把血债归零，其它字段原样保留
+            player.setData(ModAttachments.PLAYER_HORDE.get(),
+                    new PlayerHordeData(data.modDay(), data.lastTriggerDay(), 0, data.waveCount(), data.waveActive()));
+            source.sendSuccess(() -> Component.literal("已重置玩家 " + player.getScoreboardName() + " (UUID=")
+                    .append(clickableUUID(player.getUUID()))
+                    .append(Component.literal(") 的血债为 0（波次/触发日/进行中状态保留；清除尸潮请用 /zombietide debug clear）"))
+                    .withStyle(ChatFormatting.AQUA), false);
+            successCount++;
         }
         final int finalSuccessCount = successCount;
-        final int finalVillagerCount = villagerCount;
-        if (finalSuccessCount > 0) {
-            source.sendSuccess(() -> Component.literal("§a成功重置 " + finalSuccessCount + " 个玩家的血债").withStyle(ChatFormatting.GREEN), false);
-        } else if (finalVillagerCount > 0) {
-            source.sendSuccess(() -> Component.literal("§7村民没有血债，reset 只作用于玩家；清除尸潮请用 /zombietide debug clear").withStyle(ChatFormatting.GRAY), false);
-        } else {
-            source.sendSuccess(() -> Component.literal("目标中无玩家").withStyle(ChatFormatting.GRAY), false);
-        }
+        source.sendSuccess(() -> Component.literal("§a成功重置 " + finalSuccessCount + " 个玩家的血债").withStyle(ChatFormatting.GREEN), false);
         return successCount;
     }
 
