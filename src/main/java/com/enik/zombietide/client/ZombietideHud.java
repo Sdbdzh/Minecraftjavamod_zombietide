@@ -115,6 +115,8 @@ public class ZombietideHud {
      */
     public static void render(GuiGraphics guiGraphics, Minecraft minecraft) {
         if (minecraft.level == null || minecraft.player == null) return;
+        // F1 隐藏 GUI 时一并隐藏（原版 HUD 层用 () -> !options.hideGui 控制，自定义 HUD 需自己判断）
+        if (minecraft.options.hideGui) return;
 
         // 服务端配置：仅用于间隔/上限等玩法参数
         ZombietideConfig config = clientConfig != null ? clientConfig : ZombietideConfig.defaults();
