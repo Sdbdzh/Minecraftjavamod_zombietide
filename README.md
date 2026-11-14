@@ -5,7 +5,7 @@
 [![Build](https://github.com/Sdbdzh/Minecraftjavamod_zombietide/actions/workflows/build.yml/badge.svg)](https://github.com/Sdbdzh/Minecraftjavamod_zombietide/actions/workflows/build.yml)
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-62b47a)
 ![NeoForge](https://img.shields.io/badge/NeoForge-21.1.x-ea8b1a)
-![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-lightgrey)
+![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 > Minecraft 1.21.1 · NeoForge 21.1.265 · Java 21
 
@@ -86,6 +86,12 @@ Sdbdzh（Enik）
 
 ## 许可
 
-All Rights Reserved（保留所有权利）。完整条款见 [LICENSE](LICENSE)。
+[Apache License 2.0](LICENSE) —— 代码、美术与音频素材均适用。
 
-未经作者许可，请勿转载、分发或用于商业用途；整合包收录、二次开发请先联系作者。
+你可以自由使用、修改、分发本模组，包括收录进整合包与商业用途，只需满足：
+
+- 保留版权声明与 `LICENSE` 文件
+- 修改过的文件注明改动
+- 若原作品含 `NOTICE` 文件，需一并保留
+
+> 本模组按「现状」提供，不含任何担保。详见 [LICENSE](LICENSE) 第 7、8 节。
