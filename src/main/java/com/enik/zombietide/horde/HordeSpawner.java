@@ -241,7 +241,7 @@ public class HordeSpawner {
 
     /** 在目标背后/视线外刷出一只僵尸，返回是否成功。绝不因找不到刷点而放弃。 */
     private static boolean spawnZombie(ServerLevel level, UUID targetId, ZombietideConfig config, boolean isVillager) {
-        net.minecraft.world.entity.Entity target = level.getEntity(targetId);
+        net.minecraft.world.entity.Entity target = findTarget(level, targetId);
         if (target == null || !target.isAlive()) {
             EnikZombietide.LOGGER.warn("尸潮刷怪失败：目标 {} 不存在或已死亡，无法生成僵尸", targetId);
             return false;
@@ -374,7 +374,7 @@ public class HordeSpawner {
         long today = level.getDayTime() / 24000L;
         for (UUID targetId : allHordeTargets) {
             int count = survivorCount.getOrDefault(targetId, 0);
-            var target = level.getEntity(targetId);
+            var target = findTarget(level, targetId);
 
             if (target instanceof ServerPlayer player) {
                 // 【去重】同一天若已通过四散结束结算过，黎明结算跳过，防止双重计债
@@ -529,7 +529,7 @@ public class HordeSpawner {
             // 评分选点（躲阳光/背离目标/规避威胁）覆盖本处导航；FleeGoal（优先级 0）同时生效，
             // 最终以 HordeZombieGoal 的评分选点为准。
             LivingEntity mainTarget = null;
-            var targetEntity = level.getEntity(targetId);
+            var targetEntity = findTarget(level, targetId);
             if (targetEntity instanceof LivingEntity le) mainTarget = le;
             if (mainTarget != null && entity instanceof Mob mob) {
                 double fleeX = mob.getX() + (mob.getX() - mainTarget.getX()) * 4.0;
@@ -553,7 +553,7 @@ public class HordeSpawner {
         // 定制音频：四散音效只发给玩家尸潮触发者（村民尸潮不播放）
         if (config.warningEnabled() && config.scatterSound()) {
             for (UUID targetId : scatterTargets) {
-                var target = level.getEntity(targetId);
+                var target = findTarget(level, targetId);
                 if (target instanceof ServerPlayer player) {
                     ModSounds.playToPlayer(player, ModSounds.HORDE_SCATTER, SoundSource.HOSTILE, 0.8F, 1.0F);
                 }
@@ -562,7 +562,7 @@ public class HordeSpawner {
 
         // 【t37 修复】四散开始时（本方法即 23260 的调用点）重置目标 waveActive=false，避免 debug info 始终显示“进行中”
         for (UUID targetId : scatterTargets) {
-            var target = level.getEntity(targetId);
+            var target = findTarget(level, targetId);
             if (target instanceof ServerPlayer player) {
                 var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
                 if (data.waveActive()) {
@@ -589,7 +589,7 @@ public class HordeSpawner {
         java.util.Set<UUID> allHordeTargets = new java.util.HashSet<>(activeHordes.keySet());
         for (UUID targetId : allHordeTargets) {
             if (scatterTargets.contains(targetId)) continue; // 已处理
-            var target = level.getEntity(targetId);
+            var target = findTarget(level, targetId);
             if (target instanceof ServerPlayer player) {
                 var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
                 if (data.waveActive()) {
@@ -628,7 +628,7 @@ public class HordeSpawner {
                         sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false
                 ));
                 // 2) 若实体已加载，同步重置附件
-                var villagerEntity = level.getEntity(villagerUuid);
+                var villagerEntity = findTarget(level, villagerUuid);
                 if (villagerEntity instanceof net.minecraft.world.entity.npc.Villager villager) {
                     var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
                     if (vData.waveActive()) {
@@ -656,7 +656,7 @@ public class HordeSpawner {
 
             int survivorCount = countHordeZombiesByTarget(level, targetId);
 
-            var target = level.getEntity(targetId);
+            var target = findTarget(level, targetId);
             if (!(target instanceof ServerPlayer player)) continue; // 血债仅玩家；村民无血债
 
             var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
@@ -759,7 +759,7 @@ public class HordeSpawner {
         int exactDespawnTicks = (int)(23460 - dayPhase);
         if (exactDespawnTicks < 1) exactDespawnTicks = 1;
 
-        EnikZombietide.LOGGER.info("强制四散所有尸潮僵尸：检测到时间从夜间跳至白天，{} 秒后清除", config.despawnSeconds());
+        EnikZombietide.LOGGER.info("强制四散所有尸潮僵尸：检测到时间从夜间跳至白天，将在下一个 23460 起火时刻统一清除（约 {} tick）", exactDespawnTicks);
 
         // 记录每个目标进入四散的僵尸数量（用于正确的聊天提示）
         java.util.Map<UUID, Integer> scatterCountByTarget = new java.util.HashMap<>();
@@ -790,7 +790,7 @@ public class HordeSpawner {
 
             // 直接设置四散逃跑导航（背向主目标远距离移动）
             LivingEntity mainTarget = null;
-            var targetEntity = level.getEntity(targetId);
+            var targetEntity = findTarget(level, targetId);
             if (targetEntity instanceof LivingEntity le) mainTarget = le;
             if (mainTarget != null && entity instanceof Mob mob) {
                 double fleeX = mob.getX() + (mob.getX() - mainTarget.getX()) * 3.0;
@@ -817,7 +817,7 @@ public class HordeSpawner {
         targetsToClean.addAll(activeHordes.keySet());
         
         for (UUID targetId : targetsToClean) {
-            var target = level.getEntity(targetId);
+            var target = findTarget(level, targetId);
             if (target instanceof ServerPlayer player) {
                 var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
                 if (data.waveActive()) {
@@ -867,7 +867,7 @@ public class HordeSpawner {
                         sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false
                 ));
                 // 2) 若实体已加载，同步重置附件
-                var villagerEntity = level.getEntity(villagerUuid);
+                var villagerEntity = findTarget(level, villagerUuid);
                 if (villagerEntity instanceof net.minecraft.world.entity.npc.Villager villager) {
                     var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
                     if (vData.waveActive()) {
@@ -896,7 +896,7 @@ public class HordeSpawner {
         // 构建通用消息体（每个目标不同的部分：目标UUID、类型、数量）
         for (UUID targetId : scatterTargets) {
             int scatterCount = scatterCountByTarget.getOrDefault(targetId, 1);
-            var targetEntity = level.getEntity(targetId);
+            var targetEntity = findTarget(level, targetId);
             if (targetEntity == null) continue;
 
             boolean isVillagerTarget = targetEntity instanceof net.minecraft.world.entity.npc.Villager;
@@ -1311,6 +1311,20 @@ public class HordeSpawner {
         return countHordeZombies(level);
     }
 
+    /**
+     * 按 UUID 可靠地查找尸潮目标实体（玩家或村民）。
+     * <p>{@code ServerLevel.getEntity} 的 UUID 索引对已加载村民不可靠（见 {@link #buildLoadedVillagerMap}），
+     * 因此未命中时兜底遍历实体表，避免村民目标被误判为「已消失」。
+     */
+    private static net.minecraft.world.entity.Entity findTarget(ServerLevel level, UUID id) {
+        var entity = level.getEntity(id);
+        if (entity != null) return entity;
+        for (var e : level.getEntities().getAll()) {
+            if (e.getUUID().equals(id)) return e;
+        }
+        return null;
+    }
+
     /** 构建已加载村民 UUID -> 实体映射（ServerLevel.getEntity 的 UUID 索引对已加载村民不可靠，须遍历实体表） */
     private static Map<UUID, net.minecraft.world.entity.npc.Villager> buildLoadedVillagerMap(ServerLevel level) {
         Map<UUID, net.minecraft.world.entity.npc.Villager> map = new HashMap<>();
@@ -1421,7 +1435,7 @@ public class HordeSpawner {
 
     /** 将指定目标的 waveActive 重置为 false（尸潮完成/四散结束后调用） */
     private static void resetTargetWaveActive(ServerLevel level, UUID targetId) {
-        var target = level.getEntity(targetId);
+        var target = findTarget(level, targetId);
         if (target instanceof ServerPlayer player) {
             var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
             if (data.waveActive()) {
@@ -1472,7 +1486,7 @@ public class HordeSpawner {
                 var sched = entry.getValue();
                 schedule.put(entry.getKey(), new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
                         sched.modDay(), -1, sched.waveCount(), false));
-                var villagerEntity = level.getEntity(entry.getKey());
+                var villagerEntity = findTarget(level, entry.getKey());
                 if (villagerEntity instanceof net.minecraft.world.entity.npc.Villager villager) {
                     villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
                             new com.enik.zombietide.attachments.VillagerHordeData(

@@ -245,7 +245,8 @@ public class HordeZombieGoal extends Goal {
                 double len = Math.sqrt(toTargetX * toTargetX + toTargetZ * toTargetZ);
                 if (len > 0.001) {
                     double dirX = Math.cos(angle), dirZ = Math.sin(angle);
-                    awayDot = (dirX * toTargetX + dirZ * toTargetZ) / len; // >0 表示背离主目标
+                    // toTarget 指向主目标，故点积 >0 表示该方向朝向主目标，<0 才是背离
+                    awayDot = (dirX * toTargetX + dirZ * toTargetZ) / len;
                 }
             } else {
                 awayDot = 1; // 无主目标时方向等权
@@ -261,8 +262,8 @@ public class HordeZombieGoal extends Goal {
             // 1. 天空光照：越暗越好（0-15，取反加权）
             int skyLight = mob.level().getBrightness(LightLayer.SKY, dest);
             score += (15 - skyLight) * 2.0;
-            // 2. 背离主目标
-            score += awayDot * 4.0;
+            // 2. 背离主目标：awayDot 越小越背离，故取负加权
+            score -= awayDot * 4.0;
             // 3. 威胁实体规避：目的地附近有威胁则重罚
             for (LivingEntity threat : threats) {
                 double d2 = (threat.getX() - dest.getX()) * (threat.getX() - dest.getX())

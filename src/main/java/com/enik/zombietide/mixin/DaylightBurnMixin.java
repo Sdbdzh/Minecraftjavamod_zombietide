@@ -5,6 +5,8 @@ import com.enik.zombietide.config.ZombietideConfigData;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Husk;
+import net.minecraft.world.entity.monster.Zombie;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -13,18 +15,23 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /**
  * 白天燃烧配置 Mixin：让 config.daylightBurn() 真正控制【尸潮僵尸】是否会在白天被阳光点燃。
  * <p>
- * 原版 {@link Mob#isSunSensitive()} 为 protected，僵尸恒返回 true，因此 daylightBurn 关闭后
- * 尸潮僵尸仍会被太阳烧死。本 Mixin 在方法返回处改写返回值：
+ * {@code isSunSensitive()} 在 1.21.1 中**只声明于 {@link Zombie} 与 {@link Husk}**，
+ * {@link Mob} 上只有 {@code isSunBurnTick()}。因此必须注入这两个具体类：
+ * <ul>
+ *   <li>{@link Zombie} 覆盖 Zombie / Drowned / ZombieVillager（后两者继承且未覆写）；</li>
+ *   <li>{@link Husk} 覆写了该方法，需单独注入。</li>
+ * </ul>
+ * 在方法返回处改写返回值：
  * <ul>
  *   <li>仅对带 {@code zombietide_horde_target} 标记的尸潮僵尸生效；</li>
  *   <li>当 daylightBurn=false 时返回 false（白天不燃烧）；</li>
- *   <li>自然生成的僵尸/骷髅等其它实体保持原版行为，不受影响。</li>
+ *   <li>自然生成的僵尸等其它实体保持原版行为，不受影响。</li>
  * </ul>
  * <p>
  * 注意：必须用 {@code @Inject(RETURN, cancellable=true)} + {@link CallbackInfoReturnable#setReturnValue}
  * 才能改写方法自身的返回值；{@code @Redirect} 无法在 RETURN 处拦截方法自身返回。
  */
-@Mixin(Mob.class)
+@Mixin({Zombie.class, Husk.class})
 public abstract class DaylightBurnMixin {
 
     private static final String HORDE_TARGET_KEY = "zombietide_horde_target";

@@ -111,6 +111,7 @@ public class ZombietideHud {
         villagerProfessions.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
         villagerPos.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
         villagerWaveActive.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
+        villagerHordeDayMap.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
     }
 
     /**
@@ -272,6 +273,17 @@ public class ZombietideHud {
     }
 
     /** 绘制 mod info 常驻屏幕信息（右上角，实时刷新，内容同 debug info） */
+    /** 间隔显示文本：固定显示「N天」，随机显示「min~max天(随机)」 */
+    private static String intervalText(ZombietideConfig config, boolean isVillager) {
+        boolean random = isVillager ? config.villagerIntervalRandom() : config.playerIntervalRandom();
+        if (!random) {
+            return (isVillager ? config.villagerIntervalDays() : config.playerIntervalDays()) + "天";
+        }
+        int min = isVillager ? config.villagerIntervalMin() : config.playerIntervalMin();
+        int max = isVillager ? config.villagerIntervalMax() : config.playerIntervalMax();
+        return min + "~" + max + "天(随机)";
+    }
+
     private static void drawModInfoOverlay(GuiGraphics guiGraphics, Minecraft minecraft, ZombietideConfig config, int modDay) {
         // 必须用 GUI 缩放后的宽度：drawString 用的是 GUI 坐标，用物理像素宽度会把面板推到屏幕外
         int screenWidth = minecraft.getWindow().getGuiScaledWidth();
@@ -293,9 +305,9 @@ public class ZombietideHud {
         guiGraphics.drawString(minecraft.font, "§b--- 配置 ---", startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
         guiGraphics.drawString(minecraft.font, "§e玩家尸潮: §f" + (config.playerHordeEnabled() ? "§a开启" : "§c关闭")
-                + " §e间隔: §f" + config.playerIntervalDays() + "天"
+                + " §e间隔: §f" + intervalText(config, false)
                 + " §e村民尸潮: §f" + (config.villagerHordeEnabled() ? "§a开启" : "§c关闭")
-                + " §e间隔: §f" + config.villagerIntervalDays() + "天"
+                + " §e间隔: §f" + intervalText(config, true)
                 + " §e全局上限: §f" + config.globalCap(), startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
 
@@ -304,7 +316,8 @@ public class ZombietideHud {
         Integer pModDay = syncedModDay != null ? syncedModDay : modDay;
         Boolean canTrigger = syncedCanTrigger.get(playerUuid);
         int playerInterval = config.playerIntervalDays();
-        boolean playerHordeDay = playerInterval > 0 && pModDay % playerInterval == playerInterval - 1 && Boolean.TRUE.equals(canTrigger);
+        // 与主 HUD 一致：用服务端同步的权威值，不自行推算（随机间隔下固定公式会错）
+        boolean playerHordeDay = Boolean.TRUE.equals(syncedHordeDay.get(playerUuid));
 
         guiGraphics.drawString(minecraft.font, "§b--- 玩家 ---", startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
@@ -314,7 +327,7 @@ public class ZombietideHud {
         // 客户端没有 ModAttachments，从 syncedModDays 获取基础信息
         guiGraphics.drawString(minecraft.font, "§eModDay: §fDAY " + pModDay
                 + (playerHordeDay ? " §c§l←尸潮日" : "")
-                + " §e间隔: §f" + playerInterval + "天"
+                + " §e间隔: §f" + intervalText(config, false)
                 + " §e可触发: §f" + (Boolean.TRUE.equals(canTrigger) ? "§a是" : "§c否"), startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
 
@@ -336,13 +349,13 @@ public class ZombietideHud {
 
             int vModDay = entry.getValue();
             String prof = villagerProfessions.getOrDefault(entry.getKey(), "村民");
-            boolean vHordeDay = villagerInterval > 0 && vModDay % villagerInterval == villagerInterval - 1;
+            boolean vHordeDay = Boolean.TRUE.equals(villagerHordeDayMap.get(entry.getKey()));
             int dist = (int) Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz));
 
             guiGraphics.drawString(minecraft.font, "§e" + prof + " §fDAY " + vModDay
                     + (vHordeDay ? " §c§l←尸潮日" : "")
                     + " §e距离: §f" + dist + "格"
-                    + " §e间隔: §f" + villagerInterval + "天"
+                    + " §e间隔: §f" + intervalText(config, true)
                     + " §e进行中: §f" + (villagerWaveActive.getOrDefault(entry.getKey(), false) ? "§c是" : "§a否"), startX, startY + lineCount * lineHeight, 0xFFFFFF);
             lineCount++;
             villagerShown++;
