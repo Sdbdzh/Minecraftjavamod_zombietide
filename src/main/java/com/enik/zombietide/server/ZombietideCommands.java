@@ -34,10 +34,10 @@ import java.util.Collection;
  * - /zombietide status [<targets>]：查看模组天数、血债、波次、触发日
  * - /zombietide trigger <targets>：**手动触发（测试/管理用）**：玩家→玩家尸潮，村民→村民尸潮；
  *   绕过启用开关与黄昏窗口，玩家保留血债（不消耗、不清零），并占用当日触发日（当日黄昏不再自动触发）
- * - /zombietide reset <targets>：仅重置血债、波次、触发日、进行中标记（modDay 保留，提示用 /time）
+ * - /zombietide reset <targets>：**只重置玩家血债**（modDay/波次/触发日/进行中均保留）；清除尸潮请用 debug clear
  * - /zombietide debug info：显示完整调试信息
  * - /zombietide debug spawn：脚下生成 1 只测试僵尸
- * - /zombietide debug clear：清理所有活跃尸潮与僵尸
+ * - /zombietide debug clear：**清除**所有活跃尸潮与尸潮僵尸（唯一的清除命令）
  * - /zombietide debug glow <targets>：给目标实体发光 15 秒（自动过滤非生物实体）
  * <p>
  * 目标选择器支持：玩家选择器(@a/@p/@r/@s)、实体选择器(@e[type=villager])、UUID字符串
@@ -206,50 +206,39 @@ public class ZombietideCommands {
 
     // ========== reset ==========
 
-    /** 重置血债、波次、触发日、进行中标记，并取消该目标的活跃尸潮（清除其尸潮僵尸）；modDay 保留，提示用 /time */
+    /**
+     * 只重置玩家血债（bloodDebt = 0）。
+     * <p>
+     * modDay / 波次 / 上次触发日 / 进行中状态**全部原样保留**；不取消波次、不清僵尸。
+     * 需要清除尸潮与僵尸请使用 {@code /zombietide debug clear}。
+     * 村民没有血债字段，reset 对村民不适用。
+     */
     private static int reset(CommandSourceStack source, Collection<? extends Entity> targets) throws CommandSyntaxException {
-        ServerLevel hordeLevel = overworld(source);
         int successCount = 0;
+        int villagerCount = 0;
         for (Entity entity : targets) {
             if (entity instanceof ServerPlayer player) {
                 PlayerHordeData data = ModAttachments.getPlayerHordeData(player);
+                // 只把血债归零，其它字段原样保留
                 player.setData(ModAttachments.PLAYER_HORDE.get(),
-                        new PlayerHordeData(data.modDay(), 0, 0, 0, false));
-                // 取消该玩家的活跃波次并清除其尸潮僵尸，避免 reset 后继续刷怪/结算
-                HordeSpawner.cancelHorde(hordeLevel, player.getUUID());
+                        new PlayerHordeData(data.modDay(), data.lastTriggerDay(), 0, data.waveCount(), data.waveActive()));
                 source.sendSuccess(() -> Component.literal("已重置玩家 " + player.getScoreboardName() + " (UUID=")
                         .append(clickableUUID(player.getUUID()))
-                        .append(Component.literal(") 的血债、波次、触发日，并取消活跃波次（modDay 保留为 DAY " + data.modDay() + "，如需改 modDay 请用 /time）"))
+                        .append(Component.literal(") 的血债为 0（波次/触发日/进行中状态保留；清除尸潮请用 /zombietide debug clear）"))
                         .withStyle(ChatFormatting.AQUA), false);
                 successCount++;
-            } else if (entity instanceof Villager villager) {
-                VillagerHordeData data = ModAttachments.getVillagerHordeData(villager);
-                villager.setData(ModAttachments.VILLAGER_HORDE.get(),
-                        new VillagerHordeData(data.modDay(), 0, 0, false));
-                // 同步权威调度表，避免区块重载后 onEntityJoinLevel 把旧状态抄回附件
-                if (villager.level() instanceof ServerLevel sl) {
-                    var schedule = sl.getDataStorage().computeIfAbsent(
-                            com.enik.zombietide.config.VillagerScheduleData.FACTORY,
-                            com.enik.zombietide.config.VillagerScheduleData.ID);
-                    if (schedule.getAllSchedules().containsKey(villager.getUUID())) {
-                        schedule.put(villager.getUUID(), new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
-                                data.modDay(), 0, 0, false));
-                    }
-                }
-                // 取消该村民的活跃波次并清除其尸潮僵尸
-                HordeSpawner.cancelHorde(hordeLevel, villager.getUUID());
-                source.sendSuccess(() -> Component.literal("已重置村民 " + villager.getName().getString() + " (UUID=")
-                        .append(clickableUUID(villager.getUUID()))
-                        .append(Component.literal(") 的波次、触发日，并取消活跃波次（modDay 保留为 DAY " + data.modDay() + "，如需改 modDay 请用 /time）"))
-                        .withStyle(ChatFormatting.AQUA), false);
-                successCount++;
+            } else if (entity instanceof Villager) {
+                villagerCount++;
             }
         }
         final int finalSuccessCount = successCount;
+        final int finalVillagerCount = villagerCount;
         if (finalSuccessCount > 0) {
-            source.sendSuccess(() -> Component.literal("§a成功重置 " + finalSuccessCount + " 个目标（modDay 未变，改天数请用 /time set <天数>000）").withStyle(ChatFormatting.GREEN), false);
+            source.sendSuccess(() -> Component.literal("§a成功重置 " + finalSuccessCount + " 个玩家的血债").withStyle(ChatFormatting.GREEN), false);
+        } else if (finalVillagerCount > 0) {
+            source.sendSuccess(() -> Component.literal("§7村民没有血债，reset 只作用于玩家；清除尸潮请用 /zombietide debug clear").withStyle(ChatFormatting.GRAY), false);
         } else {
-            source.sendSuccess(() -> Component.literal("目标中无玩家或村民").withStyle(ChatFormatting.GRAY), false);
+            source.sendSuccess(() -> Component.literal("目标中无玩家").withStyle(ChatFormatting.GRAY), false);
         }
         return successCount;
     }
