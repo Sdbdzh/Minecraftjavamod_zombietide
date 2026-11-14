@@ -32,7 +32,8 @@ import java.util.Collection;
  * 扁平结构，无 player/villager 子命令，目标选择器自动识别类型。
  * <p>
  * - /zombietide status [<targets>]：查看模组天数、血债、波次、触发日
- * - /zombietide trigger <targets>：立即触发尸潮（玩家→玩家尸潮，村民→村民尸潮）
+ * - /zombietide trigger <targets>：**手动触发（测试/管理用）**：玩家→玩家尸潮，村民→村民尸潮；
+ *   绕过启用开关与黄昏窗口，玩家保留血债（不消耗、不清零），并占用当日触发日（当日黄昏不再自动触发）
  * - /zombietide reset <targets>：仅重置血债、波次、触发日、进行中标记（modDay 保留，提示用 /time）
  * - /zombietide debug info：显示完整调试信息
  * - /zombietide debug spawn：脚下生成 1 只测试僵尸
@@ -123,7 +124,7 @@ public class ZombietideCommands {
 
     // ========== trigger ==========
 
-    /** 立即触发尸潮：玩家→玩家尸潮，村民→村民尸潮。玩家分支【保留血债】（不消耗、不清零） */
+    /** 手动触发（测试/管理用）：玩家→玩家尸潮，村民→村民尸潮。玩家分支【保留血债】（不消耗、不清零）。 */
     private static int trigger(CommandSourceStack source, Collection<? extends Entity> targets) throws CommandSyntaxException {
         ServerLevel level = overworld(source);
         ZombietideConfig config = ConfigManager.getConfigData(level).getConfig();
@@ -154,7 +155,7 @@ public class ZombietideCommands {
                 HordeWarning.triggerPlayerHorde(player.serverLevel(), player, config);
                 HordeSpawner.startHorde(player.serverLevel(), player.getUUID(), player, totalHorde, config, false, config.playerRadius());
 
-                source.sendSuccess(() -> Component.literal("已为玩家 " + player.getScoreboardName() + " (UUID=")
+                source.sendSuccess(() -> Component.literal("【手动触发】已为玩家 " + player.getScoreboardName() + " (UUID=")
                         .append(clickableUUID(player.getUUID()))
                         .append(Component.literal(") 触发玩家尸潮（数量 " + totalHorde + "）"))
                         .withStyle(ChatFormatting.RED), false);
@@ -187,7 +188,7 @@ public class ZombietideCommands {
                 HordeWarning.triggerVillagerHorde(villagerLevel, villager, config);
                 HordeSpawner.startHorde(villagerLevel, villager.getUUID(), villager, actualHordeSize, config, true, config.villagerRadius());
 
-                source.sendSuccess(() -> Component.literal("已为村民 " + villager.getName().getString() + " (UUID=")
+                source.sendSuccess(() -> Component.literal("【手动触发】已为村民 " + villager.getName().getString() + " (UUID=")
                         .append(clickableUUID(villager.getUUID()))
                         .append(Component.literal(") 触发村民尸潮（数量 " + finalHordeSize + "）"))
                         .withStyle(ChatFormatting.RED), false);
@@ -196,7 +197,7 @@ public class ZombietideCommands {
         }
         final int finalSuccessCount = successCount;
         if (finalSuccessCount > 0) {
-            source.sendSuccess(() -> Component.literal("§a成功触发 " + finalSuccessCount + " 个尸潮").withStyle(ChatFormatting.GREEN), false);
+            source.sendSuccess(() -> Component.literal("§a【手动触发】成功触发 " + finalSuccessCount + " 个尸潮").withStyle(ChatFormatting.GREEN), false);
         } else {
             source.sendSuccess(() -> Component.literal("目标中无有效玩家或村民（村民需在主世界且非和平）").withStyle(ChatFormatting.GRAY), false);
         }
