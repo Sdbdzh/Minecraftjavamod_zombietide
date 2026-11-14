@@ -1,8 +1,34 @@
-# enik-zombietide
+# Zombie Tide（尸潮）
 
-enik-zombietide — a NeoForge mod for Minecraft 1.21.1 (NeoForge 21.1.249), scaffolded by minecraft-dev.
+> Minecraft 1.21.1 · NeoForge 21.1.265 · Java 21
 
-## Build
+一个受《7 Days to Die》启发的周期性尸潮模组：每隔一段时间，成群的僵尸会在黄昏锁定你（或村民）穷追不舍；撑到日出它们会退散，没清掉的会变成下一波额外的压力。
+
+## 特性
+
+- **周期性尸潮**：玩家尸潮与村民尸潮；间隔、数量、半径、分批节奏均可配置
+- **血债系统**：上一波幸存的僵尸会累积到下一波（累积制 / 仅上波 / 无血债三种模式）
+- **按生物群系生成**：沙漠→尸壳、沼泽→溺尸/僵尸、其他→僵尸，另有 5% 概率僵尸村民
+- **完整警告**：清晨提醒、黄昏触发标题与警报、日出四散音效、波次背景音乐（仅触发者能听到）
+- **游戏内设置页**：6 个标签页（玩家 / 村民 / 生成性能 / 世界规则 / 警告提示 / HUD），即时生效，带整页壁纸
+- **HUD**：左上角 `DAY X`，可显示附近村民的尸潮信息
+- **管理命令**：`/zombietide`（OP Level 2），详见《设计文档》
+
+## 环境要求
+
+| 项目 | 版本 |
+|------|------|
+| Minecraft | 1.21.1 |
+| NeoForge | 21.1.265（21.1.x） |
+| Java | 21 |
+
+## 安装
+
+1. 安装 Minecraft 1.21.1 + NeoForge 21.1.x；
+2. 把 `enik_zombietide-0.1.0.jar` 放进 `.minecraft/mods/`；
+3. 启动游戏。进入存档后，通过 **ESC → 模组设置** 调整参数。
+
+## 构建
 
 ```sh
 # Windows
@@ -12,18 +38,36 @@ gradlew.bat build
 ./gradlew build
 ```
 
-产物 `build/libs/enik-zombietide-0.1.0.jar` 拖入客户端 `mods/` 启动测试；`gradlew runClient`/`runServer`/`runData` 可用（runServer 需改 eula.txt 与 online-mode=false）。
+产物：`build/libs/enik_zombietide-0.1.0.jar`
 
-## Notes
+> `gradle.properties` 里的 `org.gradle.java.home` 指向本机 Java 21 运行时；换机器构建时请改成自己的 JDK 21 路径，或删除该行。
 
-- 首次构建 NeoForm 反编译可达一小时（R9），请设足够超时。
-- 1.21.1 走 NeoForge 21.1.x：`neoforge.mods.toml` **必须**声明 `modLoader="javafml"` 与 `loaderVersion`，
-  否则客户端加载即报 `Missing ModLoader`（javafml 成为默认值是更晚的 21.x 才有的）。
-- 本线不启用 Parchment（少一个版本猜测点；需要参数名可自行加回）。
-- 无 pack.mcmeta（官方 MDK 现状）。
+## 文档
 
-## Layout
+- [玩法说明](玩法说明.md) —— 面向玩家：玩法、设置、常见问题
+- [设计文档](设计文档.md) —— 面向开发者：代码结构、内部机制、命令与调参
+- [版本历史](版本历史.md) —— 每个版本做了什么
+- [尸潮生命周期全解析](尸潮生命周期全解析.md) —— 一次完整尸潮的时间线
 
-- `src/main/java/com/enik/zombietide/EnikZombietide.java` — `@Mod` 主类 + mod bus / game bus 注册点
-- `src/main/resources/META-INF/neoforge.mods.toml` — 1.21.1 形态（含 modLoader / loaderVersion，license 必填）
-- `build.gradle` — moddev 2.0.144 + Java 21 toolchain
+## 项目结构
+
+```
+src/main/java/com/enik/zombietide/
+├── EnikZombietide.java      # 主类 / 注册入口
+├── attachments/             # 玩家 / 村民尸潮数据附件
+├── client/                  # HUD、设置界面、客户端事件
+├── config/                  # 配置 record、SavedData、客户端 HUD 配置
+├── horde/                   # 计时、刷怪、警告、BGM 调度、僵尸 AI
+├── mixin/                   # 白天燃烧开关
+├── network/                 # 配置 / 状态同步
+├── server/                  # 命令、服务端事件
+└── sound/                   # 自定义音效注册
+```
+
+## 作者
+
+Sdbdzh（Enik）
+
+## 许可
+
+All Rights Reserved（保留所有权利）。未经作者许可，请勿转载、分发或用于商业用途。
