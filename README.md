@@ -25,7 +25,7 @@
 ## 安装
 
 1. 安装 Minecraft 1.21.1 + NeoForge 21.1.x；
-2. 把 `enik_zombietide-0.1.0.jar` 放进 `.minecraft/mods/`；
+2. 把构建出的 `enik_zombietide-<版本号>.jar` 放进 `.minecraft/mods/`；
 3. 启动游戏。先到 **选项 → 控制 → 按键绑定 → 「尸潮」分类**，给「打开尸潮设置」绑定一个按键（**默认未绑定**）；进入存档后按该键打开设置界面。
 
 ## 构建
@@ -38,7 +38,9 @@ gradlew.bat build
 ./gradlew build
 ```
 
-产物：`build/libs/enik_zombietide-0.1.0.jar`
+产物：`build/libs/enik_zombietide-<版本号>.jar`
+
+> 版本号只有一个来源：`gradle.properties` 的 `mod_version`。它同时决定 jar 文件名、`neoforge.mods.toml` 的 version 和设置页右下角显示的「版本号」，**不要在别处手写版本号**。
 
 > `gradle.properties` 里的 `org.gradle.java.home` 指向本机 Java 21 运行时；换机器构建时请改成自己的 JDK 21 路径，或删除该行。
 

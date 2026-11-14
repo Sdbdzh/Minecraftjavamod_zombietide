@@ -45,6 +45,18 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 // Chinese in gradle.properties must be written as Unicode escapes (\uXXXX) to avoid
 // garbled output from the ISO-8859-1 properties file encoding.
 processResources {
+    // 把 neoforge.mods.toml 里用到的占位符属性显式声明为任务输入。
+    // 否则只改 gradle.properties 时，Gradle 会认为源文件没变而判定 UP-TO-DATE，
+    // 打出来的 jar 里 version 仍是旧值（踩过一次：改 mod_version 后 jar 内还是 0.1.0）。
+    inputs.property('mod_id', mod_id)
+    inputs.property('mod_name', mod_name)
+    inputs.property('mod_version', mod_version)
+    inputs.property('mod_authors', mod_authors)
+    inputs.property('mod_license', mod_license)
+    inputs.property('mod_description', mod_description)
+    inputs.property('neo_version_range', neo_version_range)
+    inputs.property('minecraft_version_range', minecraft_version_range)
+
     filesMatching('META-INF/neoforge.mods.toml') {
         expand project.properties
     }
