@@ -209,7 +209,7 @@ public class ZombietideHud {
                     double dx = p[0] - playerX, dy = p[1] - playerY, dz = p[2] - playerZ;
                     dist = (int) Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz));
                 }
-                // 尸潮日（villagerModDay % interval == interval - 1）时 DAY X 部分变红粗体，距离也变红粗体，职业名保持白色粗体
+                // 尸潮日（villagerModDay % interval == interval - 1）时仅 DAY X 变红粗体；距离不变红，职业名保持白色
                 // interval=7 时：6, 13, 20, 27... (第 7、14、21、28 天)
                 int villagerInterval = config.villagerIntervalDays();
                 boolean villagerHordeDay = villagerInterval > 0 && villagerModDay % villagerInterval == villagerInterval - 1;

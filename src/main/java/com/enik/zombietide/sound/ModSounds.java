@@ -47,8 +47,8 @@ public final class ModSounds {
     }
 
     /**
-     * @param wideRange 触发音效需要覆盖村民尸潮 32 格警告范围，用固定 48 格；
-     *                  其余用默认可变范围（仅目标玩家附近）
+     * @param wideRange true = 固定 48 格广播半径（尸潮触发警报，让触发点附近更多玩家听到）；
+     *                  false = 默认可变范围（仅目标玩家附近）
      */
     private static DeferredHolder<SoundEvent, SoundEvent> register(String name, boolean wideRange) {
         return SOUNDS.register(name, () -> {
