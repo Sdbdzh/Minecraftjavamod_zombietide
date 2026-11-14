@@ -64,7 +64,7 @@ public class HordeWarning {
 
     /**
      * 玩家尸潮触发警报：尸潮触发瞬间调用（设计文档 7.2）。
-     * 大标题「夜潮」+ 副标题 + 定制触发音效（尸潮触发.mp3，替换原版僵尸敲木门声）+ 突袭旁白（文案库随机抽 1 段）。
+     * 大标题「尸潮」+ 副标题 + 定制触发音效（尸潮触发.mp3，替换原版僵尸敲木门声）+ 突袭旁白（文案库随机抽 1 段）。
      *
      * @param level  服务端世界
      * @param player 被警报的玩家（尸潮触发目标）
@@ -73,7 +73,7 @@ public class HordeWarning {
     public static void triggerPlayerHorde(ServerLevel level, ServerPlayer player, ZombietideConfig config) {
         if (config == null || !config.warningEnabled()) return;
 
-        // 大标题「夜潮」+ 副标题（语言键驱动）
+        // 大标题「尸潮」+ 副标题（语言键驱动；标题是功能名，不是氛围文案）
         if (config.warningTitle()) {
             player.connection.send(new ClientboundSetTitlesAnimationPacket(5, 60, 20));
             player.connection.send(new ClientboundSetTitleTextPacket(TITLE_TEXT));

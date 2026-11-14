@@ -7,6 +7,7 @@ import com.enik.zombietide.network.ModMessages;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.Util;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -27,7 +28,7 @@ import java.util.function.IntConsumer;
  * <p>
  * 信息架构：
  * <ul>
- *   <li>按作用对象分为 6 个分页：玩家尸潮 / 村民尸潮 / 生成性能 / 世界规则 / 警告提示 / HUD 本机。</li>
+ *   <li>按作用对象分为 6 个分页：玩家尸潮 / 村民尸潮 / 生成性能 / 世界规则 / 警告提示 / HUD。</li>
  *   <li>每个分页内部再按功能分区（总开关、触发节奏、规模、范围……），带分隔线与分区标题。</li>
  *   <li>每个设置项统一为「作用域标签 + 名称」「灰色说明」「控件」三行结构，并带悬停详细提示。</li>
  *   <li>HUD 分页为<b>本机全局</b>配置（{@link ClientHudConfig}），不随存档保存；其余分页写入存档级配置。</li>
@@ -51,27 +52,26 @@ public class ZombietideSettingsScreen extends Screen {
 
     /** 分页：按作用对象/主题划分 */
     private enum Tab {
-        PLAYER("玩家尸潮"),
-        VILLAGER("村民尸潮"),
-        SPAWN("生成性能"),
-        WORLD("世界规则"),
-        WARNING("警告提示"),
-        HUD("HUD 本机");
+        PLAYER("zombietide.settings.tab.player"),
+        VILLAGER("zombietide.settings.tab.villager"),
+        SPAWN("zombietide.settings.tab.spawn"),
+        WORLD("zombietide.settings.tab.world"),
+        WARNING("zombietide.settings.tab.warning"),
+        HUD("zombietide.settings.tab.hud");
 
-        final String label;
-        Tab(String label) { this.label = label; }
+        final String key;
+        Tab(String key) { this.key = key; }
     }
 
     /** 作用域：告诉玩家这项设置具体改谁 */
     private enum Scope {
-        PLAYER("玩家", "§9"),
-        VILLAGER("村民", "§a"),
-        WORLD("世界", "§6"),
-        CLIENT("本机", "§d");
+        PLAYER("zombietide.settings.scope.player", "§9"),
+        VILLAGER("zombietide.settings.scope.villager", "§a"),
+        WORLD("zombietide.settings.scope.world", "§6");
 
-        final String label;
+        final String key;
         final String color;
-        Scope(String label, String color) { this.label = label; this.color = color; }
+        Scope(String key, String color) { this.key = key; this.color = color; }
     }
 
     private Tab currentTab = Tab.PLAYER;
@@ -177,7 +177,7 @@ public class ZombietideSettingsScreen extends Screen {
     private Checkbox villagerHordeBoldCheckbox;
 
     public ZombietideSettingsScreen(Screen parent, ZombietideConfig config) {
-        super(Component.literal("尸潮配置"));
+        super(Component.literal(tr("zombietide.settings.title")));
         this.parent = parent;
         this.config = config;
     }
@@ -208,7 +208,7 @@ public class ZombietideSettingsScreen extends Screen {
         int tabStartX = (this.width - tabWidth * tabCount) / 2;
         for (int i = 0; i < tabCount; i++) {
             Tab tab = Tab.values()[i];
-            Button btn = Button.builder(Component.literal(tab.label), b -> {
+            Button btn = Button.builder(Component.literal(tr(tab.key)), b -> {
                 this.currentTab = tab;
                 this.scrollOffset = 0;
                 this.rebuildWidgets();
@@ -222,388 +222,385 @@ public class ZombietideSettingsScreen extends Screen {
 
         switch (currentTab) {
             case PLAYER -> {
-                y = addNote("标签：[玩家] 玩家尸潮 · [村民] 村民尸潮", centerX, y);
-                y = addNote("　　　[世界] 本存档全局 · [本机] 仅本机", centerX, y);
-                y = addSection("总开关", centerX, y);
-                addCheckbox("启用玩家尸潮", Scope.PLAYER,
-                        "关闭后玩家不再触发尸潮",
-                        "总开关。关闭后玩家侧计时继续，但不会触发尸潮。",
+                y = addSection("zombietide.settings.common.text1", centerX, y);
+                addCheckbox("zombietide.settings.player.item1.name", Scope.PLAYER,
+                        "zombietide.settings.player.item1.desc",
+                        "zombietide.settings.player.item1.tip",
                         config.playerHordeEnabled(), centerX, y,
                         (cb, v) -> config = config.withPlayerHordeEnabled(v), false);
                 y += ROW_HEIGHT;
 
-                y = addSection("触发节奏", centerX, y);
-                addIntField("间隔天数", Scope.PLAYER,
-                        "每 N 天触发一次；1 = 每天",
-                        "玩家尸潮的触发周期，按主世界游戏日计算；所有玩家共享同一个模组天数。",
+                y = addSection("zombietide.settings.common.text2", centerX, y);
+                addIntField("zombietide.settings.player.item2.name", Scope.PLAYER,
+                        "zombietide.settings.player.item2.desc",
+                        "zombietide.settings.player.item2.tip",
                         config.playerIntervalDays(), centerX, y, 1,
                         v -> config = config.withPlayerIntervalDays(v), false);
                 y += ROW_HEIGHT;
-                addCheckbox("随机间隔", Scope.PLAYER,
-                        "开启后忽略固定间隔，改用范围",
-                        "开启后会在「间隔最小~最大天数」之间随机下一次触发间隔。",
+                addCheckbox("zombietide.settings.player.item3.name", Scope.PLAYER,
+                        "zombietide.settings.player.item3.desc",
+                        "zombietide.settings.player.item3.tip",
                         config.playerIntervalRandom(), centerX, y,
                         (cb, v) -> config = config.withPlayerIntervalRandom(v), false);
                 y += ROW_HEIGHT;
-                addIntField("间隔最小天数", Scope.PLAYER,
-                        "随机间隔的取值下限",
-                        "仅在「随机间隔」开启时生效。",
+                addIntField("zombietide.settings.player.item4.name", Scope.PLAYER,
+                        "zombietide.settings.player.item4.desc",
+                        "zombietide.settings.player.item4.tip",
                         config.playerIntervalMin(), centerX, y, 1,
                         v -> config = config.withPlayerIntervalMin(v), false);
                 y += ROW_HEIGHT;
-                addIntField("间隔最大天数", Scope.PLAYER,
-                        "随机间隔的取值上限",
-                        "仅在「随机间隔」开启时生效。",
+                addIntField("zombietide.settings.player.item5.name", Scope.PLAYER,
+                        "zombietide.settings.player.item5.desc",
+                        "zombietide.settings.player.item5.tip",
                         config.playerIntervalMax(), centerX, y, 1,
                         v -> config = config.withPlayerIntervalMax(v), false);
                 y += ROW_HEIGHT;
 
-                y = addSection("尸潮规模", centerX, y);
-                addIntField("每次生成数量", Scope.PLAYER,
-                        "本波基础僵尸数",
-                        "未开启随机数量时使用该值；血债会在此基础上追加。",
+                y = addSection("zombietide.settings.common.text3", centerX, y);
+                addIntField("zombietide.settings.player.item6.name", Scope.PLAYER,
+                        "zombietide.settings.player.item6.desc",
+                        "zombietide.settings.player.item6.tip",
                         config.playerCount(), centerX, y, 1,
                         v -> config = config.withPlayerCount(v), false);
                 y += ROW_HEIGHT;
-                addCheckbox("随机数量", Scope.PLAYER,
-                        "开启后忽略固定数量，改用范围",
-                        "开启后每次尸潮数量会在「数量最小~最大值」之间随机。",
+                addCheckbox("zombietide.settings.player.item7.name", Scope.PLAYER,
+                        "zombietide.settings.player.item7.desc",
+                        "zombietide.settings.player.item7.tip",
                         config.playerCountRandom(), centerX, y,
                         (cb, v) -> config = config.withPlayerCountRandom(v), false);
                 y += ROW_HEIGHT;
-                addIntField("数量最小值", Scope.PLAYER,
-                        "随机数量的取值下限",
-                        "仅在「随机数量」开启时生效。",
+                addIntField("zombietide.settings.player.item8.name", Scope.PLAYER,
+                        "zombietide.settings.player.item8.desc",
+                        "zombietide.settings.player.item8.tip",
                         config.playerCountMin(), centerX, y, 1,
                         v -> config = config.withPlayerCountMin(v), false);
                 y += ROW_HEIGHT;
-                addIntField("数量最大值", Scope.PLAYER,
-                        "随机数量的取值上限",
-                        "仅在「随机数量」开启时生效。",
+                addIntField("zombietide.settings.player.item9.name", Scope.PLAYER,
+                        "zombietide.settings.player.item9.desc",
+                        "zombietide.settings.player.item9.tip",
                         config.playerCountMax(), centerX, y, 1,
                         v -> config = config.withPlayerCountMax(v), false);
                 y += ROW_HEIGHT;
             }
             case VILLAGER -> {
-                y = addSection("总开关", centerX, y);
-                addCheckbox("启用村民尸潮", Scope.VILLAGER,
-                        "关闭后村民不再触发尸潮",
-                        "总开关。关闭后村民侧计时继续，但不会触发尸潮。",
+                y = addSection("zombietide.settings.common.text4", centerX, y);
+                addCheckbox("zombietide.settings.villager.item1.name", Scope.VILLAGER,
+                        "zombietide.settings.villager.item1.desc",
+                        "zombietide.settings.villager.item1.tip",
                         config.villagerHordeEnabled(), centerX, y,
                         (cb, v) -> config = config.withVillagerHordeEnabled(v), false);
                 y += ROW_HEIGHT;
 
-                y = addSection("触发节奏", centerX, y);
-                addIntField("间隔天数", Scope.VILLAGER,
-                        "每 N 天触发一次；1 = 每天",
-                        "村民尸潮的触发周期，与主世界游戏日同步；所有村民共享同一个模组天数。",
+                y = addSection("zombietide.settings.common.text5", centerX, y);
+                addIntField("zombietide.settings.villager.item2.name", Scope.VILLAGER,
+                        "zombietide.settings.villager.item2.desc",
+                        "zombietide.settings.villager.item2.tip",
                         config.villagerIntervalDays(), centerX, y, 1,
                         v -> config = config.withVillagerIntervalDays(v), false);
                 y += ROW_HEIGHT;
-                addCheckbox("随机间隔", Scope.VILLAGER,
-                        "开启后忽略固定间隔，改用范围",
-                        "开启后会在「间隔最小~最大天数」之间随机下一次触发间隔。",
+                addCheckbox("zombietide.settings.villager.item3.name", Scope.VILLAGER,
+                        "zombietide.settings.villager.item3.desc",
+                        "zombietide.settings.villager.item3.tip",
                         config.villagerIntervalRandom(), centerX, y,
                         (cb, v) -> config = config.withVillagerIntervalRandom(v), false);
                 y += ROW_HEIGHT;
-                addIntField("间隔最小天数", Scope.VILLAGER,
-                        "随机间隔的取值下限",
-                        "仅在「随机间隔」开启时生效。",
+                addIntField("zombietide.settings.villager.item4.name", Scope.VILLAGER,
+                        "zombietide.settings.villager.item4.desc",
+                        "zombietide.settings.villager.item4.tip",
                         config.villagerIntervalMin(), centerX, y, 1,
                         v -> config = config.withVillagerIntervalMin(v), false);
                 y += ROW_HEIGHT;
-                addIntField("间隔最大天数", Scope.VILLAGER,
-                        "随机间隔的取值上限",
-                        "仅在「随机间隔」开启时生效。",
+                addIntField("zombietide.settings.villager.item5.name", Scope.VILLAGER,
+                        "zombietide.settings.villager.item5.desc",
+                        "zombietide.settings.villager.item5.tip",
                         config.villagerIntervalMax(), centerX, y, 1,
                         v -> config = config.withVillagerIntervalMax(v), false);
                 y += ROW_HEIGHT;
 
-                y = addSection("尸潮规模", centerX, y);
-                addIntField("每次生成数量", Scope.VILLAGER,
-                        "本波基础僵尸数",
-                        "未开启随机数量时使用该值；村民尸潮不结血债。",
+                y = addSection("zombietide.settings.common.text6", centerX, y);
+                addIntField("zombietide.settings.villager.item6.name", Scope.VILLAGER,
+                        "zombietide.settings.villager.item6.desc",
+                        "zombietide.settings.villager.item6.tip",
                         config.villagerCount(), centerX, y, 1,
                         v -> config = config.withVillagerCount(v), false);
                 y += ROW_HEIGHT;
-                addCheckbox("随机数量", Scope.VILLAGER,
-                        "开启后忽略固定数量，改用范围",
-                        "开启后每次尸潮数量会在「数量最小~最大值」之间随机。",
+                addCheckbox("zombietide.settings.villager.item7.name", Scope.VILLAGER,
+                        "zombietide.settings.villager.item7.desc",
+                        "zombietide.settings.villager.item7.tip",
                         config.villagerCountRandom(), centerX, y,
                         (cb, v) -> config = config.withVillagerCountRandom(v), false);
                 y += ROW_HEIGHT;
-                addIntField("数量最小值", Scope.VILLAGER,
-                        "随机数量的取值下限",
-                        "仅在「随机数量」开启时生效。",
+                addIntField("zombietide.settings.villager.item8.name", Scope.VILLAGER,
+                        "zombietide.settings.villager.item8.desc",
+                        "zombietide.settings.villager.item8.tip",
                         config.villagerCountMin(), centerX, y, 1,
                         v -> config = config.withVillagerCountMin(v), false);
                 y += ROW_HEIGHT;
-                addIntField("数量最大值", Scope.VILLAGER,
-                        "随机数量的取值上限",
-                        "仅在「随机数量」开启时生效。",
+                addIntField("zombietide.settings.villager.item9.name", Scope.VILLAGER,
+                        "zombietide.settings.villager.item9.desc",
+                        "zombietide.settings.villager.item9.tip",
                         config.villagerCountMax(), centerX, y, 1,
                         v -> config = config.withVillagerCountMax(v), false);
                 y += ROW_HEIGHT;
             }
             case SPAWN -> {
-                y = addSection("分批节奏", centerX, y);
-                addIntField("批次 tick 间隔", Scope.WORLD,
-                        "每批之间等待的 tick（20=1秒）",
-                        "越小刷得越快、压力越大；越大刷得越平缓。",
+                y = addSection("zombietide.settings.common.text7", centerX, y);
+                addIntField("zombietide.settings.spawn.item1.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item1.desc",
+                        "zombietide.settings.spawn.item1.tip",
                         config.batchTick(), centerX, y, 1,
                         v -> config = config.withBatchTick(v), false);
                 y += ROW_HEIGHT;
-                addIntField("玩家批量大小", Scope.WORLD,
-                        "玩家尸潮每批最多生成数",
-                        "每过一个批次间隔生成一批，受全局僵尸上限限制。",
+                addIntField("zombietide.settings.spawn.item2.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item2.desc",
+                        "zombietide.settings.spawn.item2.tip",
                         config.batchSize(), centerX, y, 1,
                         v -> config = config.withBatchSize(v), false);
                 y += ROW_HEIGHT;
-                addIntField("村民批量大小", Scope.WORLD,
-                        "村民尸潮每批最多生成数",
-                        "每过一个批次间隔生成一批，受全局僵尸上限限制。",
+                addIntField("zombietide.settings.spawn.item3.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item3.desc",
+                        "zombietide.settings.spawn.item3.tip",
                         config.villagerBatchSize(), centerX, y, 1,
                         v -> config = config.withVillagerBatchSize(v), false);
                 y += ROW_HEIGHT;
 
-                y = addSection("生成范围", centerX, y);
-                addIntField("玩家生成半径", Scope.WORLD,
-                        "以玩家为中心的最大生成距离",
-                        "尸潮僵尸只会在该半径内寻找刷点。",
+                y = addSection("zombietide.settings.common.text8", centerX, y);
+                addIntField("zombietide.settings.spawn.item4.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item4.desc",
+                        "zombietide.settings.spawn.item4.tip",
                         config.playerRadius(), centerX, y, 1,
                         v -> config = config.withPlayerRadius(v), false);
                 y += ROW_HEIGHT;
-                addIntField("村民生成半径", Scope.WORLD,
-                        "以村民为中心的最大生成距离",
-                        "尸潮僵尸只会在该半径内寻找刷点。",
+                addIntField("zombietide.settings.spawn.item5.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item5.desc",
+                        "zombietide.settings.spawn.item5.tip",
                         config.villagerRadius(), centerX, y, 1,
                         v -> config = config.withVillagerRadius(v), false);
                 y += ROW_HEIGHT;
-                addIntField("最小生成距离", Scope.WORLD,
-                        "单只僵尸距目标的最近距离",
-                        "避免僵尸直接刷在玩家/村民脸上。",
+                addIntField("zombietide.settings.spawn.item6.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item6.desc",
+                        "zombietide.settings.spawn.item6.tip",
                         config.minSpawnDist(), centerX, y, 1,
                         v -> config = config.withMinSpawnDist(v), false);
                 y += ROW_HEIGHT;
-                addIntField("最大生成距离", Scope.WORLD,
-                        "单只僵尸距目标的最远距离",
-                        "超过该距离的刷点不会被选中。",
+                addIntField("zombietide.settings.spawn.item7.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item7.desc",
+                        "zombietide.settings.spawn.item7.tip",
                         config.maxSpawnDist(), centerX, y, 1,
                         v -> config = config.withMaxSpawnDist(v), false);
                 y += ROW_HEIGHT;
-                addIntField("采样次数", Scope.WORLD,
-                        "刷点采样次数，越大越易找到位置",
-                        "每次刷怪的采样次数；越大越容易找到合适位置，但开销更高。",
+                addIntField("zombietide.settings.spawn.item8.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item8.desc",
+                        "zombietide.settings.spawn.item8.tip",
                         config.spawnAttempts(), centerX, y, 1,
                         v -> config = config.withSpawnAttempts(v), false);
                 y += ROW_HEIGHT;
 
-                y = addSection("变种与权重", centerX, y);
-                addCheckbox("按生物群系生成", Scope.WORLD,
-                        "沙漠→尸壳、沼泽→溺尸等",
-                        "关闭后统一生成普通僵尸；开启后按目标所在生物群系选择变种。",
+                y = addSection("zombietide.settings.common.text9", centerX, y);
+                addCheckbox("zombietide.settings.spawn.item9.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item9.desc",
+                        "zombietide.settings.spawn.item9.tip",
                         config.spawnByBiome(), centerX, y,
                         (cb, v) -> config = config.withSpawnByBiome(v), false);
                 y += ROW_HEIGHT;
-                addIntField("距离权重（×100）", Scope.WORLD,
-                        "刷点评分中距离的权重",
-                        "值越大越偏向远处刷怪；按 ×100 输入，如 60 = 0.6。",
+                addIntField("zombietide.settings.spawn.item10.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item10.desc",
+                        "zombietide.settings.spawn.item10.tip",
                         Math.round(config.distanceWeight() * 100), centerX, y, 0,
                         v -> config = config.withDistanceWeight(v / 100.0f), false);
                 y += ROW_HEIGHT;
-                addIntField("暗度权重（×100）", Scope.WORLD,
-                        "刷点评分中阴影的权重",
-                        "值越大越偏向暗处刷怪；按 ×100 输入，如 60 = 0.6。",
+                addIntField("zombietide.settings.spawn.item11.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item11.desc",
+                        "zombietide.settings.spawn.item11.tip",
                         Math.round(config.darkWeight() * 100), centerX, y, 0,
                         v -> config = config.withDarkWeight(v / 100.0f), false);
                 y += ROW_HEIGHT;
 
-                y = addSection("性能上限", centerX, y);
-                addIntField("全局僵尸上限", Scope.WORLD,
-                        "全场存活尸潮僵尸上限",
-                        "达到上限后刷怪会挂起，直到有僵尸死亡释放名额。",
+                y = addSection("zombietide.settings.common.text10", centerX, y);
+                addIntField("zombietide.settings.spawn.item12.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item12.desc",
+                        "zombietide.settings.spawn.item12.tip",
                         config.globalCap(), centerX, y, 1,
                         v -> config = config.withGlobalCap(v), false);
                 y += ROW_HEIGHT;
             }
             case WORLD -> {
-                y = addSection("生存规则", centerX, y);
-                addCheckbox("阳光下燃烧", Scope.WORLD,
-                        "白天阳光是否点燃僵尸",
-                        "关闭后尸潮僵尸白天也不会被阳光点燃。",
+                y = addSection("zombietide.settings.common.text11", centerX, y);
+                addCheckbox("zombietide.settings.world.item1.name", Scope.WORLD,
+                        "zombietide.settings.world.item1.desc",
+                        "zombietide.settings.world.item1.tip",
                         config.daylightBurn(), centerX, y,
                         (cb, v) -> config = config.withDaylightBurn(v), false);
                 y += ROW_HEIGHT;
-                addCheckbox("尸潮期间禁止睡觉", Scope.WORLD,
-                        "尸潮进行中玩家无法入睡",
-                        "玩家尸潮进行中，或附近村民尸潮进行中时，禁止玩家入睡。",
+                addCheckbox("zombietide.settings.world.item2.name", Scope.WORLD,
+                        "zombietide.settings.world.item2.desc",
+                        "zombietide.settings.world.item2.tip",
                         config.blockSleep(), centerX, y,
                         (cb, v) -> config = config.withBlockSleep(v), false);
                 y += ROW_HEIGHT;
-
-                y = addSection("血债", centerX, y);
-                addCycleButton("血债模式", Scope.PLAYER,
-                        "上波幸存僵尸如何结转到下波",
-                        "累积制：每次把幸存数累加到血债；只记上波：只保留最近一波；不结转：血债始终为 0。",
-                        () -> "血债模式：" + debtModeLabel(config.debtMode()), centerX, y,
-                        () -> config = config.withDebtMode(nextDebtMode(config.debtMode())));
-                y += ROW_HEIGHT;
-                addIntField("血债上限", Scope.PLAYER,
-                        "血债最多累计多少只",
-                        "达到上限后不再增加；血债会在下波尸潮时追加到生成数量。",
-                        config.debtCap(), centerX, y, 0,
-                        v -> config = config.withDebtCap(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("清理", centerX, y);
-                addIntField("僵尸自然消失秒数", Scope.WORLD,
-                        "日出前 N 秒开始四散",
-                        "23460 起火时刻统一清除；该值决定提前多久开始逃跑。",
-                        config.despawnSeconds(), centerX, y, 1,
-                        v -> config = config.withDespawnSeconds(v), false);
-                y += ROW_HEIGHT;
-            }
-            case WARNING -> {
-                y = addSection("警告开关", centerX, y);
-                addCheckbox("启用警告", Scope.WORLD,
-                        "总开关，关闭后无任何提示",
-                        "关闭后清晨提醒、触发标题和音效都不再出现。",
-                        config.warningEnabled(), centerX, y,
-                        (cb, v) -> config = config.withWarningEnabled(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("标题警告", Scope.WORLD,
-                        "触发时显示「尸潮」大标题",
-                        "仅「启用警告」开启时生效。",
-                        config.warningTitle(), centerX, y,
-                        (cb, v) -> config = config.withWarningTitle(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("尸潮触发音效", Scope.WORLD,
-                        "触发时播放定制音效",
-                        "对应「尸潮触发.mp3」，已替换原版僵尸敲木门声；仅「启用警告」开启时生效，村民尸潮附近玩家也能听到。",
-                        config.warningSound(), centerX, y,
-                        (cb, v) -> config = config.withWarningSound(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("定制音频", centerX, y);
-                addCheckbox("清晨提醒音效", Scope.WORLD,
-                        "尸潮日清晨提醒时播放",
-                        "对应「清晨提醒.mp3」；只发给收到提醒的玩家本人，受「启用警告」总开关控制。",
-                        config.morningWarningSound(), centerX, y,
-                        (cb, v) -> config = config.withMorningWarningSound(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("四散音效", Scope.WORLD,
-                        "日出前四散时播放",
-                        "对应「四散触发.mp3」；只发给玩家尸潮触发者，村民尸潮不播放。",
-                        config.scatterSound(), centerX, y,
-                        (cb, v) -> config = config.withScatterSound(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("尸潮背景音乐", Scope.WORLD,
-                        "尸潮期间随机间隔播放背景音乐",
-                        "每 30 秒~2 分钟随机播放一段（5 段素材随机选取）；只有玩家尸潮触发者能听到，村民尸潮不播放；波次结束自动停止。",
-                        config.hordeBgmSound(), centerX, y,
-                        (cb, v) -> config = config.withHordeBgmSound(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("范围", centerX, y);
-                addIntField("村民警告范围", Scope.VILLAGER,
-                        "村民尸潮警报的广播半径",
-                        "该范围内的玩家会收到标题、音效和聊天提示。",
-                        config.villagerWarningRange(), centerX, y, 1,
-                        v -> config = config.withVillagerWarningRange(v), false);
-                y += ROW_HEIGHT;
-                addIntField("村民禁睡范围", Scope.VILLAGER,
-                        "村民尸潮阻止入睡的半径",
-                        "该范围内的玩家在村民尸潮期间无法入睡。",
+                addIntField("zombietide.settings.world.item3.name", Scope.VILLAGER,
+                        "zombietide.settings.world.item3.desc",
+                        "zombietide.settings.world.item3.tip",
                         config.villagerSleepBlockRange(), centerX, y, 1,
                         v -> config = config.withVillagerSleepBlockRange(v), false);
                 y += ROW_HEIGHT;
 
-                y = addSection("自然生成", centerX, y);
-                addCheckbox("屏蔽自然僵尸生成", Scope.WORLD,
-                        "阻止原版自然刷新的僵尸类",
-                        "拦截僵尸、尸壳、溺尸、僵尸村民的自然生成；不影响尸潮刷怪。",
+                y = addSection("zombietide.settings.common.text12", centerX, y);
+                addCycleButton("zombietide.settings.world.item4.name", Scope.PLAYER,
+                        "zombietide.settings.world.item4.desc",
+                        "zombietide.settings.world.item4.tip",
+                        () -> tr("zombietide.settings.debt.prefix") + debtModeLabel(config.debtMode()), centerX, y,
+                        () -> config = config.withDebtMode(nextDebtMode(config.debtMode())));
+                y += ROW_HEIGHT;
+                addIntField("zombietide.settings.world.item5.name", Scope.PLAYER,
+                        "zombietide.settings.world.item5.desc",
+                        "zombietide.settings.world.item5.tip",
+                        config.debtCap(), centerX, y, 0,
+                        v -> config = config.withDebtCap(v), false);
+                y += ROW_HEIGHT;
+
+                y = addSection("zombietide.settings.common.text13", centerX, y);
+                addIntField("zombietide.settings.world.item6.name", Scope.WORLD,
+                        "zombietide.settings.world.item6.desc",
+                        "zombietide.settings.world.item6.tip",
+                        config.despawnSeconds(), centerX, y, 1,
+                        v -> config = config.withDespawnSeconds(v), false);
+                y += ROW_HEIGHT;
+
+                y = addSection("zombietide.settings.common.text14", centerX, y);
+                addCheckbox("zombietide.settings.world.item7.name", Scope.WORLD,
+                        "zombietide.settings.world.item7.desc",
+                        "zombietide.settings.world.item7.tip",
                         config.blockNaturalSpawn(), centerX, y,
                         (cb, v) -> config = config.withBlockNaturalSpawn(v), false);
                 y += ROW_HEIGHT;
             }
-            case HUD -> {
-                y = addSection("本页说明", centerX, y);
-                y = addNote("本页设置仅保存在本机，所有存档/服务器通用", centerX, y);
+            case WARNING -> {
+                y = addSection("zombietide.settings.common.text15", centerX, y);
+                addCheckbox("zombietide.settings.warning.item1.name", Scope.WORLD,
+                        "zombietide.settings.warning.item1.desc",
+                        "zombietide.settings.warning.item1.tip",
+                        config.warningEnabled(), centerX, y,
+                        (cb, v) -> config = config.withWarningEnabled(v), false);
+                y += ROW_HEIGHT;
+                addCheckbox("zombietide.settings.warning.item2.name", Scope.WORLD,
+                        "zombietide.settings.warning.item2.desc",
+                        "zombietide.settings.warning.item2.tip",
+                        config.warningTitle(), centerX, y,
+                        (cb, v) -> config = config.withWarningTitle(v), false);
+                y += ROW_HEIGHT;
+                addCheckbox("zombietide.settings.warning.item3.name", Scope.WORLD,
+                        "zombietide.settings.warning.item3.desc",
+                        "zombietide.settings.warning.item3.tip",
+                        config.warningSound(), centerX, y,
+                        (cb, v) -> config = config.withWarningSound(v), false);
+                y += ROW_HEIGHT;
 
-                y = addSection("显示", centerX, y);
-                addCheckbox("启用 HUD（DAY X）", Scope.CLIENT,
-                        "左上角显示当前模组天数",
-                        "关闭后不渲染 DAY X 与村民列表。",
+                y = addSection("zombietide.settings.common.text16", centerX, y);
+                addCheckbox("zombietide.settings.warning.item4.name", Scope.WORLD,
+                        "zombietide.settings.warning.item4.desc",
+                        "zombietide.settings.warning.item4.tip",
+                        config.morningWarningSound(), centerX, y,
+                        (cb, v) -> config = config.withMorningWarningSound(v), false);
+                y += ROW_HEIGHT;
+                addCheckbox("zombietide.settings.warning.item5.name", Scope.WORLD,
+                        "zombietide.settings.warning.item5.desc",
+                        "zombietide.settings.warning.item5.tip",
+                        config.scatterSound(), centerX, y,
+                        (cb, v) -> config = config.withScatterSound(v), false);
+                y += ROW_HEIGHT;
+                addCheckbox("zombietide.settings.warning.item6.name", Scope.WORLD,
+                        "zombietide.settings.warning.item6.desc",
+                        "zombietide.settings.warning.item6.tip",
+                        config.hordeBgmSound(), centerX, y,
+                        (cb, v) -> config = config.withHordeBgmSound(v), false);
+                y += ROW_HEIGHT;
+
+                y = addSection("zombietide.settings.common.text17", centerX, y);
+                addIntField("zombietide.settings.warning.item7.name", Scope.VILLAGER,
+                        "zombietide.settings.warning.item7.desc",
+                        "zombietide.settings.warning.item7.tip",
+                        config.villagerWarningRange(), centerX, y, 1,
+                        v -> config = config.withVillagerWarningRange(v), false);
+                y += ROW_HEIGHT;
+            }
+            case HUD -> {
+                y = addNote("zombietide.settings.common.text18", centerX, y);
+
+                y = addSection("zombietide.settings.common.text19", centerX, y);
+                addCheckbox("zombietide.settings.hud.item1.name", null,
+                        "zombietide.settings.hud.item1.desc",
+                        "zombietide.settings.hud.item1.tip",
                         hudConfig.hudEnabled(), centerX, y,
                         (cb, v) -> hudConfig = hudConfig.withHudEnabled(v), true);
                 y += ROW_HEIGHT;
-                addCheckbox("显示附近村民尸潮信息", Scope.CLIENT,
-                        "在 HUD 下方列出附近村民",
-                        "按距离从近到远排序，最多显示设定条数。",
+                addCheckbox("zombietide.settings.hud.item2.name", null,
+                        "zombietide.settings.hud.item2.desc",
+                        "zombietide.settings.hud.item2.tip",
                         hudConfig.showVillagerHorde(), centerX, y,
                         (cb, v) -> hudConfig = hudConfig.withShowVillagerHorde(v), true);
                 y += ROW_HEIGHT;
-                addCheckbox("HUD 粗体（DAY X）", Scope.CLIENT,
-                        "DAY X 使用粗体",
-                        "仅影响玩家自己的 DAY X 文字。",
+                addCheckbox("zombietide.settings.hud.item3.name", null,
+                        "zombietide.settings.hud.item3.desc",
+                        "zombietide.settings.hud.item3.tip",
                         hudConfig.hudBold(), centerX, y,
                         (cb, v) -> hudConfig = hudConfig.withHudBold(v), true);
                 y += ROW_HEIGHT;
-                addCheckbox("村民尸潮粗体", Scope.CLIENT,
-                        "村民条目使用粗体",
-                        "仅影响 HUD 村民列表的文字。",
+                addCheckbox("zombietide.settings.hud.item4.name", null,
+                        "zombietide.settings.hud.item4.desc",
+                        "zombietide.settings.hud.item4.tip",
                         hudConfig.villagerHordeBold(), centerX, y,
                         (cb, v) -> hudConfig = hudConfig.withVillagerHordeBold(v), true);
                 y += ROW_HEIGHT;
 
-                y = addSection("位置与缩放", centerX, y);
-                addIntField("HUD X 坐标", Scope.CLIENT,
-                        "屏幕横向像素坐标",
-                        "从屏幕左上角起算。",
+                y = addSection("zombietide.settings.common.text20", centerX, y);
+                addIntField("zombietide.settings.hud.item5.name", null,
+                        "zombietide.settings.hud.item5.desc",
+                        "zombietide.settings.hud.item5.tip",
                         hudConfig.hudX(), centerX, y, 0,
                         v -> hudConfig = hudConfig.withHudX(v), true);
                 y += ROW_HEIGHT;
-                addIntField("HUD Y 坐标", Scope.CLIENT,
-                        "屏幕纵向像素坐标",
-                        "从屏幕左上角起算。",
+                addIntField("zombietide.settings.hud.item6.name", null,
+                        "zombietide.settings.hud.item6.desc",
+                        "zombietide.settings.hud.item6.tip",
                         hudConfig.hudY(), centerX, y, 0,
                         v -> hudConfig = hudConfig.withHudY(v), true);
                 y += ROW_HEIGHT;
-                addIntField("HUD 缩放（×10）", Scope.CLIENT,
-                        "50 = 5 倍，10 = 1 倍",
-                        "按 ×10 输入，实际缩放 = 输入值 / 10。",
+                addIntField("zombietide.settings.hud.item7.name", null,
+                        "zombietide.settings.hud.item7.desc",
+                        "zombietide.settings.hud.item7.tip",
                         Math.round(hudConfig.hudScale() * 10), centerX, y, 1,
                         v -> hudConfig = hudConfig.withHudScale(v / 10.0f), true);
                 y += ROW_HEIGHT;
-                addIntField("村民列表 X 坐标", Scope.CLIENT,
-                        "村民列表的横向坐标",
-                        "从屏幕左上角起算。",
+                addIntField("zombietide.settings.hud.item8.name", null,
+                        "zombietide.settings.hud.item8.desc",
+                        "zombietide.settings.hud.item8.tip",
                         hudConfig.villagerHordeX(), centerX, y, 0,
                         v -> hudConfig = hudConfig.withVillagerHordeX(v), true);
                 y += ROW_HEIGHT;
-                addIntField("村民列表 Y 坐标", Scope.CLIENT,
-                        "村民列表的纵向坐标",
-                        "从屏幕左上角起算。",
+                addIntField("zombietide.settings.hud.item9.name", null,
+                        "zombietide.settings.hud.item9.desc",
+                        "zombietide.settings.hud.item9.tip",
                         hudConfig.villagerHordeY(), centerX, y, 0,
                         v -> hudConfig = hudConfig.withVillagerHordeY(v), true);
                 y += ROW_HEIGHT;
-                addIntField("村民列表缩放（×10）", Scope.CLIENT,
-                        "10 = 1 倍",
-                        "按 ×10 输入，实际缩放 = 输入值 / 10。",
+                addIntField("zombietide.settings.hud.item10.name", null,
+                        "zombietide.settings.hud.item10.desc",
+                        "zombietide.settings.hud.item10.tip",
                         Math.round(hudConfig.villagerHordeScale() * 10), centerX, y, 1,
                         v -> hudConfig = hudConfig.withVillagerHordeScale(v / 10.0f), true);
                 y += ROW_HEIGHT;
 
-                y = addSection("村民列表", centerX, y);
-                addIntField("显示距离（格）", Scope.CLIENT,
-                        "只显示该距离内的村民",
-                        "超过该距离的村民不会出现在 HUD 列表中。",
+                y = addSection("zombietide.settings.common.text21", centerX, y);
+                addIntField("zombietide.settings.hud.item11.name", null,
+                        "zombietide.settings.hud.item11.desc",
+                        "zombietide.settings.hud.item11.tip",
                         hudConfig.villagerHordeDisplayRange(), centerX, y, 1,
                         v -> hudConfig = hudConfig.withVillagerHordeDisplayRange(v), true);
                 y += ROW_HEIGHT;
-                addIntField("最大显示数量", Scope.CLIENT,
-                        "最多列出多少条",
-                        "按距离从近到远排序后截取。",
+                addIntField("zombietide.settings.hud.item12.name", null,
+                        "zombietide.settings.hud.item12.desc",
+                        "zombietide.settings.hud.item12.tip",
                         hudConfig.villagerHordeMaxEntries(), centerX, y, 1,
                         v -> hudConfig = hudConfig.withVillagerHordeMaxEntries(v), true);
                 y += ROW_HEIGHT;
@@ -611,7 +608,7 @@ public class ZombietideSettingsScreen extends Screen {
         }
 
         // ===== 固定底部完成按钮（手动渲染/命中） =====
-        this.doneBtn = Button.builder(Component.literal("完成"), b -> this.onClose())
+        this.doneBtn = Button.builder(Component.literal(tr("zombietide.settings.button.done")), b -> this.onClose())
                 .bounds(this.width / 2 - 60, this.height - 28, 120, 20).build();
 
         // 内容高度：以最后一个控件底边为准 + 底部留白
@@ -869,20 +866,20 @@ public class ZombietideSettingsScreen extends Screen {
     // ==================== 控件工厂 ====================
 
     private int addSection(String title, int centerX, int y) {
-        this.sectionHeaders.add(new SectionHeader(title, centerX, y));
+        this.sectionHeaders.add(new SectionHeader(tr(title), centerX, y));
         return y + SECTION_HEIGHT;
     }
 
     private int addNote(String text, int centerX, int y) {
-        this.tabLabels.add(new LabelData("§7" + text, centerX, y));
+        this.tabLabels.add(new LabelData("§7" + tr(text), centerX, y));
         return y + 16;
     }
 
     private Checkbox addCheckbox(String label, Scope scope, String desc, String tooltip,
                                  boolean checked, int centerX, int y,
                                  Checkbox.OnValueChange onChange, boolean clientOnly) {
-        this.tabLabels.add(new LabelData("§l" + scope.color + "[" + scope.label + "] §r§f" + label, centerX, y));
-        this.tabLabels.add(new LabelData("§7" + desc, centerX, y + 10));
+        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color + "[" + tr(scope.key) + "] §r§f") + tr(label), centerX, y));
+        this.tabLabels.add(new LabelData("§7" + tr(desc), centerX, y + 10));
         Checkbox cb = Checkbox.builder(Component.empty(), this.font)
                 .pos(centerX - 100, y + 22)
                 .selected(checked)
@@ -897,7 +894,7 @@ public class ZombietideSettingsScreen extends Screen {
                 .build();
         cb.setWidth(FIELD_WIDTH);
         cb.setHeight(FIELD_HEIGHT);
-        cb.setTooltip(Tooltip.create(Component.literal(tooltip)));
+        cb.setTooltip(Tooltip.create(Component.literal(tr(tooltip))));
         this.addRenderableWidget(cb);
         this.checkboxes.add(cb);
         return cb;
@@ -906,11 +903,11 @@ public class ZombietideSettingsScreen extends Screen {
     private EditBox addIntField(String label, Scope scope, String desc, String tooltip,
                                 int value, int centerX, int y, int minValue,
                                 IntConsumer onChange, boolean clientOnly) {
-        this.tabLabels.add(new LabelData("§l" + scope.color + "[" + scope.label + "] §r§f" + label, centerX, y));
-        this.tabLabels.add(new LabelData("§7" + desc, centerX, y + 10));
-        EditBox field = new EditBox(this.font, centerX - 100, y + 22, FIELD_WIDTH, FIELD_HEIGHT, Component.literal(label));
+        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color + "[" + tr(scope.key) + "] §r§f") + tr(label), centerX, y));
+        this.tabLabels.add(new LabelData("§7" + tr(desc), centerX, y + 10));
+        EditBox field = new EditBox(this.font, centerX - 100, y + 22, FIELD_WIDTH, FIELD_HEIGHT, Component.literal(tr(label)));
         field.setValue(String.valueOf(value));
-        field.setTooltip(Tooltip.create(Component.literal(tooltip)));
+        field.setTooltip(Tooltip.create(Component.literal(tr(tooltip))));
         final boolean[] isSetting = { false };
         final int[] lastSentValue = { value };
         field.setResponder((s) -> {
@@ -943,15 +940,15 @@ public class ZombietideSettingsScreen extends Screen {
 
     private Button addCycleButton(String label, Scope scope, String desc, String tooltip,
                                   java.util.function.Supplier<String> valueText, int centerX, int y, Runnable onPress) {
-        this.tabLabels.add(new LabelData("§l" + scope.color + "[" + scope.label + "] §r§f" + label, centerX, y));
-        this.tabLabels.add(new LabelData("§7" + desc, centerX, y + 10));
+        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color + "[" + tr(scope.key) + "] §r§f") + tr(label), centerX, y));
+        this.tabLabels.add(new LabelData("§7" + tr(desc), centerX, y + 10));
         Button btn = Button.builder(Component.literal(valueText.get()), b -> {
             onPress.run();
             pushConfig();
             // 直接刷新按钮文字，避免重建整页（重建会打断当前点击事件）
             b.setMessage(Component.literal(valueText.get()));
         }).bounds(centerX - 100, y + 22, FIELD_WIDTH, FIELD_HEIGHT).build();
-        btn.setTooltip(Tooltip.create(Component.literal(tooltip)));
+        btn.setTooltip(Tooltip.create(Component.literal(tr(tooltip))));
         this.addRenderableWidget(btn);
         return btn;
     }
@@ -962,14 +959,14 @@ public class ZombietideSettingsScreen extends Screen {
         // 保持存档里的 HUD 字段与本机全局配置一致（仅兼容旧数据，实际渲染以本机为准）
         this.config = this.config.withHud(ClientHudConfig.get());
         ModMessages.sendConfigToServer(this.config);
-        toast("§a[尸潮] 配置已立即生效");
+        toast(tr("zombietide.settings.toast.config_saved"));
     }
 
     /** 本机全局 HUD 配置：只写本地文件，不发服务端 */
     private void commitClientHud() {
         ClientHudConfig.set(this.hudConfig);
         this.config = this.config.withHud(this.hudConfig);
-        toast("§a[尸潮] HUD 设置已保存（本机，所有存档通用）");
+        toast(tr("zombietide.settings.toast.hud_saved"));
     }
 
     private void toast(String msg) {
@@ -981,11 +978,16 @@ public class ZombietideSettingsScreen extends Screen {
         }
     }
 
+    /** 从客户端语言文件取文字；缺键时 I18n.get 原样返回键，便于发现遗漏 */
+    private static String tr(String key) {
+        return I18n.get(key);
+    }
+
     private static String debtModeLabel(String mode) {
         return switch (mode == null ? "" : mode) {
-            case "last_only" -> "只记上波";
-            case "none" -> "不结转";
-            default -> "累积制";
+            case "last_only" -> tr("zombietide.settings.debt.last_only");
+            case "none" -> tr("zombietide.settings.debt.none");
+            default -> tr("zombietide.settings.debt.cumulative");
         };
     }
 
