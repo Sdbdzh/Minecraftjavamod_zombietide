@@ -111,12 +111,15 @@ public class ZombietideSettingsScreen extends Screen {
     /** 壁纸纹理（完整资源路径；SimpleTexture 不做前缀/后缀转换）。图片为 rgb24，无 alpha 通道。 */
     private static final ResourceLocation BG_TEXTURE =
             ResourceLocation.fromNamespaceAndPath(EnikZombietide.MODID, "textures/gui/settings_bg.png");
-    /** 原始图片尺寸：1376×278 的宽幅长图 */
-    private static final int BG_TEX_W = 1376;
-    private static final int BG_TEX_H = 278;
+    /** 原始图片尺寸：5504×1112 的宽幅长图（超分辨率版，比例与旧版 1376×278 一致） */
+    private static final int BG_TEX_W = 5504;
+    private static final int BG_TEX_H = 1112;
     /** 当前水平滚动偏移（屏幕像素），切换分页时向目标平滑插值 */
     private float bgScroll = 0.0F;
     private boolean bgScrollReady = false;
+    /** 记录上次渲染的窗口尺寸：尺寸变化时重新吸附背景偏移 */
+    private int bgLastWidth = -1;
+    private int bgLastHeight = -1;
 
     private Checkbox playerHordeEnabledCheckbox;
     private EditBox playerIntervalDaysEdit;
@@ -662,25 +665,40 @@ public class ZombietideSettingsScreen extends Screen {
      * 绘制 100% 不透明背景壁纸。
      * <ul>
      *   <li><b>放大铺满（cover）</b>：scale = max(屏宽/图宽, 屏高/图高)，额外 +2px 冗余，
-     *       保证上下左右都不露黑边。图片是 1376×278 的宽幅长图，按高度铺满后宽度远大于屏幕，
+     *       保证上下左右都不露黑边。图片是 5504×1112 的宽幅长图，按高度铺满后宽度远大于屏幕，
      *       正好留出左右滚动空间。</li>
      *   <li><b>不透明</b>：不再调用 renderBackground（那是半透明暗色遮罩）；
      *       整屏由 rgb24 图片覆盖（NativeImage 会把 alpha 填 255），并把 shader color 的 alpha 显式置 1。</li>
-     *   <li><b>随分页左右滑动</b>：按 currentTab.ordinal() 在 [0, maxScroll] 上取目标偏移，
-     *       每帧平滑插值，模拟安卓桌面壁纸跟随页面滑动；首次打开直接停在对应位置。</li>
+     *   <li><b>随分页左右滑动（安卓桌面壁纸式）</b>：滑动范围完全由图片绘制宽度决定
+     *       —— maxScroll = drawW - 屏宽；第 1 个分页停在图片左边缘（偏移 0），
+     *       最后一个分页停在图片右边缘（偏移 maxScroll），中间分页按进度落在中间。
+     *       每帧平滑插值，首次打开/窗口尺寸变化时直接吸附到目标位置。</li>
      * </ul>
      */
     private void renderWallpaper(GuiGraphics g) {
         int w = this.width;
         int h = this.height;
+
+        // 窗口尺寸变化（改窗口大小 / GUI 缩放）时重新吸附，避免沿用旧偏移
+        if (w != this.bgLastWidth || h != this.bgLastHeight) {
+            this.bgLastWidth = w;
+            this.bgLastHeight = h;
+            this.bgScrollReady = false;
+        }
+
         // +2 像素冗余，避免浮点取整在边缘留下 1px 缝隙
         float scale = Math.max((float) (w + 2) / BG_TEX_W, (float) (h + 2) / BG_TEX_H);
         float drawW = BG_TEX_W * scale;
         float drawH = BG_TEX_H * scale;
+        // 滑动范围完全由「图片绘制宽度 - 屏幕宽度」决定
         float maxScroll = Math.max(0.0F, drawW - w);
 
         int tabCount = Tab.values().length;
-        float target = maxScroll * (this.currentTab.ordinal() / (float) Math.max(1, tabCount - 1));
+        // 进度 0 = 第一个分页（图片左边缘）；1 = 最后一个分页（图片右边缘）；中间按比例
+        float progress = tabCount <= 1 ? 0.0F
+                : this.currentTab.ordinal() / (float) (tabCount - 1);
+        float target = maxScroll * progress;
+
         if (!this.bgScrollReady) {
             this.bgScroll = target;
             this.bgScrollReady = true;
