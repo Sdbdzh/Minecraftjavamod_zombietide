@@ -22,7 +22,8 @@ import java.util.UUID;
  * 规则（按需求）：
  * <ul>
  *   <li>只有 {@code waveActive=true} 的**玩家**能听到；村民尸潮不播放，附近玩家也听不到</li>
- *   <li>每次播放后随机等待 30 秒 ~ 2 分钟（600~2400 tick）再播下一段，不做无缝循环</li>
+ *   <li>每隔随机 30 秒 ~ 2 分钟（600~2400 tick）播一段；间隔从**本次开始播放**时刻起算，
+ *       不是播完再等（实现为 {@code NEXT_PLAY_TICK = now + randomInterval()}），不做无缝循环</li>
  *   <li>具体曲目由 {@code sounds.json} 中 horde_bgm 的 5 个变体随机选取</li>
  *   <li>波次结束（四散/黎明/强制四散/清场）或关闭开关时，立即下发停止包掐掉残留音乐</li>
  * </ul>

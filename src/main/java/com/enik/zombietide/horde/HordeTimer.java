@@ -341,7 +341,7 @@ public class HordeTimer {
             HordeSpawner.startHorde(overworld, villager.getUUID(), villager, hordeSize, config, true, config.villagerRadius());
 
             // 同步给附近玩家
-            for (ServerPlayer p : overworld.getServer().getPlayerList().getPlayers()) {
+            for (ServerPlayer p : overworld.players()) {
                 if (p.distanceToSqr(villager) <= 128.0 * 128.0) {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), modDay,
@@ -351,14 +351,14 @@ public class HordeTimer {
         }
     }
 
-    /** 绕过窗口限制的玩家尸潮触发（missedDusk 补偿），带前夜警告 */
+    /** 绕过窗口限制的玩家尸潮触发（missedDusk 补偿），带清晨提醒 */
     private static void checkPlayerHordesBypassWindowWithWarning(ServerLevel overworld, ZombietideConfig config) {
         if (!config.playerHordeEnabled()) return;
 
         MinecraftServer server = overworld.getServer();
         if (server == null) return;
 
-        // 先发前夜警告
+        // 先发清晨提醒
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (player.level().dimension() != Level.OVERWORLD) continue;
 
@@ -379,38 +379,10 @@ public class HordeTimer {
         checkPlayerHordesBypassWindow(overworld, config);
     }
 
-    /** 绕过窗口限制的村民尸潮触发，带前夜警告 */
+    /** 绕过窗口限制的村民尸潮触发（missedDusk 补偿）。
+     *  <p>方法名带 WithWarning 是历史遗留：村民清晨提醒已弃用，本方法不再发送任何提醒。
+     *  原先的调度表遍历已无副作用，已删除。 */
     private static void checkVillagerHordesBypassWindowWithWarning(ServerLevel overworld, ZombietideConfig config) {
-        if (!config.villagerHordeEnabled()) return;
-
-        VillagerScheduleData schedule = overworld.getDataStorage().computeIfAbsent(
-                VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
-
-        // 构建"当前已加载村民"映射（一次性遍历，替代逐条 getEntity）
-        java.util.Map<UUID, Villager> loadedVillagers = buildLoadedVillagerMap(overworld);
-        if (loadedVillagers.isEmpty()) return;
-
-        for (var entry : schedule.getAllSchedules().entrySet()) {
-            UUID villagerUuid = entry.getKey();
-            VillagerScheduleData.ScheduleEntry sched = entry.getValue();
-
-            int modDay = sched.modDay();
-            int interval = config.villagerIntervalDays();
-            if (interval <= 0) continue;
-            // 触发判定：严格按 interval，第 interval 天首次触发，之后每 interval 天
-            // 即：modDay % interval == interval - 1
-            // interval=7 时：6, 13, 20, 27... (第 7、14、21、28 天)
-            if (modDay % interval != interval - 1) continue;
-            if (sched.lastTriggerDay() == modDay && sched.waveCount() > 0) continue;
-
-            Villager villager = loadedVillagers.get(villagerUuid);
-            if (villager == null) continue;
-            if (villager.level().dimension() != Level.OVERWORLD) continue;
-
-            // 村民尸潮清晨提醒已弃用
-            // HordeSpawner.sendVillagerMorningWarning(overworld, villager, config);
-        }
-
         checkVillagerHordesBypassWindow(overworld, config);
     }
 
@@ -497,7 +469,7 @@ public class HordeTimer {
             HordeWarning.triggerVillagerHorde(overworld, villager, config);
             HordeSpawner.startHorde(overworld, villager.getUUID(), villager, hordeSize, config, true, config.villagerRadius());
 
-            for (ServerPlayer p : overworld.getServer().getPlayerList().getPlayers()) {
+            for (ServerPlayer p : overworld.players()) {
                 if (p.distanceToSqr(villager) <= 128.0 * 128.0) {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), targetModDay,
@@ -588,7 +560,7 @@ public class HordeTimer {
             HordeWarning.triggerVillagerHorde(overworld, villager, config);
             HordeSpawner.startHorde(overworld, villager.getUUID(), villager, hordeSize, config, true, config.villagerRadius());
 
-            for (ServerPlayer p : overworld.getServer().getPlayerList().getPlayers()) {
+            for (ServerPlayer p : overworld.players()) {
                 if (p.distanceToSqr(villager) <= 128.0 * 128.0) {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), modDay,

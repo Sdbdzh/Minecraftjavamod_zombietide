@@ -39,7 +39,8 @@ public class HordeWarning {
     private static final Random RANDOM = new Random();
 
     /**
-     * 清晨尸潮提醒：尸潮日黎明后（0-1000）调用。
+     * 清晨尸潮提醒：常规路径在尸潮日黎明后（0-1000）调用；
+     * missedDusk 补偿链在夜晚跨过黄昏窗口时也会调用（语义仍是「清晨提醒」）。
      * 发送聊天文案（随机抽 1 段）+ 定制清晨提醒音效（受 morningWarningSound 开关控制），无大标题。
      *
      * @param level  服务端世界
@@ -86,7 +87,7 @@ public class HordeWarning {
                     ModSounds.HORDE_TRIGGER.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
         }
 
-        // 突袭旁白：逾期立即触发时从语言文件随机抽 1 段
+        // 突袭旁白：无条件发送，从语言文件随机抽 1 段
         int index = RANDOM.nextInt(AMBUSH_LINE_COUNT) + 1;
         player.sendSystemMessage(Component.translatable("zombietide.ambush." + index));
 
@@ -95,7 +96,7 @@ public class HordeWarning {
 
     /**
      * 村民尸潮触发警报：村民尸潮触发瞬间调用（设计文档 7.2 语义）。
-     * 大标题 + 僵尸嘶吼 + 突袭旁白，发给村民周围 villagerWarningRange 范围内的玩家。
+     * 大标题 + 定制触发音效 + 突袭旁白，发给村民周围 villagerWarningRange 范围内的玩家。
      *
      * @param level    服务端世界
      * @param villager 尸潮触发的村民
@@ -106,7 +107,7 @@ public class HordeWarning {
 
         double range = config.villagerWarningRange();
         for (ServerPlayer player : level.getPlayers(p -> p.distanceToSqr(villager) <= range * range)) {
-            // 村民尸潮触发警报与玩家触发警报共用三件套（标题+嘶吼+突袭旁白）
+            // 村民尸潮触发警报与玩家触发警报共用三件套（标题 + 触发音效 + 突袭旁白）
             triggerPlayerHorde(level, player, config);
         }
         EnikZombietide.LOGGER.info("村民尸潮触发警报已发送给 {} 周围 {} 格内的玩家",

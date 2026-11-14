@@ -23,7 +23,7 @@ import java.util.UUID;
  *   <li>永不自然消失（setPersistenceRequired）</li>
  *   <li>增援召唤关闭（SPAWN_REINFORCEMENTS_CHANCE 基值归零）</li>
  *   <li>NBT 身份标记：目标 UUID + 波次 ID + 状态</li>
- *   <li>主目标锁定 Goal 注入 goalSelector 优先级 0（最高）</li>
+ *   <li>主目标锁定 Goal 注入 goalSelector 优先级 9（最低）</li>
  * </ol>
  * <p>
  * 破门功能已移除：僵尸不再破坏门（设计变更）。
@@ -41,9 +41,9 @@ public final class HordeZombieBehavior {
     /**
      * 应用尸潮僵尸行为。
      *
-     * @param mob        尸潮僵尸（Zombie、Husk、Stray 等 Mob）
+     * @param mob        尸潮僵尸（Zombie / Husk / Drowned / ZombieVillager）
      * @param targetUUID 主目标 UUID（尸潮触发者：玩家或村民）
-     * @param config     存档配置（保留参数，供后续扩展如日光燃烧开关）
+     * @param config     存档配置；当前 apply() 未使用，日光燃烧由 DaylightBurnMixin 实现
      */
     public static void apply(Mob mob, UUID targetUUID, ZombietideConfig config) {
         // 1. 永不自然消失（幂等调用，HordeSpawner 此前已调用过一次）

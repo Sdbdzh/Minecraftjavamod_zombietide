@@ -21,7 +21,7 @@ public class ConfigManager {
     }
 
     /**
-     * 应用远程配置（客户端 ESC 菜单修改后收到的 payload）。
+     * 应用远程配置（客户端按键打开的设置界面修改后收到的 payload）。
      * 修改后将配置写入 Level Data 并标记脏，随存档持久化；同时广播给所有在线客户端。
      */
     public static void applyRemoteConfig(ZombietideConfig newConfig, ServerLevel level) {

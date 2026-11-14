@@ -523,8 +523,10 @@ public class HordeSpawner {
             if (exactDespawnTicks < 1) exactDespawnTicks = 1;
             scatteringZombies.put(entity.getUUID(), exactDespawnTicks);
 
-            // 直接设置四散逃跑导航（背向主目标远距离移动），不依赖 HordeZombieGoal
-            // 因为 state==1 时 HordeZombieGoal.canUse() 返回 false，不会再执行
+            // 直接设置四散逃跑导航（背向主目标远距离移动）。
+            // 注意：state==1 时 HordeZombieGoal.canUse() 仍返回 true，其 tick() 会用 8 方向
+            // 评分选点（躲阳光/背离目标/规避威胁）覆盖本处导航；FleeGoal（优先级 0）同时生效，
+            // 最终以 HordeZombieGoal 的评分选点为准。
             LivingEntity mainTarget = null;
             var targetEntity = level.getEntity(targetId);
             if (targetEntity instanceof LivingEntity le) mainTarget = le;
@@ -557,7 +559,7 @@ public class HordeSpawner {
             }
         }
 
-        // 【t37 修复】四散完成后重置目标 waveActive=false，避免 debug info 始终显示“进行中”
+        // 【t37 修复】四散开始时（本方法即 23260 的调用点）重置目标 waveActive=false，避免 debug info 始终显示“进行中”
         for (UUID targetId : scatterTargets) {
             var target = level.getEntity(targetId);
             if (target instanceof ServerPlayer player) {
@@ -683,7 +685,8 @@ public class HordeSpawner {
                             .withStyle(survivorCount > 0 ? net.minecraft.ChatFormatting.RED : net.minecraft.ChatFormatting.GREEN))
                     .append(net.minecraft.network.chat.Component.literal(" 只，血债 +" + newDebt)
                             .withStyle(net.minecraft.ChatFormatting.RED));
-            for (ServerPlayer p : level.getPlayers(pl -> !pl.gameMode.getGameModeForPlayer().isSurvival())) {
+            for (ServerPlayer p : level.getPlayers(pl -> pl.gameMode.getGameModeForPlayer() != GameType.SURVIVAL
+                    && pl.gameMode.getGameModeForPlayer() != GameType.ADVENTURE)) {
                 p.sendSystemMessage(debtMsg);
             }
         }
@@ -1023,7 +1026,7 @@ public class HordeSpawner {
         // 村民尸潮清晨提醒已弃用
     }
 
-    /** 清晨警告检测：黎明后（0-1000）检查今天是否为尸潮日，仅发送聊天提醒（无标题/音效） */
+    /** 清晨警告检测：黎明后（0-1000）检查今天是否为尸潮日；发送聊天提醒 + morning_warning 音效（无大标题） */
     public static void checkMorningWarning(ServerLevel level, ZombietideConfig config) {
         if (!config.warningEnabled()) return;
 
@@ -1137,7 +1140,8 @@ public class HordeSpawner {
                 // Zombie 已覆盖 ZombieVillager / Husk / Drowned（均为其子类）
                 count++;
             } else if (entity instanceof net.minecraft.world.entity.monster.Stray) {
-                // Stray 不是 Zombie 子类，必须单独计入；否则不计全局上限，且 UUID 会被误删
+                // 防御性保留：当前 createBiomeZombie 不生成 Stray；但若带尸潮标记的 Stray 存在
+                // （其他模组/指令生成），仍需计入全局上限，否则 UUID 会被误删
                 count++;
             } else {
                 // 不是尸潮僵尸类型，清理

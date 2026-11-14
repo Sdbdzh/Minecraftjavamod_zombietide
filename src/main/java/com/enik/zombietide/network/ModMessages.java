@@ -23,7 +23,7 @@ import java.util.UUID;
 
 /**
  * 客户端 <-> 服务端 自定义网络通道。
- * 主要用途：客户端 ESC 菜单修改配置后，发送 ConfigToServerPayload 给服务端，
+ * 主要用途：客户端按键打开的设置界面修改配置后，发送 ConfigToServerPayload 给服务端，
  * 服务端修改 Level Data 并通过 PacketDistributor 广播给所有在线客户端，实现“立即生效”。
  */
 @EventBusSubscriber(modid = EnikZombietide.MODID, bus = EventBusSubscriber.Bus.MOD)
@@ -426,7 +426,7 @@ public class ModMessages {
         }
     }
 
-    /** 客户端 -> 服务端：发送配置修改（ESC 菜单即时生效）。
+    /** 客户端 -> 服务端：发送配置修改（设置界面即时生效）。
      * 客户端没有 ServerLifecycleHooks（无服务端实例），故不做 null 检查，
      * 始终通过 PacketDistributor.sendToServer() 将配置发给服务端处理。 */
     public static void sendConfigToServer(ZombietideConfig config) {
