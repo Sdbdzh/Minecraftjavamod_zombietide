@@ -260,9 +260,9 @@ public class HordeSpawner {
             mob.finalizeSpawn(level, level.getCurrentDifficultyAt(target.blockPosition()), MobSpawnType.NATURAL, null);
         }
 
-        // 根据尸潮类型选择半径
+        // 玩家尸潮半径直接取配置；villagerHordeRadii 只保存村民尸潮的临时覆盖值
         double radius = isVillager ? villagerHordeRadii.getOrDefault(targetId, (double) config.villagerRadius())
-                                   : villagerHordeRadii.getOrDefault(targetId, (double) config.playerRadius());
+                                   : config.playerRadius();
         // findSpawnPos 已保证绝不返回 null：优先背后，兜底任意安全点，最终兜底目标脚下地表
         BlockPos spawnPos = findSpawnPos(level, target, radius, config);
 
@@ -446,7 +446,8 @@ public class HordeSpawner {
                         ModMessages.sendVillagerModDay(p, villager.getUUID(),
                                 ModMessages.extractVillagerRegistryKey(villager),
                                 vData.modDay(),
-                                villager.getX(), villager.getY(), villager.getZ(), false);
+                                villager.getX(), villager.getY(), villager.getZ(), false,
+                                HordeTimer.isHordeDay(villager.getUUID(), vData.modDay(), vData.lastTriggerDay(), config, true));
                     }
                 }
             }
@@ -550,7 +551,7 @@ public class HordeSpawner {
         notifyScatterTargetsWithCount(level, config, scatterTargets, scatterCountByTarget);
 
         // 定制音频：四散音效只发给玩家尸潮触发者（村民尸潮不播放）
-        if (config.scatterSound()) {
+        if (config.warningEnabled() && config.scatterSound()) {
             for (UUID targetId : scatterTargets) {
                 var target = level.getEntity(targetId);
                 if (target instanceof ServerPlayer player) {
@@ -851,29 +852,8 @@ public class HordeSpawner {
             }
         }
         
-        // 【t37 修复】强制四散完成后重置目标 waveActive=false，避免 debug info 始终显示“进行中”
-        for (UUID targetId : scatterTargets) {
-            var target = level.getEntity(targetId);
-            if (target instanceof ServerPlayer player) {
-                var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
-                if (data.waveActive()) {
-                    player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
-                            new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data.modDay(), data.lastTriggerDay(), data.bloodDebt(), data.waveCount(), false
-                            ));
-                    EnikZombietide.LOGGER.debug("玩家 {} waveActive 已重置为 false（强制四散完成）", targetId);
-                }
-            } else if (target instanceof net.minecraft.world.entity.npc.Villager villager) {
-                var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
-                if (vData.waveActive()) {
-                    villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
-                            new com.enik.zombietide.attachments.VillagerHordeData(
-                                    vData.modDay(), vData.lastTriggerDay(), vData.waveCount(), false
-                            ));
-                    EnikZombietide.LOGGER.debug("村民 {} waveActive 已重置为 false（强制四散完成）", targetId);
-                }
-            }
-        }
+        // t37 块已删除（Issue #8）：上方 targetsToClean 循环已覆盖 scatterTargets 并全部置
+        // waveActive=false，此处再判 waveActive 恒为 false，属死代码。
 
         // 【关键修复】扫描 VillagerScheduleData，无条件把 waveActive 写回 false（权威数据源）
         VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(
@@ -1012,10 +992,8 @@ public class HordeSpawner {
 
                 var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
                 int modDay = data.modDay();
-                int interval = config.playerIntervalDays();
-                if (interval <= 0) continue;
-                // 【修复 off-by-one】与触发判定保持一致：尸潮日为 modDay % interval == interval - 1
-                if (modDay % interval != interval - 1) continue;
+                // 与触发判定保持一致，支持固定/随机间隔
+                if (!HordeTimer.isHordeDay(player.getUUID(), modDay, data.lastTriggerDay(), config, false)) continue;
                 if (modDay == data.lastTriggerDay()) continue;
 
                 // 今天是尸潮日，发送清晨提醒
@@ -1037,12 +1015,8 @@ public class HordeSpawner {
 
                 var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
                 int modDay = data.modDay();
-                int interval = config.playerIntervalDays();
-                if (interval <= 0) continue;
-                // 【修复 off-by-one】与触发判定（HordeTimer.checkPlayerHordes）保持一致：
-                // 尸潮日 = modDay % interval == interval - 1（interval=7 → 第 6/13/20 天，即游戏日第 7/14/21 天）。
-                // 旧写法 == 0 会晚一天提醒：实际尸潮当天不提醒，反而在尸潮次日误报。
-                if (modDay % interval != interval - 1) continue;
+                // 与触发判定（HordeTimer.isHordeDay）保持一致，同时支持固定/随机间隔
+                if (!HordeTimer.isHordeDay(player.getUUID(), modDay, data.lastTriggerDay(), config, false)) continue;
                 if (modDay == data.lastTriggerDay()) continue;
 
                 // 今天是尸潮日，发送清晨聊天提醒

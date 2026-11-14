@@ -53,7 +53,8 @@ public final class HordeBgmScheduler {
             PlayerHordeData data = ModAttachments.getPlayerHordeData(player);
 
             // 仅玩家尸潮触发者：waveActive 由 checkPlayerHordes 置 true，四散/黎明置 false
-            boolean inHorde = config.hordeBgmSound()
+            boolean inHorde = config.warningEnabled()
+                    && config.hordeBgmSound()
                     && data.waveActive()
                     && player.level().dimension() == Level.OVERWORLD
                     && player.serverLevel().getDifficulty() != Difficulty.PEACEFUL;

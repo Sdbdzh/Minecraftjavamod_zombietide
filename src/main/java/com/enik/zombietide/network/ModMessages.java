@@ -66,7 +66,7 @@ public class ModMessages {
     public static final ResourceLocation PLAYER_MOD_DAY_ID = ResourceLocation.fromNamespaceAndPath(
             "enik_zombietide", "player_mod_day");
 
-    public record PlayerModDayPayload(UUID playerUuid, int modDay, boolean canTriggerHorde) implements CustomPacketPayload {
+    public record PlayerModDayPayload(UUID playerUuid, int modDay, boolean canTriggerHorde, boolean hordeDay) implements CustomPacketPayload {
         public static final Type<PlayerModDayPayload> TYPE = new Type<>(PLAYER_MOD_DAY_ID);
 
         public static final StreamCodec<FriendlyByteBuf, PlayerModDayPayload> STREAM_CODEC = new StreamCodec<>() {
@@ -75,6 +75,7 @@ public class ModMessages {
                 buf.writeUUID(payload.playerUuid);
                 buf.writeInt(payload.modDay);
                 buf.writeBoolean(payload.canTriggerHorde);
+                buf.writeBoolean(payload.hordeDay);
             }
 
             @Override
@@ -82,7 +83,8 @@ public class ModMessages {
                 UUID uuid = buf.readUUID();
                 int modDay = buf.readInt();
                 boolean canTrigger = buf.readBoolean();
-                return new PlayerModDayPayload(uuid, modDay, canTrigger);
+                boolean hordeDay = buf.readBoolean();
+                return new PlayerModDayPayload(uuid, modDay, canTrigger, hordeDay);
             }
         };
 
@@ -100,7 +102,7 @@ public class ModMessages {
     public static final ResourceLocation INFO_OVERLAY_ID = ResourceLocation.fromNamespaceAndPath(
             "enik_zombietide", "info_overlay");
 
-    public record VillagerModDayPayload(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive) implements CustomPacketPayload {
+    public record VillagerModDayPayload(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay) implements CustomPacketPayload {
         public static final Type<VillagerModDayPayload> TYPE = new Type<>(VILLAGER_MOD_DAY_ID);
 
         public static final StreamCodec<FriendlyByteBuf, VillagerModDayPayload> STREAM_CODEC = new StreamCodec<>() {
@@ -113,6 +115,7 @@ public class ModMessages {
                 buf.writeDouble(payload.y());
                 buf.writeDouble(payload.z());
                 buf.writeBoolean(payload.waveActive());
+                buf.writeBoolean(payload.hordeDay());
             }
 
             @Override
@@ -124,7 +127,8 @@ public class ModMessages {
                 double y = buf.readDouble();
                 double z = buf.readDouble();
                 boolean waveActive = buf.readBoolean();
-                return new VillagerModDayPayload(uuid, registryKey, modDay, x, y, z, waveActive);
+                boolean hordeDay = buf.readBoolean();
+                return new VillagerModDayPayload(uuid, registryKey, modDay, x, y, z, waveActive, hordeDay);
             }
         };
 
@@ -385,7 +389,7 @@ public class ModMessages {
                 .playToClient(PlayerModDayPayload.TYPE, PlayerModDayPayload.STREAM_CODEC,
                         (payload, context) -> {
                             context.enqueueWork(() -> {
-                                ZombietideHud.onModDayReceived(payload.playerUuid(), payload.modDay(), payload.canTriggerHorde());
+                                ZombietideHud.onModDayReceived(payload.playerUuid(), payload.modDay(), payload.canTriggerHorde(), payload.hordeDay());
                             });
                         })
                 // 服务端 -> 客户端：村民模组天数同步
@@ -393,7 +397,8 @@ public class ModMessages {
                         (payload, context) -> {
                             context.enqueueWork(() -> {
                                 ZombietideHud.onVillagerModDayReceived(payload.villagerUuid(), payload.registryKey(),
-                                        payload.modDay(), payload.x(), payload.y(), payload.z(), payload.waveActive());
+                                        payload.modDay(), payload.x(), payload.y(), payload.z(),
+                                        payload.waveActive(), payload.hordeDay());
                             });
                         })
                 // 服务端 -> 客户端：mod info 常驻显示开关
@@ -434,19 +439,13 @@ public class ModMessages {
     }
 
     /** 发送玩家模组天数给特定玩家 */
-    public static void sendModDay(ServerPlayer player, int modDay, boolean canTriggerHorde) {
-        PacketDistributor.sendToPlayer(player, new PlayerModDayPayload(player.getUUID(), modDay, canTriggerHorde));
+    public static void sendModDay(ServerPlayer player, int modDay, boolean canTriggerHorde, boolean hordeDay) {
+        PacketDistributor.sendToPlayer(player, new PlayerModDayPayload(player.getUUID(), modDay, canTriggerHorde, hordeDay));
     }
 
     /** 发送村民模组天数给特定玩家（用于 HUD 显示附近村民） */
-    public static void sendVillagerModDay(ServerPlayer player, UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive) {
-        PacketDistributor.sendToPlayer(player, new VillagerModDayPayload(villagerUuid, registryKey, modDay, x, y, z, waveActive));
-    }
-
-    /** 发送村民模组天数给特定玩家（用于 HUD 显示附近村民）——兼容旧签名，自动提取 registryKey */
-    public static void sendVillagerModDay(ServerPlayer player, UUID villagerUuid, net.minecraft.world.entity.npc.Villager villager, int modDay, double x, double y, double z, boolean waveActive) {
-        String registryKey = extractVillagerRegistryKey(villager);
-        PacketDistributor.sendToPlayer(player, new VillagerModDayPayload(villagerUuid, registryKey, modDay, x, y, z, waveActive));
+    public static void sendVillagerModDay(ServerPlayer player, UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay) {
+        PacketDistributor.sendToPlayer(player, new VillagerModDayPayload(villagerUuid, registryKey, modDay, x, y, z, waveActive, hordeDay));
     }
 
     /** 广播所有玩家的模组天数给所有在线客户端 */
@@ -454,11 +453,14 @@ public class ModMessages {
         if (ServerLifecycleHooks.getCurrentServer() == null) return;
         ServerLevel overworld = ServerLifecycleHooks.getCurrentServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
         if (overworld == null) return;
+        ZombietideConfig cfg = com.enik.zombietide.config.ConfigManager.getConfigData(overworld).getConfig();
         for (ServerPlayer player : overworld.getPlayers(p -> true)) {
             var data = ModAttachments.getPlayerHordeData(player);
             boolean canTrigger = player.level().dimension() == net.minecraft.world.level.Level.OVERWORLD
                     && player.serverLevel().getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL;
-            sendModDay(player, data.modDay(), canTrigger);
+            sendModDay(player, data.modDay(), canTrigger,
+                    com.enik.zombietide.horde.HordeTimer.isHordeDay(
+                            player.getUUID(), data.modDay(), data.lastTriggerDay(), cfg, false));
         }
     }
 
@@ -500,7 +502,10 @@ public class ModMessages {
                         extractVillagerRegistryKey(villager),
                         sched.modDay(),
                         villager.getX(), villager.getY(), villager.getZ(),
-                        sched.waveActive());
+                        sched.waveActive(),
+                        com.enik.zombietide.horde.HordeTimer.isHordeDay(
+                                villager.getUUID(), sched.modDay(), sched.lastTriggerDay(),
+                                com.enik.zombietide.config.ConfigManager.getConfigData(overworld).getConfig(), true));
                 }
             }
         }

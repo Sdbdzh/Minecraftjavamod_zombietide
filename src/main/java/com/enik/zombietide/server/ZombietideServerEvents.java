@@ -98,18 +98,21 @@ public class ZombietideServerEvents {
         var playerData = ModAttachments.getPlayerHordeData(player);
         boolean canTrigger = player.level().dimension() == net.minecraft.world.level.Level.OVERWORLD
                 && player.serverLevel().getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL;
-        ModMessages.sendModDay(player, playerData.modDay(), canTrigger);
+        ModMessages.sendModDay(player, playerData.modDay(), canTrigger,
+                HordeTimer.isHordeDay(player.getUUID(), playerData.modDay(), playerData.lastTriggerDay(), config, false));
         // 登录时对账一次：立即结束跨天残留的尸潮（避免白天加载存档后状态卡住）
         HordeSpawner.reconcileStaleWaves(level, config);
         // 【BUG3 修复】同步附近村民的模组天数给新登录玩家，确保 HUD 立即显示实时村民状态
         for (var entity : level.getEntities().getAll()) {
             if (entity instanceof net.minecraft.world.entity.npc.Villager villager) {
                 if (player.distanceToSqr(villager) <= 128.0 * 128.0) {
+                    var vData = ModAttachments.getVillagerHordeData(villager);
                     ModMessages.sendVillagerModDay(player, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager),
-                            ModAttachments.getVillagerHordeData(villager).modDay(),
+                            vData.modDay(),
                             villager.getX(), villager.getY(), villager.getZ(),
-                            ModAttachments.getVillagerHordeData(villager).waveActive());
+                            vData.waveActive(),
+                            HordeTimer.isHordeDay(villager.getUUID(), vData.modDay(), vData.lastTriggerDay(), config, true));
                 }
             }
         }

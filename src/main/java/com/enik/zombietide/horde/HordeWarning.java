@@ -72,6 +72,14 @@ public class HordeWarning {
      * @param config 当前配置（warning 开关控制各通道）
      */
     public static void triggerPlayerHorde(ServerLevel level, ServerPlayer player, ZombietideConfig config) {
+        triggerPlayerHorde(level, player, config, true);
+    }
+
+    /**
+     * @param playSound 是否播放触发音效。村民尸潮由调用方在村民位置统一广播一次，
+     *                  避免对范围内每个玩家各播一份导致 N 层重叠（见 {@link #triggerVillagerHorde}）
+     */
+    private static void triggerPlayerHorde(ServerLevel level, ServerPlayer player, ZombietideConfig config, boolean playSound) {
         if (config == null || !config.warningEnabled()) return;
 
         // 大标题「尸潮」+ 副标题（语言键驱动；标题是功能名，不是氛围文案）
@@ -82,7 +90,7 @@ public class HordeWarning {
         }
 
         // 定制音频：替换原版 ZOMBIE_ATTACK_WOODEN_DOOR；保持广播语义（村民尸潮附近玩家也能听到）
-        if (config.warningSound()) {
+        if (playSound && config.warningSound()) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                     ModSounds.HORDE_TRIGGER.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
         }
@@ -105,10 +113,17 @@ public class HordeWarning {
     public static void triggerVillagerHorde(ServerLevel level, Villager villager, ZombietideConfig config) {
         if (config == null || !config.warningEnabled()) return;
 
+        // 触发音效在村民位置广播一次（horde_trigger 是 48 格固定半径），
+        // 不能对每个玩家各播一份，否则相邻玩家会听到 N 层重叠
+        if (config.warningSound()) {
+            level.playSound(null, villager.getX(), villager.getY(), villager.getZ(),
+                    ModSounds.HORDE_TRIGGER.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+        }
+
         double range = config.villagerWarningRange();
         for (ServerPlayer player : level.getPlayers(p -> p.distanceToSqr(villager) <= range * range)) {
-            // 村民尸潮触发警报与玩家触发警报共用三件套（标题 + 触发音效 + 突袭旁白）
-            triggerPlayerHorde(level, player, config);
+            // 标题 + 旁白逐玩家发送；音效已在村民位置统一广播，此处不再重复
+            triggerPlayerHorde(level, player, config, false);
         }
         EnikZombietide.LOGGER.info("村民尸潮触发警报已发送给 {} 周围 {} 格内的玩家",
                 villager.getStringUUID(), (int) range);

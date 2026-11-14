@@ -172,7 +172,8 @@ public class HordeTimer {
                 // 同步给客户端（含 canTriggerHorde）
                 boolean canTrigger = player.level().dimension() == Level.OVERWORLD
                         && player.serverLevel().getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL;
-                ModMessages.sendModDay(player, newModDay, canTrigger);
+                ModMessages.sendModDay(player, newModDay, canTrigger,
+                        isHordeDay(player.getUUID(), newModDay, data.lastTriggerDay(), config, false));
             }
         }
 
@@ -222,6 +223,45 @@ public class HordeTimer {
     }
 
     /** 检查玩家尸潮触发（仅主世界、非和平、黄昏窗口） */
+    /**
+     * 判断指定目标在 modDay 是否为尸潮日。
+     * <p>固定间隔：{@code modDay % interval == interval - 1}。
+     * <p>随机间隔：基于 {@code (目标 UUID, lastTriggerDay)} 的确定性伪随机间隔。
+     * 同一波次内算出的间隔恒定，跨重启/重登一致，因此无需新增持久化字段。
+     *
+     * @param lastTriggerDay 上次触发日；{@code -1} 表示从未触发（首次按随机间隔等待）
+     */
+    public static boolean isHordeDay(UUID targetId, int modDay, int lastTriggerDay,
+                                     ZombietideConfig config, boolean isVillager) {
+        int interval = isVillager ? config.villagerIntervalDays() : config.playerIntervalDays();
+        if (interval <= 0) return false;
+
+        boolean random = isVillager ? config.villagerIntervalRandom() : config.playerIntervalRandom();
+        if (!random) {
+            return modDay % interval == interval - 1;
+        }
+
+        int min = isVillager ? config.villagerIntervalMin() : config.playerIntervalMin();
+        int max = isVillager ? config.villagerIntervalMax() : config.playerIntervalMax();
+        if (min < 1) min = 1;
+        if (max < min) max = min;
+
+        int need = randomIntervalDays(targetId, lastTriggerDay, min, max);
+        int base = lastTriggerDay < 0 ? -1 : lastTriggerDay;
+        return modDay - base >= need;
+    }
+
+    /** 确定性伪随机间隔：同一 {@code (targetId, lastTriggerDay)} 恒定，跨重启一致。 */
+    private static int randomIntervalDays(UUID targetId, int lastTriggerDay, int min, int max) {
+        long h = targetId.getMostSignificantBits() * 0x9E3779B97F4A7C15L
+               ^ targetId.getLeastSignificantBits() * 0xC2B2AE3D27D4EB4FL
+               ^ (long) lastTriggerDay * 0x165667B19E3779F9L;
+        h ^= (h >>> 33);
+        h *= 0xFF51AFD7ED558CCDL;
+        h ^= (h >>> 33);
+        return min + (int) Math.floorMod(h, (long) (max - min + 1));
+    }
+
     private static void checkPlayerHordes(ServerLevel overworld, ZombietideConfig config) {
         if (!config.playerHordeEnabled()) return;
 
@@ -246,12 +286,7 @@ public class HordeTimer {
 
             var hordeData = ModAttachments.getPlayerHordeData(player);
             int modDay = hordeData.modDay();
-            int interval = config.playerIntervalDays();
-            if (interval <= 0) continue;
-            // 触发判定：严格按 interval，第 interval 天首次触发，之后每 interval 天
-            // 即：modDay % interval == interval - 1
-            // interval=7 时：6, 13, 20, 27... (第 7、14、21、28 天)
-            if (modDay % interval != interval - 1) continue;
+            if (!isHordeDay(player.getUUID(), modDay, hordeData.lastTriggerDay(), config, false)) continue;
             if (hordeData.lastTriggerDay() == modDay && hordeData.waveCount() > 0) {
                 EnikZombietide.LOGGER.info("checkPlayerHordes: 玩家 {} 今日(DAY {})已触发过，跳过（lastTriggerDay={}, waveCount={}）",
                         player.getScoreboardName(), modDay, hordeData.lastTriggerDay(), hordeData.waveCount());
@@ -265,8 +300,8 @@ public class HordeTimer {
             }
             int totalHorde = hordeSize + hordeData.bloodDebt();
 
-            EnikZombietide.LOGGER.info("checkPlayerHordes: 触发玩家 {} 尸潮 modDay={} interval={} hordeSize={} bloodDebt={} total={}",
-                    player.getScoreboardName(), modDay, interval, hordeSize, hordeData.bloodDebt(), totalHorde);
+            EnikZombietide.LOGGER.info("checkPlayerHordes: 触发玩家 {} 尸潮 modDay={} hordeSize={} bloodDebt={} total={}",
+                    player.getScoreboardName(), modDay, hordeSize, hordeData.bloodDebt(), totalHorde);
 
             player.setData(ModAttachments.PLAYER_HORDE.get(),
                     new PlayerHordeData(hordeData.modDay(), modDay, 0,
@@ -305,12 +340,7 @@ public class HordeTimer {
             VillagerScheduleData.ScheduleEntry sched = entry.getValue();
 
             int modDay = sched.modDay();
-            int interval = config.villagerIntervalDays();
-            if (interval <= 0) continue;
-            // 触发判定：严格按 interval，第 interval 天首次触发，之后每 interval 天
-            // 即：modDay % interval == interval - 1
-            // interval=7 时：6, 13, 20, 27... (第 7、14、21、28 天)
-            if (modDay % interval != interval - 1) continue;
+            if (!isHordeDay(villagerUuid, modDay, sched.lastTriggerDay(), config, true)) continue;
             if (sched.lastTriggerDay() == modDay && sched.waveCount() > 0) continue;
 
             // 实体验证：从已加载村民映射中取（getEntity 的 UUID 索引不可靠）
@@ -324,8 +354,8 @@ public class HordeTimer {
                 hordeSize = HordeSpawner.rollHordeSize(config.villagerCountMin(), config.villagerCountMax());
             }
 
-            EnikZombietide.LOGGER.info("checkVillagerHordes: 触发村民 {} 尸潮 modDay={} interval={} hordeSize={}",
-                    villager.getStringUUID(), modDay, interval, hordeSize);
+            EnikZombietide.LOGGER.info("checkVillagerHordes: 触发村民 {} 尸潮 modDay={} hordeSize={}",
+                    villager.getStringUUID(), modDay, hordeSize);
 
             // 更新调度表
             VillagerScheduleData.ScheduleEntry newSched = new VillagerScheduleData.ScheduleEntry(
@@ -345,7 +375,8 @@ public class HordeTimer {
                 if (p.distanceToSqr(villager) <= 128.0 * 128.0) {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), modDay,
-                            villager.getX(), villager.getY(), villager.getZ(), true);
+                            villager.getX(), villager.getY(), villager.getZ(), true,
+                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true));
                 }
             }
         }
@@ -364,12 +395,7 @@ public class HordeTimer {
 
             var hordeData = ModAttachments.getPlayerHordeData(player);
             int modDay = hordeData.modDay();
-            int interval = config.playerIntervalDays();
-            if (interval <= 0) continue;
-            // 触发判定：严格按 interval，第 interval 天首次触发，之后每 interval 天
-            // 即：modDay % interval == interval - 1
-            // interval=7 时：6, 13, 20, 27... (第 7、14、21、28 天)
-            if (modDay % interval != interval - 1) continue;
+            if (!isHordeDay(player.getUUID(), modDay, hordeData.lastTriggerDay(), config, false)) continue;
             if (hordeData.lastTriggerDay() == modDay && hordeData.waveCount() > 0) continue;
 
             HordeSpawner.sendMorningWarning(overworld, player, config);
@@ -392,10 +418,8 @@ public class HordeTimer {
 
         int interval = config.playerIntervalDays();
         if (interval <= 0) return;
-        // 触发判定：严格按 interval，第 interval 天首次触发，之后每 interval 天
-        // 即：targetModDay % interval == interval - 1
-        // interval=7 时：6, 13, 20, 27... (第 7、14、21、28 天)
-        if (targetModDay % interval != interval - 1) return;
+        // 固定间隔模式可提前剪枝；随机间隔需逐目标判定（见循环内 isHordeDay）
+        if (!config.playerIntervalRandom() && targetModDay % interval != interval - 1) return;
 
         MinecraftServer server = overworld.getServer();
         if (server == null) return;
@@ -406,6 +430,7 @@ public class HordeTimer {
 
             var hordeData = ModAttachments.getPlayerHordeData(player);
             if (hordeData.modDay() != targetModDay) continue;
+            if (!isHordeDay(player.getUUID(), targetModDay, hordeData.lastTriggerDay(), config, false)) continue;
             if (targetModDay == hordeData.lastTriggerDay() && hordeData.waveCount() > 0) continue;
 
             int hordeSize = config.playerCount();
@@ -429,10 +454,8 @@ public class HordeTimer {
 
         int interval = config.villagerIntervalDays();
         if (interval <= 0) return;
-        // 触发判定：严格按 interval，第 interval 天首次触发，之后每 interval 天
-        // 即：targetModDay % interval == interval - 1
-        // interval=7 时：6, 13, 20, 27... (第 7、14、21、28 天)
-        if (targetModDay % interval != interval - 1) return;
+        // 固定间隔模式可提前剪枝；随机间隔需逐目标判定（见循环内 isHordeDay）
+        if (!config.villagerIntervalRandom() && targetModDay % interval != interval - 1) return;
 
         VillagerScheduleData schedule = overworld.getDataStorage().computeIfAbsent(
                 VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
@@ -447,6 +470,7 @@ public class HordeTimer {
 
             if (sched.modDay() != targetModDay) continue;
             if (targetModDay == sched.lastTriggerDay() && sched.waveCount() > 0) continue;
+            if (!isHordeDay(villagerUuid, targetModDay, sched.lastTriggerDay(), config, true)) continue;
 
             Villager villager = loadedVillagers.get(villagerUuid);
             if (villager == null) continue;
@@ -473,7 +497,8 @@ public class HordeTimer {
                 if (p.distanceToSqr(villager) <= 128.0 * 128.0) {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), targetModDay,
-                            villager.getX(), villager.getY(), villager.getZ(), true);
+                            villager.getX(), villager.getY(), villager.getZ(), true,
+                            isHordeDay(villager.getUUID(), targetModDay, sched.lastTriggerDay(), config, true));
                 }
             }
         }
@@ -492,12 +517,7 @@ public class HordeTimer {
 
             var hordeData = ModAttachments.getPlayerHordeData(player);
             int modDay = hordeData.modDay();
-            int interval = config.playerIntervalDays();
-            if (interval <= 0) continue;
-            // 触发判定：严格按 interval，第 interval 天首次触发，之后每 interval 天
-            // 即：modDay % interval == interval - 1
-            // interval=7 时：6, 13, 20, 27... (第 7、14、21、28 天)
-            if (modDay % interval != interval - 1) continue;
+            if (!isHordeDay(player.getUUID(), modDay, hordeData.lastTriggerDay(), config, false)) continue;
             if (hordeData.lastTriggerDay() == modDay && hordeData.waveCount() > 0) continue;
 
             int hordeSize = config.playerCount();
@@ -531,12 +551,7 @@ public class HordeTimer {
             VillagerScheduleData.ScheduleEntry sched = entry.getValue();
 
             int modDay = sched.modDay();
-            int interval = config.villagerIntervalDays();
-            if (interval <= 0) continue;
-            // 触发判定：严格按 interval，第 interval 天首次触发，之后每 interval 天
-            // 即：modDay % interval == interval - 1
-            // interval=7 时：6, 13, 20, 27... (第 7、14、21、28 天)
-            if (modDay % interval != interval - 1) continue;
+            if (!isHordeDay(villagerUuid, modDay, sched.lastTriggerDay(), config, true)) continue;
             if (sched.lastTriggerDay() == modDay && sched.waveCount() > 0) continue;
 
             Villager villager = loadedVillagers.get(villagerUuid);
@@ -564,7 +579,8 @@ public class HordeTimer {
                 if (p.distanceToSqr(villager) <= 128.0 * 128.0) {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), modDay,
-                            villager.getX(), villager.getY(), villager.getZ(), true);
+                            villager.getX(), villager.getY(), villager.getZ(), true,
+                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true));
                 }
             }
         }

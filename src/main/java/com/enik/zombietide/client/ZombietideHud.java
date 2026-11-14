@@ -37,6 +37,8 @@ public class ZombietideHud {
     private static final Map<UUID, Integer> syncedModDays = new HashMap<>();
     /** 服务端同步的玩家是否可触发尸潮（主世界+非和平） */
     private static final Map<UUID, Boolean> syncedCanTrigger = new HashMap<>();
+    /** 服务端算好的「今天是否为该玩家的尸潮日」（支持固定/随机间隔） */
+    private static final Map<UUID, Boolean> syncedHordeDay = new HashMap<>();
     /** 服务端同步的村民模组天数（UUID -> modDay；用于 HUD 附近村民显示） */
     private static final Map<UUID, Integer> villagerModDays = new HashMap<>();
     /** 村民职业名缓存（UUID -> profession，如“村民”、“牧羊人”、“图书管理员”） */
@@ -47,6 +49,8 @@ public class ZombietideHud {
 
     /** 村民尸潮是否进行中（UUID -> waveActive；由服务端同步，用于信息层显示真实状态） */
     private static final Map<UUID, Boolean> villagerWaveActive = new HashMap<>();
+    /** 服务端算好的「今天是否为该村民的尸潮日」 */
+    private static final Map<UUID, Boolean> villagerHordeDayMap = new HashMap<>();
 
     /** 客户端缓存的 mod info 常驻显示开关（由服务端通过 InfoOverlayPayload 同步） */
     private static boolean infoOverlayEnabled = false;
@@ -62,15 +66,17 @@ public class ZombietideHud {
     }
 
     /** 接收服务端同步的玩家模组天数（PlayerModDayPayload） */
-    public static void onModDayReceived(UUID playerUuid, int modDay, boolean canTriggerHorde) {
+    public static void onModDayReceived(UUID playerUuid, int modDay, boolean canTriggerHorde, boolean hordeDay) {
         syncedModDays.put(playerUuid, modDay);
         syncedCanTrigger.put(playerUuid, canTriggerHorde);
+        syncedHordeDay.put(playerUuid, hordeDay);
     }
 
     /** 接收服务端同步的村民模组天数（VillagerModDayPayload） */
-    public static void onVillagerModDayReceived(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive) {
+    public static void onVillagerModDayReceived(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay) {
         villagerModDays.put(villagerUuid, modDay);
         villagerWaveActive.put(villagerUuid, waveActive);
+        villagerHordeDayMap.put(villagerUuid, hordeDay);
         thisBatchVillagers.add(villagerUuid); // 记录本批次收到的村民
         // 客户端本地化：直接使用 Minecraft Java 原版标准译名（entity.minecraft.villager.*）
         String localizedProfession = ModMessages.localizeProfession(registryKey);
@@ -129,15 +135,12 @@ public class ZombietideHud {
         float dayScale = hud.hudScale();
         boolean dayBold = hud.hudBold();
 
-        // 尸潮当天（模组天数是间隔天数的倍数）：红色粗体，其余白色
-        int interval = config.playerIntervalDays();
+        // 尸潮当天：红色粗体，其余白色
+        // 判定由服务端算好并随 PlayerModDayPayload 同步（HordeTimer.isHordeDay），
+        // 同时支持固定间隔与随机间隔，客户端不再自行用 modDay % interval 推算
         UUID playerUuid = minecraft.player.getUUID();
         Integer modDay = syncedModDays.get(playerUuid);
-        Boolean canTrigger = syncedCanTrigger.get(playerUuid);
-        // 尸潮日判定与触发逻辑保持一致：modDay % interval == interval - 1
-        // interval=1（每天）：任意 DAY（含 DAY 0）均为尸潮日；interval=7：第 6/13/20... 天
-        // 需在主世界且非和平（canTrigger）下才显示红色；不额外限制 modDay > 0，否则每天模式会漏掉 DAY 0
-        boolean hordeDay = modDay != null && interval > 0 && modDay % interval == interval - 1 && Boolean.TRUE.equals(canTrigger);
+        boolean hordeDay = Boolean.TRUE.equals(syncedHordeDay.get(playerUuid));
         String dayText;
         if (modDay != null) {
             if (hordeDay) {
@@ -211,10 +214,9 @@ public class ZombietideHud {
                     double dx = p[0] - playerX, dy = p[1] - playerY, dz = p[2] - playerZ;
                     dist = (int) Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz));
                 }
-                // 尸潮日（villagerModDay % interval == interval - 1）时仅 DAY X 变红粗体；距离不变红，职业名保持白色
-                // interval=7 时：6, 13, 20, 27... (第 7、14、21、28 天)
-                int villagerInterval = config.villagerIntervalDays();
-                boolean villagerHordeDay = villagerInterval > 0 && villagerModDay % villagerInterval == villagerInterval - 1;
+                // 尸潮日时仅 DAY X 变红粗体；距离不变红，职业名保持白色
+                // 判定由服务端算好并随 VillagerModDayPayload 同步，支持随机间隔
+                boolean villagerHordeDay = Boolean.TRUE.equals(villagerHordeDayMap.get(entry.getKey()));
                 // 分段组装：各段独立闭合，移除对 drawString 第4参数颜色的依赖
                 String professionSegment;
                 if (villagerBold) {
