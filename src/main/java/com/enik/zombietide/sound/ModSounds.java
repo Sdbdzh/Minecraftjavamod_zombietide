@@ -38,8 +38,8 @@ public final class ModSounds {
     public static final DeferredHolder<SoundEvent, SoundEvent> HORDE_BGM =
             register("horde_bgm", false);
 
-    /** 背景音乐使用的音效分类（用于停止包精确匹配） */
-    public static final SoundSource BGM_SOURCE = SoundSource.MUSIC;
+    /** 背景音乐使用的音效分类：中文「环境」(AMBIENT)，不是「音乐」(MUSIC)；停止包必须与之保持一致 */
+    public static final SoundSource BGM_SOURCE = SoundSource.AMBIENT;
     public static final ResourceLocation BGM_ID =
             ResourceLocation.fromNamespaceAndPath(EnikZombietide.MODID, "horde_bgm");
 

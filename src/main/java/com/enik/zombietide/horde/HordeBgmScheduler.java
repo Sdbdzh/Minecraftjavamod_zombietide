@@ -73,7 +73,8 @@ public final class HordeBgmScheduler {
             }
             if (now >= next) {
                 // 只发给该玩家本人（ClientboundSoundPacket，不广播）
-                ModSounds.playToPlayer(player, ModSounds.HORDE_BGM, SoundSource.MUSIC, BGM_VOLUME, 1.0F);
+                // 分类用「环境」(AMBIENT)，与 ModSounds.BGM_SOURCE 的停止包保持一致
+                ModSounds.playToPlayer(player, ModSounds.HORDE_BGM, SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
                 NEXT_PLAY_TICK.put(id, now + randomInterval());
             }
         }
