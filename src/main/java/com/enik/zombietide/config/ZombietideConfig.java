@@ -25,7 +25,10 @@ public record ZombietideConfig(
             HudConfig.CODEC.fieldOf("hud").forGetter(ZombietideConfig::hud)
     ).apply(instance, ZombietideConfig::new));
 
-    /** 默认配置（与 2026-11-14 实机调参一致；仅影响新存档/无配置数据时） */
+    /**
+     * 默认配置 —— 与 2026-11-14 实机调参（存档「新的世界」）完全一致。
+     * <p>仅影响**新存档**与缺失配置的读档；已有存档不会被覆盖。
+     */
     public static ZombietideConfig defaults() {
         return new ZombietideConfig(
                 PlayerHordeConfig.defaults(),
@@ -63,7 +66,7 @@ public record ZombietideConfig(
         ).apply(instance, PlayerHordeConfig::new));
 
         public static PlayerHordeConfig defaults() {
-            return new PlayerHordeConfig(true, 1, false, 5, 9, 8, true, 15, 30);
+            return new PlayerHordeConfig(true, 7, false, 5, 9, 20, true, 32, 64);
         }
 
         public PlayerHordeConfig withHordeEnabled(boolean v) { return new PlayerHordeConfig(v, intervalDays, intervalRandom, intervalMin, intervalMax, count, countRandom, countMin, countMax); }
@@ -101,7 +104,7 @@ public record ZombietideConfig(
         ).apply(instance, VillagerHordeConfig::new));
 
         public static VillagerHordeConfig defaults() {
-            return new VillagerHordeConfig(true, 1, false, 5, 9, 2, true, 5, 15);
+            return new VillagerHordeConfig(true, 7, false, 5, 9, 16, true, 16, 32);
         }
 
         public VillagerHordeConfig withHordeEnabled(boolean v) { return new VillagerHordeConfig(v, intervalDays, intervalRandom, intervalMin, intervalMax, count, countRandom, countMin, countMax); }
@@ -142,10 +145,10 @@ public record ZombietideConfig(
 
         /**
          * 默认值。注意：v0.1.20 起「最大生成距离」与「玩家/村民生成半径」合并为一项，
-         * 半径本身就是最远落点距离，默认 65（等价于旧版 radius=120 与 maxSpawnDist=65 取小后的效果）。
+         * 半径本身就是最远落点距离。
          */
         public static SpawnConfig defaults() {
-            return new SpawnConfig(200, 30, 30, 65, 65, true, 24, 100, 0.6f, 0.6f);
+            return new SpawnConfig(200, 4, 2, 150, 150, true, 60, 120, 0.6f, 0.6f);
         }
 
         public SpawnConfig withBatchTick(int v) { return new SpawnConfig(v, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight); }
@@ -182,7 +185,7 @@ public record ZombietideConfig(
         ).apply(instance, WorldConfig::new));
 
         public static WorldConfig defaults() {
-            return new WorldConfig(128, true, true, "cumulative", 32, 20, 32, 32);
+            return new WorldConfig(512, true, true, "cumulative", 32, 10, 16, 32);
         }
 
         public WorldConfig withGlobalCap(int v) { return new WorldConfig(v, daylightBurn, blockSleep, debtMode, debtCap, despawnSeconds, villagerWarningRange, villagerSleepBlockRange); }
@@ -260,7 +263,8 @@ public record ZombietideConfig(
         ).apply(instance, HudConfig::new));
 
         public static HudConfig defaults() {
-            return new HudConfig(true, true, "top_left", 4, 4, 4, 50, 5.0f, 1.0f, true, false, 120, 30);
+            // 村民列表默认关闭：大多数玩家只关心自己的 DAY X，开着反而挡视线
+            return new HudConfig(true, false, "top_left", 5, 4, 4, 50, 5.0f, 1.0f, true, false, 16, 5);
         }
 
         public HudConfig withHudEnabled(boolean v) { return new HudConfig(v, showVillagerHorde, hudPosition, hudX, hudY, villagerHordeX, villagerHordeY, hudScale, villagerHordeScale, hudBold, villagerHordeBold, villagerHordeDisplayRange, villagerHordeMaxEntries); }
