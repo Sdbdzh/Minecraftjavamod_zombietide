@@ -107,6 +107,8 @@ public class ZombietideSettingsScreen extends Screen {
     private static final int FIELD_WIDTH = 200;
     private static final int SCROLLBAR_WIDTH = 6;
     private static final int SCROLLBAR_GAP = 4;
+    /** 生成半径输入上限：防止填出离谱值（实际生效值还会被服务器模拟距离再压一次） */
+    private static final int MAX_RADIUS_INPUT = 512;
 
     // ==================== 背景壁纸 ====================
     /** 壁纸纹理（完整资源路径；SimpleTexture 不做前缀/后缀转换）。图片为 rgb24，无 alpha 通道。 */
@@ -393,13 +395,13 @@ public class ZombietideSettingsScreen extends Screen {
                 addIntField("zombietide.settings.spawn.item4.name", Scope.WORLD,
                         "zombietide.settings.spawn.item4.desc",
                         "zombietide.settings.spawn.item4.tip",
-                        config.playerRadius(), centerX, y, 1,
+                        config.playerRadius(), centerX, y, 1, MAX_RADIUS_INPUT,
                         v -> config = config.withPlayerRadius(v), false);
                 y += ROW_HEIGHT;
                 addIntField("zombietide.settings.spawn.item5.name", Scope.WORLD,
                         "zombietide.settings.spawn.item5.desc",
                         "zombietide.settings.spawn.item5.tip",
-                        config.villagerRadius(), centerX, y, 1,
+                        config.villagerRadius(), centerX, y, 1, MAX_RADIUS_INPUT,
                         v -> config = config.withVillagerRadius(v), false);
                 y += ROW_HEIGHT;
                 addIntField("zombietide.settings.spawn.item6.name", Scope.WORLD,
@@ -1010,6 +1012,13 @@ public class ZombietideSettingsScreen extends Screen {
     private EditBox addIntField(String label, Scope scope, String desc, String tooltip,
                                 int value, int centerX, int y, int minValue,
                                 IntConsumer onChange, boolean clientOnly) {
+        return addIntField(label, scope, desc, tooltip, value, centerX, y, minValue,
+                Integer.MAX_VALUE, onChange, clientOnly);
+    }
+
+    private EditBox addIntField(String label, Scope scope, String desc, String tooltip,
+                                int value, int centerX, int y, int minValue, int maxValue,
+                                IntConsumer onChange, boolean clientOnly) {
         this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color + "[" + tr(scope.key) + "] §r§f") + tr(label), centerX, y));
         this.tabLabels.add(new LabelData("§7" + tr(desc), centerX, y + 10));
         EditBox field = new EditBox(this.font, centerX - 100, y + 22, FIELD_WIDTH, FIELD_HEIGHT, Component.literal(tr(label)));
@@ -1026,6 +1035,11 @@ public class ZombietideSettingsScreen extends Screen {
                     field.setValue(String.valueOf(minValue));
                     isSetting[0] = false;
                     v = minValue;
+                } else if (v > maxValue) {
+                    isSetting[0] = true;
+                    field.setValue(String.valueOf(maxValue));
+                    isSetting[0] = false;
+                    v = maxValue;
                 }
                 onChange.accept(v);
                 if (v != lastSentValue[0]) {

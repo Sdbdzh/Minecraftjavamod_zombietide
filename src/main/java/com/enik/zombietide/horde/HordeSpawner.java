@@ -1147,32 +1147,53 @@ public class HordeSpawner {
         return count;
     }
 
-    /** 在目标背后寻找刷点，带兜底：
-     *  1. 优先目标背后 + 可站立（点积 < 0）且生成空间足够（2 格空气）
-     *  2. 兜底：任意可站立的地表点且生成空间足够
-     *  3. 最终兜底：目标脚下地表（不再检查空气，由 spawnZombie 做最终校验）
-     *  确保无论什么情况都能返回非空刷点，绝不放弃该批次。
+    /**
+     * 实体能正常 tick 的最大半径（格）。
+     * <p>取服务器**模拟距离**（区块）× 16，再留 1 个区块余量。
+     * 注意不能用视距：视距内的区块虽然已加载，但超出模拟距离的实体不会 tick，刷在那里只会站着发呆。
+     * 取不到时兜底 10 区块（1.21 默认模拟距离）。
      */
+    private static double maxSimulationRadius(ServerLevel level) {
+        int simChunks = 10;
+        var server = level.getServer();
+        if (server != null && server.getPlayerList() != null) {
+            int d = server.getPlayerList().getSimulationDistance();
+            if (d > 0) simChunks = d;
+        }
+        return Math.max(16.0, simChunks * 16.0 - 16.0);
+    }
+
     /**
      * 在目标周围的安全地表点中挑一个刷怪位置。
-     * <p>「生成性能」分页里与刷点相关的参数全部在这里生效，不再有摆设项：
+     * <p>「生成性能」分页里与刷点相关的参数全部在这里生效：
      * <ul>
-     *   <li>{@code radius}（玩家/村民生成半径）——**最远落点距离**，尸潮不会刷到比这更远；</li>
+     *   <li>{@code radius}（玩家/村民生成半径）——**最远落点距离**，尸潮不会刷到比这更远；
+     *       还会被服务器**模拟距离**再压一次（见 {@link #maxSimulationRadius}）；</li>
      *   <li>{@code minSpawnDist}——**最近落点距离**，避免刷在目标脸上；落点就在
      *       {@code [minSpawnDist, radius]} 这个环带内按面积均匀采样（sqrt），不会挤在中心；</li>
      *   <li>{@code spawnAttempts}——采样次数，越大越容易同时命中「背后 + 有空间 + 高评分」；</li>
      *   <li>{@code distanceWeight} / {@code darkWeight}——候选点评分权重（越远、越暗得分越高），
      *       在「背后」和「任意」两个优先级内各取最高分；两者都为 0 时退化为先到先得。</li>
      * </ul>
-     * 优先级仍是：目标背后 → 任意安全点 → 目标脚下地表，绝不返回 null。
+     * <p><b>区块保护</b>：{@code Level#getHeightmapPos} 在区块未加载时会<b>同步加载/生成</b>区块
+     * （{@code ChunkStatus.FULL, true}）。因此这里做两层防护：
+     * ① 用模拟距离收缩采样半径；② 每个候选点先用 {@code hasChunkAt} 过滤，未加载直接丢弃。
+     * 保证刷怪永远不会强制生成新区块。
+     * <p>优先级仍是：目标背后 → 任意安全点 → 目标脚下地表，绝不返回 null。
      */
     private static BlockPos findSpawnPos(ServerLevel level, net.minecraft.world.entity.Entity target,
                                          double radius, ZombietideConfig config) {
         int attempts = config.spawnAttempts() > 0 ? Math.min(500, config.spawnAttempts()) : 60;
 
-        // 距离环带：内圈 = minSpawnDist，外圈 = 生成半径（玩家/村民各一项，半径本身就是最远落点距离）
+        // 距离环带：内圈 = minSpawnDist，外圈 = min(生成半径, 模拟距离上限)
+        // 超出模拟距离的区块即便已加载，实体也不会 tick（僵尸站着不动），再往外则完全是未加载区块。
         double inner = Math.max(0.0, config.minSpawnDist());
-        double outer = Math.max(0.0, radius);
+        double simLimit = maxSimulationRadius(level);
+        double configured = Math.max(0.0, radius);
+        double outer = Math.min(configured, simLimit);
+        if (outer < configured) {
+            EnikZombietide.LOGGER.debug("刷怪半径被模拟距离收缩：配置={} 格，实际上限={} 格", configured, outer);
+        }
         if (outer < inner) outer = inner; // 容错：最小距离大于半径时退化为同一圈
         double minSq = inner * inner;
         double spanSq = Math.max(0.0, outer * outer - minSq);
@@ -1199,6 +1220,12 @@ public class HordeSpawner {
 
             int spawnX = (int)(target.getX() + dx);
             int spawnZ = (int)(target.getZ() + dz);
+
+            // 区块保护：未加载的区块一律丢弃。getHeightmapPos 会同步加载/生成区块，
+            // 这里先查一次 hasChunkAt（纯查询、不触发加载），避免刷怪把区块强行拉起来。
+            if (!level.hasChunkAt(new BlockPos(spawnX, 0, spawnZ))) {
+                continue;
+            }
 
             BlockPos surfacePos = level.getHeightmapPos(
                 net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
