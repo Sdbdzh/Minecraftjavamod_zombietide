@@ -325,6 +325,8 @@ public class HordeSpawner {
                   entity instanceof net.minecraft.world.entity.monster.Stray)) continue;
             CompoundTag tag = entity.getPersistentData();
             if (!tag.hasUUID(HORDE_TARGET_UUID_KEY)) continue;
+            // 调试生成的僵尸不计入血债幸存者
+            if (tag.getBoolean("zombietide_debug")) continue;
 
             UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
             allHordeTargets.add(targetId);
@@ -1123,14 +1125,12 @@ public class HordeSpawner {
                 it.remove();
                 continue;
             }
-            if (entity instanceof net.minecraft.world.entity.monster.Zombie z) {
+            if (entity instanceof net.minecraft.world.entity.monster.Zombie) {
+                // Zombie 已覆盖 ZombieVillager / Husk / Drowned（均为其子类）
                 count++;
-            } else if (entity instanceof net.minecraft.world.entity.monster.ZombieVillager) {
-                count++; // 僵尸村民也计入尸潮僵尸
-            } else if (entity instanceof net.minecraft.world.entity.monster.Husk) {
-                count++; // 尸壳也计入尸潮僵尸
-            } else if (entity instanceof net.minecraft.world.entity.monster.Drowned) {
-                count++; // 溺尸也计入尸潮僵尸
+            } else if (entity instanceof net.minecraft.world.entity.monster.Stray) {
+                // Stray 不是 Zombie 子类，必须单独计入；否则不计全局上限，且 UUID 会被误删
+                count++;
             } else {
                 // 不是尸潮僵尸类型，清理
                 it.remove();
@@ -1334,6 +1334,8 @@ public class HordeSpawner {
                   entity instanceof net.minecraft.world.entity.monster.Stray)) continue;
             CompoundTag tag = entity.getPersistentData();
             if (!tag.hasUUID(HORDE_TARGET_UUID_KEY)) continue;
+            // 调试生成的僵尸不参与对账清理
+            if (tag.getBoolean("zombietide_debug")) continue;
             // 已进入四散状态（state=1）的僵尸由 settleDebtAtBurnTime 在 23460 统一清除，不在此提前丢弃
             if (tag.getInt(HORDE_STATE_KEY) == 1) continue;
             UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);

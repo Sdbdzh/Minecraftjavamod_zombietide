@@ -7,10 +7,8 @@ import com.enik.zombietide.config.ConfigManager;
 import com.enik.zombietide.config.ZombietideConfig;
 import com.enik.zombietide.horde.HordeSpawner;
 import com.enik.zombietide.horde.HordeWarning;
-import com.enik.zombietide.horde.HordeTimer;
 import com.enik.zombietide.network.ModMessages;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -23,11 +21,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.AABB;
 
 import java.util.Random;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.Collection;
@@ -43,8 +38,7 @@ import java.util.Collection;
  * - /zombietide debug info：显示完整调试信息
  * - /zombietide debug spawn：脚下生成 1 只测试僵尸
  * - /zombietide debug clear：清理所有活跃尸潮与僵尸
- * - /zombietide debug glow <targets>：村民发光 15 秒（仅村民，自动过滤）
- * - /zombietide debug info_toggle：切换右上角 Info Overlay
+ * - /zombietide debug glow <targets>：给目标实体发光 15 秒（自动过滤非生物实体）
  * <p>
  * 目标选择器支持：玩家选择器(@a/@p/@r/@s)、实体选择器(@e[type=villager])、UUID字符串
  * 由 ZombietideServerEvents.onRegisterCommands（RegisterCommandsEvent）调用 register()。
@@ -83,6 +77,12 @@ public class ZombietideCommands {
         );
     }
 
+    /** 模组配置与尸潮数据都挂在主世界 Level Data；命令统一以主世界为准，避免在其它维度读写到独立配置 */
+    private static ServerLevel overworld(CommandSourceStack source) {
+        ServerLevel ow = source.getServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+        return ow != null ? ow : source.getLevel();
+    }
+
     // ========== status ==========
 
     /** 查看指定实体的模组天数、血债、波次状态（自动识别玩家/村民） */
@@ -91,29 +91,28 @@ public class ZombietideCommands {
     }
 
     private static int status(CommandSourceStack source, Collection<? extends Entity> targets) throws CommandSyntaxException {
-        ServerLevel level = source.getLevel();
         boolean hasOutput = false;
         for (Entity entity : targets) {
             if (entity instanceof ServerPlayer player) {
                 PlayerHordeData data = ModAttachments.getPlayerHordeData(player);
                 source.sendSuccess(() -> Component.literal("===== 尸潮状态: " + player.getScoreboardName() + " (玩家) =====").withStyle(ChatFormatting.GOLD), false);
-                source.sendSuccess(() -> Component.literal("玩家 " + player.getScoreboardName()
-                        + " (UUID=" + player.getStringUUID() + ")"
-                        + "：模组天数 DAY " + data.modDay()
+                source.sendSuccess(() -> Component.literal("玩家 " + player.getScoreboardName() + " (UUID=")
+                        .append(clickableUUID(player.getUUID()))
+                        .append(Component.literal(")：模组天数 DAY " + data.modDay()
                         + "，血债 " + data.bloodDebt()
                         + "，波次 " + data.waveCount()
                         + "，上次触发日 DAY " + data.lastTriggerDay()
-                        + (data.waveActive() ? "（尸潮进行中）" : "（无尸潮）")), false);
+                        + (data.waveActive() ? "（尸潮进行中）" : "（无尸潮）"))), false);
                 hasOutput = true;
             } else if (entity instanceof Villager villager) {
                 VillagerHordeData data = ModAttachments.getVillagerHordeData(villager);
                 source.sendSuccess(() -> Component.literal("===== 尸潮状态: " + villager.getName().getString() + " (村民) =====").withStyle(ChatFormatting.GOLD), false);
-                source.sendSuccess(() -> Component.literal("村民 " + villager.getName().getString()
-                        + " (UUID=" + villager.getStringUUID() + ")"
-                        + "：模组天数 DAY " + data.modDay()
+                source.sendSuccess(() -> Component.literal("村民 " + villager.getName().getString() + " (UUID=")
+                        .append(clickableUUID(villager.getUUID()))
+                        .append(Component.literal(")：模组天数 DAY " + data.modDay()
                         + "，波次 " + data.waveCount()
                         + "，上次触发日 DAY " + data.lastTriggerDay()
-                        + (data.waveActive() ? "（尸潮进行中）" : "（无尸潮）")), false);
+                        + (data.waveActive() ? "（尸潮进行中）" : "（无尸潮）"))), false);
                 hasOutput = true;
             }
         }
@@ -127,13 +126,19 @@ public class ZombietideCommands {
 
     /** 立即触发尸潮：玩家→玩家尸潮，村民→村民尸潮 */
     private static int trigger(CommandSourceStack source, Collection<? extends Entity> targets) throws CommandSyntaxException {
-        ServerLevel level = source.getLevel();
+        ServerLevel level = overworld(source);
         ZombietideConfig config = ConfigManager.getConfigData(level).getConfig();
 
         int successCount = 0;
         for (Entity entity : targets) {
             if (entity instanceof ServerPlayer player) {
-                // 玩家尸潮
+                // 玩家尸潮：与常规触发保持一致，仅主世界 + 非和平
+                if (player.level().dimension() != net.minecraft.world.level.Level.OVERWORLD
+                        || player.serverLevel().getDifficulty() == net.minecraft.world.Difficulty.PEACEFUL) {
+                    source.sendSuccess(() -> Component.literal("跳过玩家 " + player.getScoreboardName()
+                            + "：仅主世界且非和平模式可触发").withStyle(ChatFormatting.GRAY), false);
+                    continue;
+                }
                 PlayerHordeData data = ModAttachments.getPlayerHordeData(player);
                 int hordeSize = config.playerCount();
                 if (config.playerCountRandom()) {
@@ -144,34 +149,39 @@ public class ZombietideCommands {
                 player.setData(ModAttachments.PLAYER_HORDE.get(),
                         new PlayerHordeData(data.modDay(), data.modDay(), data.bloodDebt(), data.waveCount() + 1, true));
 
-                HordeWarning.triggerPlayerHorde(level, player, config);
-                HordeSpawner.startHorde(level, player.getUUID(), player, totalHorde, config, false, config.playerRadius());
+                HordeWarning.triggerPlayerHorde(player.serverLevel(), player, config);
+                HordeSpawner.startHorde(player.serverLevel(), player.getUUID(), player, totalHorde, config, false, config.playerRadius());
 
-                source.sendSuccess(() -> Component.literal("已为玩家 " + player.getScoreboardName()
-                        + " (UUID=" + player.getStringUUID() + ") 触发玩家尸潮（数量 " + totalHorde + "）").withStyle(ChatFormatting.RED), false);
+                source.sendSuccess(() -> Component.literal("已为玩家 " + player.getScoreboardName() + " (UUID=")
+                        .append(clickableUUID(player.getUUID()))
+                        .append(Component.literal(") 触发玩家尸潮（数量 " + totalHorde + "）"))
+                        .withStyle(ChatFormatting.RED), false);
                 successCount++;
 
             } else if (entity instanceof Villager villager) {
                 // 村民尸潮
                 if (!villager.isAlive()) continue;
-                if (villager.level().dimension() != net.minecraft.world.level.Level.OVERWORLD) continue;
-                if (villager.level().getDifficulty() == net.minecraft.world.Difficulty.PEACEFUL) continue;
+                if (!(villager.level() instanceof ServerLevel villagerLevel)) continue;
+                if (villagerLevel.dimension() != net.minecraft.world.level.Level.OVERWORLD) continue;
+                if (villagerLevel.getDifficulty() == net.minecraft.world.Difficulty.PEACEFUL) continue;
 
                 VillagerHordeData data = ModAttachments.getVillagerHordeData(villager);
                 int actualHordeSize = config.villagerCount();
                 if (config.villagerCountRandom()) {
                     actualHordeSize = config.villagerCountMin() + new Random().nextInt(config.villagerCountMax() - config.villagerCountMin() + 1);
                 }
+                final int finalHordeSize = actualHordeSize;
 
                 villager.setData(ModAttachments.VILLAGER_HORDE.get(),
                         new VillagerHordeData(data.modDay(), data.modDay(), data.waveCount() + 1, true));
 
-                HordeWarning.triggerVillagerHorde(level, villager, config);
-                HordeSpawner.startHorde(level, villager.getUUID(), villager, actualHordeSize, config, true, config.villagerRadius());
+                HordeWarning.triggerVillagerHorde(villagerLevel, villager, config);
+                HordeSpawner.startHorde(villagerLevel, villager.getUUID(), villager, actualHordeSize, config, true, config.villagerRadius());
 
-                final String villagerMsg = "已为村民 " + villager.getName().getString()
-                        + " (UUID=" + villager.getStringUUID() + ") 触发村民尸潮（数量 " + actualHordeSize + "）";
-                source.sendSuccess(() -> Component.literal(villagerMsg).withStyle(ChatFormatting.RED), false);
+                source.sendSuccess(() -> Component.literal("已为村民 " + villager.getName().getString() + " (UUID=")
+                        .append(clickableUUID(villager.getUUID()))
+                        .append(Component.literal(") 触发村民尸潮（数量 " + finalHordeSize + "）"))
+                        .withStyle(ChatFormatting.RED), false);
                 successCount++;
             }
         }
@@ -194,9 +204,10 @@ public class ZombietideCommands {
                 PlayerHordeData data = ModAttachments.getPlayerHordeData(player);
                 player.setData(ModAttachments.PLAYER_HORDE.get(),
                         new PlayerHordeData(data.modDay(), 0, 0, 0, false));
-                final String playerMsg = "已重置玩家 " + player.getScoreboardName()
-                        + " (UUID=" + player.getStringUUID() + ") 的血债、波次、触发日（modDay 保留为 DAY " + data.modDay() + "，如需改 modDay 请用 /time）";
-                source.sendSuccess(() -> Component.literal(playerMsg).withStyle(ChatFormatting.AQUA), false);
+                source.sendSuccess(() -> Component.literal("已重置玩家 " + player.getScoreboardName() + " (UUID=")
+                        .append(clickableUUID(player.getUUID()))
+                        .append(Component.literal(") 的血债、波次、触发日（modDay 保留为 DAY " + data.modDay() + "，如需改 modDay 请用 /time）"))
+                        .withStyle(ChatFormatting.AQUA), false);
                 successCount++;
             } else if (entity instanceof Villager villager) {
                 VillagerHordeData data = ModAttachments.getVillagerHordeData(villager);
@@ -212,9 +223,10 @@ public class ZombietideCommands {
                                 data.modDay(), 0, 0, false));
                     }
                 }
-                final String villagerMsg = "已重置村民 " + villager.getName().getString()
-                        + " (UUID=" + villager.getStringUUID() + ") 的波次、触发日（modDay 保留为 DAY " + data.modDay() + "，如需改 modDay 请用 /time）";
-                source.sendSuccess(() -> Component.literal(villagerMsg).withStyle(ChatFormatting.AQUA), false);
+                source.sendSuccess(() -> Component.literal("已重置村民 " + villager.getName().getString() + " (UUID=")
+                        .append(clickableUUID(villager.getUUID()))
+                        .append(Component.literal(") 的波次、触发日（modDay 保留为 DAY " + data.modDay() + "，如需改 modDay 请用 /time）"))
+                        .withStyle(ChatFormatting.AQUA), false);
                 successCount++;
             }
         }
@@ -231,40 +243,22 @@ public class ZombietideCommands {
 
     /** 创建可点击填入聊天框的 UUID 组件（点击在聊天输入框自动填入，悬停显示“点击填入”） */
     private static Component clickableUUID(UUID uuid) {
+        // 必须用 withStyle(UnaryOperator) 叠加样式；若再调 withStyle(Style.EMPTY...) 会整体替换样式，
+        // 把颜色清掉（点击事件虽在，但看起来像普通文本，容易被误认为“不可点击”）。
         return Component.literal(uuid.toString())
-                .withStyle(ChatFormatting.AQUA)
-                .withStyle(net.minecraft.network.chat.Style.EMPTY
+                .withStyle(style -> style
+                        .withColor(ChatFormatting.AQUA)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, uuid.toString()))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                 Component.literal("点击填入 UUID"))));
     }
 
-    /** 寻找离执行者最近且存活的村民（100 格范围内） */
-    private static Villager findNearestVillager(ServerPlayer player) {
-        ServerLevel level = player.serverLevel();
-        double r = 100.0;
-        AABB box = new AABB(
-                player.getX() - r, player.getY() - r, player.getZ() - r,
-                player.getX() + r, player.getY() + r, player.getZ() + r);
-        Villager nearest = null;
-        double bestDist = Double.MAX_VALUE;
-        for (Villager villager : level.getEntitiesOfClass(Villager.class, box)) {
-            if (!villager.isAlive()) continue;
-            double d = villager.distanceToSqr(player);
-            if (d < bestDist) {
-                bestDist = d;
-                nearest = villager;
-            }
-        }
-        return nearest;
-    }
-
     // ========== 调试命令 ==========
 
-    /** 显示模组完整调试信息（分区、彩色、全汉化，UUID 直接显示） */
+    /** 显示模组完整调试信息（分区、彩色、全汉化，UUID 可点击填入） */
     private static int debugInfo(CommandSourceStack source) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
-        ServerLevel level = source.getLevel();
+        ServerLevel level = overworld(source);
         ZombietideConfig config = ConfigManager.getConfigData(level).getConfig();
 
         // 标题
@@ -315,8 +309,10 @@ public class ZombietideCommands {
         int activeVillagerCount = HordeSpawner.getActiveVillagerHordeCount(level);
         int hordeZombieCount = 0;
         for (Entity entity : level.getEntities().getAll()) {
-            if (entity instanceof net.minecraft.world.entity.monster.Zombie z) {
-                if (z.getPersistentData().hasUUID("zombietide_horde_target")) {
+            // Zombie 已覆盖 ZombieVillager/Husk/Drowned；Stray 不是 Zombie 子类，需单独计入
+            if (entity instanceof net.minecraft.world.entity.monster.Zombie
+                    || entity instanceof net.minecraft.world.entity.monster.Stray) {
+                if (entity.getPersistentData().hasUUID("zombietide_horde_target")) {
                     hordeZombieCount++;
                 }
             }
@@ -336,16 +332,19 @@ public class ZombietideCommands {
     /** 在玩家脚下直接生成一只调试僵尸（用于测试刷怪点） */
     private static int debugSpawnZombie(CommandSourceStack source) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
-        ServerLevel level = source.getLevel();
+        ServerLevel level = overworld(source);
         ZombietideConfig config = ConfigManager.getConfigData(level).getConfig();
+        ServerLevel spawnLevel = player.serverLevel();
 
         net.minecraft.world.entity.monster.Zombie zombie = new net.minecraft.world.entity.monster.Zombie(
-                net.minecraft.world.entity.EntityType.ZOMBIE, level);
+                net.minecraft.world.entity.EntityType.ZOMBIE, spawnLevel);
         net.minecraft.core.BlockPos pos = player.blockPosition().offset(0, 2, 3);
         zombie.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0, 0);
         zombie.getPersistentData().putUUID("zombietide_horde_target", player.getUUID());
+        // 调试标记：对账时跳过，避免刚生成就被「孤儿尸潮僵尸」清理掉
+        zombie.getPersistentData().putBoolean("zombietide_debug", true);
         com.enik.zombietide.horde.HordeZombieBehavior.apply(zombie, player.getUUID(), config);
-        level.addFreshEntity(zombie);
+        spawnLevel.addFreshEntity(zombie);
 
         source.sendSuccess(() -> Component.literal("已在玩家前方生成 1 只调试尸潮僵尸").withStyle(ChatFormatting.GREEN), false);
         return 1;
@@ -353,8 +352,7 @@ public class ZombietideCommands {
 
     /** 清理所有活跃尸潮与存活尸潮僵尸 */
     private static int debugClearHordes(CommandSourceStack source) throws CommandSyntaxException {
-        ServerPlayer player = source.getPlayerOrException();
-        ServerLevel level = source.getLevel();
+        ServerLevel level = overworld(source);
 
         // 清理 activeHordes 并重置所有目标 waveActive
         HordeSpawner.clearActiveHordes(level);
@@ -362,9 +360,11 @@ public class ZombietideCommands {
         // 清理存活尸潮僵尸
         int cleared = 0;
         for (Entity entity : level.getEntities().getAll()) {
-            if (entity instanceof net.minecraft.world.entity.monster.Zombie z) {
-                if (z.getPersistentData().hasUUID("zombietide_horde_target")) {
-                    z.discard();
+            // Zombie 已覆盖 ZombieVillager/Husk/Drowned；Stray 不是 Zombie 子类，需单独计入
+            if (entity instanceof net.minecraft.world.entity.monster.Zombie
+                    || entity instanceof net.minecraft.world.entity.monster.Stray) {
+                if (entity.getPersistentData().hasUUID("zombietide_horde_target")) {
+                    entity.discard();
                     cleared++;
                 }
             }
@@ -384,9 +384,10 @@ public class ZombietideCommands {
                     net.minecraft.world.effect.MobEffects.GLOWING,
                     15 * 20, 1, false, false));
 
-            final String entityMsg = "已给 " + entity.getName().getString()
-                    + " (UUID=" + entity.getStringUUID() + "，类型=" + entity.getType().getDescription().getString() + ") 添加 15 秒发光效果";
-            source.sendSuccess(() -> Component.literal(entityMsg).withStyle(ChatFormatting.AQUA), false);
+            source.sendSuccess(() -> Component.literal("已给 " + entity.getName().getString() + " (UUID=")
+                    .append(clickableUUID(entity.getUUID()))
+                    .append(Component.literal("，类型=" + entity.getType().getDescription().getString() + ") 添加 15 秒发光效果"))
+                    .withStyle(ChatFormatting.AQUA), false);
             successCount++;
         }
         final int finalSuccessCount = successCount;
