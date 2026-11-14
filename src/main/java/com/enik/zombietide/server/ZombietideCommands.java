@@ -36,7 +36,6 @@ import java.util.Collection;
  *   绕过启用开关与黄昏窗口，玩家保留血债（不消耗、不清零），并占用当日触发日（当日黄昏不再自动触发）
  * - /zombietide reset <players>：**只重置玩家血债**（仅玩家；modDay/波次/触发日/进行中均保留）；清除尸潮请用 debug clear
  * - /zombietide debug info：显示完整调试信息
- * - /zombietide debug spawn：脚下生成 1 只测试僵尸
  * - /zombietide debug clear：**清除**所有活跃尸潮与尸潮僵尸（唯一的清除命令）
  * - /zombietide debug glow <targets>：给目标实体发光 15 秒（自动过滤非生物实体）
  * <p>
@@ -67,8 +66,6 @@ public class ZombietideCommands {
                 .then(Commands.literal("debug")
                         .then(Commands.literal("info")
                                 .executes(ctx -> debugInfo(ctx.getSource())))
-                        .then(Commands.literal("spawn")
-                                .executes(ctx -> debugSpawnZombie(ctx.getSource())))
                         .then(Commands.literal("clear")
                                 .executes(ctx -> debugClearHordes(ctx.getSource())))
                         .then(Commands.literal("glow")
@@ -317,27 +314,6 @@ public class ZombietideCommands {
                 + " §e活跃村民尸潮: §f" + finalActiveVillagerCount
                 + " §e全局僵尸上限: §f" + config.globalCap()), false);
 
-        return 1;
-    }
-
-    /** 在玩家脚下直接生成一只调试僵尸（用于测试刷怪点） */
-    private static int debugSpawnZombie(CommandSourceStack source) throws CommandSyntaxException {
-        ServerPlayer player = source.getPlayerOrException();
-        ServerLevel level = overworld(source);
-        ZombietideConfig config = ConfigManager.getConfigData(level).getConfig();
-        ServerLevel spawnLevel = player.serverLevel();
-
-        net.minecraft.world.entity.monster.Zombie zombie = new net.minecraft.world.entity.monster.Zombie(
-                net.minecraft.world.entity.EntityType.ZOMBIE, spawnLevel);
-        net.minecraft.core.BlockPos pos = player.blockPosition().offset(0, 2, 3);
-        zombie.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0, 0);
-        zombie.getPersistentData().putUUID("zombietide_horde_target", player.getUUID());
-        // 调试标记：对账时跳过，避免刚生成就被「孤儿尸潮僵尸」清理掉
-        zombie.getPersistentData().putBoolean("zombietide_debug", true);
-        com.enik.zombietide.horde.HordeZombieBehavior.apply(zombie, player.getUUID(), config);
-        spawnLevel.addFreshEntity(zombie);
-
-        source.sendSuccess(() -> Component.literal("已在玩家前方生成 1 只调试尸潮僵尸").withStyle(ChatFormatting.GREEN), false);
         return 1;
     }
 
