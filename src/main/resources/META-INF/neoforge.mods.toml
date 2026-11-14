@@ -3,10 +3,11 @@
 # Note: do not write "dollar+brace" example text in this file, it will be evaluated as an expression by the Groovy template engine and fail the build.
 modLoader="javafml"
 loaderVersion="[1,)"
-mixins = [
-  "enik_zombietide.mixins"
-]
 license="${mod_license}"
+
+# NeoForge 1.20.5+ 的 mixin 声明格式（顶层 mixins = [...] 是 Forge 旧格式，NeoForge 不识别）
+[[mixins]]
+config="enik_zombietide.mixins.json"
 
 [[mods]]
 modId="${mod_id}"
