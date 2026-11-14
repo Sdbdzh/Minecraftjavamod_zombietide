@@ -37,3 +37,6 @@ build_output*.txt
 Thumbs.db
 .DS_Store
 desktop.ini
+
+# ---- 资源/图片 下的临时导出副本（UUID 命名）----
+资源/图片/*-*-*-*-*.png
