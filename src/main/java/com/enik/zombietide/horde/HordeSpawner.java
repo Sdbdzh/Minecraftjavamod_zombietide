@@ -1148,6 +1148,13 @@ public class HordeSpawner {
     }
 
     /**
+     * 允许的落点低于「目标所在地表」的最大格数。
+     * <p>高度图取的是该列最高实体方块，但在洞穴口、天坑、竖井、玩家自己挖的竖井里，
+     * 这个"最高方块"本身就在地下。超过该容差即视为地下落点，直接丢弃。
+     */
+    private static final int MAX_DEPTH_BELOW_SURFACE = 16;
+
+    /**
      * 实体能正常 tick 的最大半径（格）。
      * <p>取服务器**模拟距离**（区块）× 16，再留 1 个区块余量。
      * 注意不能用视距：视距内的区块虽然已加载，但超出模拟距离的实体不会 tick，刷在那里只会站着发呆。
@@ -1179,6 +1186,9 @@ public class HordeSpawner {
      * （{@code ChunkStatus.FULL, true}）。因此这里做两层防护：
      * ① 用模拟距离收缩采样半径；② 每个候选点先用 {@code hasChunkAt} 过滤，未加载直接丢弃。
      * 保证刷怪永远不会强制生成新区块。
+     * <p><b>只在地表</b>：高度图取的是该列最高实体方块，但在洞穴口 / 天坑 / 竖井里它本身就在地下。
+     * 因此落点还要满足「不低于目标所在列地表 {@value #MAX_DEPTH_BELOW_SURFACE} 格」，否则丢弃。
+     * 基准是<b>目标所在列的地表</b>，所以玩家在地下挖矿时仍然只在地表刷怪。
      * <p>优先级仍是：目标背后 → 任意安全点 → 目标脚下地表，绝不返回 null。
      */
     private static BlockPos findSpawnPos(ServerLevel level, net.minecraft.world.entity.Entity target,
@@ -1211,6 +1221,12 @@ public class HordeSpawner {
         double forwardX = -Math.sin(Math.toRadians(targetYaw));
         double forwardZ = Math.cos(Math.toRadians(targetYaw));
 
+        // 地表基准：目标所在列的最高实体方块。玩家在地下挖矿时它仍是头顶的地表，
+        // 因此落点被约束在地表附近，而不是玩家脚边的洞穴里。
+        int targetSurfaceY = level.getHeight(
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                target.getBlockX(), target.getBlockZ());
+
         for (int i = 0; i < attempts; i++) {
             double angle = RANDOM.nextDouble() * 2 * Math.PI;
             // 环带内按面积均匀采样：dist² 均匀 → 不会全都挤在内圈
@@ -1231,6 +1247,12 @@ public class HordeSpawner {
                 net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                 new BlockPos(spawnX, 0, spawnZ)
             );
+
+            // 只要地表：洞穴口 / 天坑 / 竖井里，高度图会指到地下，这类落点直接丢弃。
+            // 基准取「目标所在列的地表」，所以玩家在地下挖矿时仍然只在地表刷。
+            if (surfacePos.getY() < targetSurfaceY - MAX_DEPTH_BELOW_SURFACE) {
+                continue;
+            }
 
             // 检查生成空间：需要 surfacePos.above() 和 surfacePos.above().above() 都是空气/可替换
             BlockPos feetPos = surfacePos.above();
