@@ -100,7 +100,7 @@ public class ModMessages {
     public static final ResourceLocation INFO_OVERLAY_ID = ResourceLocation.fromNamespaceAndPath(
             "enik_zombietide", "info_overlay");
 
-    public record VillagerModDayPayload(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z) implements CustomPacketPayload {
+    public record VillagerModDayPayload(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive) implements CustomPacketPayload {
         public static final Type<VillagerModDayPayload> TYPE = new Type<>(VILLAGER_MOD_DAY_ID);
 
         public static final StreamCodec<FriendlyByteBuf, VillagerModDayPayload> STREAM_CODEC = new StreamCodec<>() {
@@ -112,6 +112,7 @@ public class ModMessages {
                 buf.writeDouble(payload.x());
                 buf.writeDouble(payload.y());
                 buf.writeDouble(payload.z());
+                buf.writeBoolean(payload.waveActive());
             }
 
             @Override
@@ -122,7 +123,8 @@ public class ModMessages {
                 double x = buf.readDouble();
                 double y = buf.readDouble();
                 double z = buf.readDouble();
-                return new VillagerModDayPayload(uuid, registryKey, modDay, x, y, z);
+                boolean waveActive = buf.readBoolean();
+                return new VillagerModDayPayload(uuid, registryKey, modDay, x, y, z, waveActive);
             }
         };
 
@@ -393,7 +395,7 @@ public class ModMessages {
                         (payload, context) -> {
                             context.enqueueWork(() -> {
                                 ZombietideHud.onVillagerModDayReceived(payload.villagerUuid(), payload.registryKey(),
-                                        payload.modDay(), payload.x(), payload.y(), payload.z());
+                                        payload.modDay(), payload.x(), payload.y(), payload.z(), payload.waveActive());
                             });
                         })
                 // 服务端 -> 客户端：mod info 常驻显示开关
@@ -439,14 +441,14 @@ public class ModMessages {
     }
 
     /** 发送村民模组天数给特定玩家（用于 HUD 显示附近村民） */
-    public static void sendVillagerModDay(ServerPlayer player, UUID villagerUuid, String registryKey, int modDay, double x, double y, double z) {
-        PacketDistributor.sendToPlayer(player, new VillagerModDayPayload(villagerUuid, registryKey, modDay, x, y, z));
+    public static void sendVillagerModDay(ServerPlayer player, UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive) {
+        PacketDistributor.sendToPlayer(player, new VillagerModDayPayload(villagerUuid, registryKey, modDay, x, y, z, waveActive));
     }
 
     /** 发送村民模组天数给特定玩家（用于 HUD 显示附近村民）——兼容旧签名，自动提取 registryKey */
-    public static void sendVillagerModDay(ServerPlayer player, UUID villagerUuid, net.minecraft.world.entity.npc.Villager villager, int modDay, double x, double y, double z) {
+    public static void sendVillagerModDay(ServerPlayer player, UUID villagerUuid, net.minecraft.world.entity.npc.Villager villager, int modDay, double x, double y, double z, boolean waveActive) {
         String registryKey = extractVillagerRegistryKey(villager);
-        PacketDistributor.sendToPlayer(player, new VillagerModDayPayload(villagerUuid, registryKey, modDay, x, y, z));
+        PacketDistributor.sendToPlayer(player, new VillagerModDayPayload(villagerUuid, registryKey, modDay, x, y, z, waveActive));
     }
 
     /** 广播所有玩家的模组天数给所有在线客户端 */
@@ -499,7 +501,8 @@ public class ModMessages {
                     sendVillagerModDay(player, villager.getUUID(),
                         extractVillagerRegistryKey(villager),
                         sched.modDay(),
-                        villager.getX(), villager.getY(), villager.getZ());
+                        villager.getX(), villager.getY(), villager.getZ(),
+                        sched.waveActive());
                 }
             }
         }

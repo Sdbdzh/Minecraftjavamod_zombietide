@@ -106,7 +106,8 @@ public class ZombietideServerEvents {
                     ModMessages.sendVillagerModDay(player, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager),
                             ModAttachments.getVillagerHordeData(villager).modDay(),
-                            villager.getX(), villager.getY(), villager.getZ());
+                            villager.getX(), villager.getY(), villager.getZ(),
+                            ModAttachments.getVillagerHordeData(villager).waveActive());
                 }
             }
         }

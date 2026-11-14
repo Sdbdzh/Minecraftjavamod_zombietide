@@ -436,27 +436,24 @@ public class HordeSpawner {
                         ModMessages.sendVillagerModDay(p, villager.getUUID(),
                                 ModMessages.extractVillagerRegistryKey(villager),
                                 vData.modDay(),
-                                villager.getX(), villager.getY(), villager.getZ());
+                                villager.getX(), villager.getY(), villager.getZ(), false);
                     }
                 }
             }
         }
 
-        // 【修复】兜底：调度表里仍有 waveActive=true 但实体已死/卸载/跨维度的村民，强制重置
-        // 这解决了：村民死后实体消失，onDawn 遍历 level.getEntities() 找不到它，导致 waveActive 永不重置
+        // 【修复】黎明兜底：调度表是权威数据源，必须无条件把 waveActive 写回 false。
+        // 之前只在「实体已消失/跨维度」时重置调度表，已加载村民的调度条目会一直是 true；
+        // 区块重新加载时 onEntityJoinLevel 会把 true 再抄回实体附件 → 白天仍显示「尸潮进行中」。
         com.enik.zombietide.config.VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(
                 com.enik.zombietide.config.VillagerScheduleData.FACTORY, com.enik.zombietide.config.VillagerScheduleData.ID);
         for (var entry : schedule.getAllSchedules().entrySet()) {
             com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry sched = entry.getValue();
             if (sched.waveActive()) {
-                Entity entity = level.getEntity(entry.getKey());
-                if (entity == null || !(entity instanceof net.minecraft.world.entity.npc.Villager) || entity.level().dimension() != net.minecraft.world.level.Level.OVERWORLD) {
-                    com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry fixed = new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
-                            sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false
-                    );
-                    schedule.put(entry.getKey(), fixed);
-                    EnikZombietide.LOGGER.debug("村民 {} 实体已消失/跨维度，黎明兜底重置 waveActive=false", entry.getKey());
-                }
+                schedule.put(entry.getKey(), new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
+                        sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false
+                ));
+                EnikZombietide.LOGGER.debug("村民 {} 黎明重置调度表 waveActive=false", entry.getKey());
             }
         }
         
@@ -603,8 +600,9 @@ public class HordeSpawner {
             // 这里暂不处理村民实体为 null 的情况，依靠 onDawn 的调度表兜底
         }
 
-        // 【关键修复】进一步兜底：扫描 VillagerScheduleData，重置所有 waveActive=true 的村民
-        // 这处理了 activeHordes 已被 onDawn/forceScatterAll 清空，但村民附件仍有 waveActive=true 的情况
+        // 【关键修复】扫描 VillagerScheduleData，无条件把 waveActive 写回 false（权威数据源）。
+        // 之前实体存在时只重置附件、不写调度表，导致调度表一直 true；
+        // 区块重载时 onEntityJoinLevel 会把 true 抄回附件，白天仍显示「尸潮进行中」。
         VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(
                 VillagerScheduleData.FACTORY, VillagerScheduleData.ID
         );
@@ -612,24 +610,22 @@ public class HordeSpawner {
             UUID villagerUuid = entry.getKey();
             var sched = entry.getValue();
             if (sched.waveActive()) {
+                // 1) 权威调度表置 false
+                schedule.put(villagerUuid, new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
+                        sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false
+                ));
+                // 2) 若实体已加载，同步重置附件
                 var villagerEntity = level.getEntity(villagerUuid);
                 if (villagerEntity instanceof net.minecraft.world.entity.npc.Villager villager) {
-                    // 实体存在，重置附件
                     var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
                     if (vData.waveActive()) {
                         villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
                                 new com.enik.zombietide.attachments.VillagerHordeData(
                                         vData.modDay(), vData.lastTriggerDay(), vData.waveCount(), false
                                 ));
-                        EnikZombietide.LOGGER.debug("村民 {} 调度表兜底重置 waveActive=false（scatter 阶段）", villagerUuid);
                     }
-                } else {
-                    // 实体不存在（已死/卸载/跨维度），直接重置调度表条目
-                    schedule.put(villagerUuid, new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
-                            sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false
-                    ));
-                    EnikZombietide.LOGGER.debug("村民 {} 调度表兜底重置 waveActive=false（实体已消失，scatter 阶段）", villagerUuid);
                 }
+                EnikZombietide.LOGGER.debug("村民 {} 四散阶段重置 waveActive=false（调度表+附件）", villagerUuid);
             }
         }
     }
@@ -866,14 +862,18 @@ public class HordeSpawner {
             }
         }
 
-        // 【关键修复】兜底：扫描 VillagerScheduleData，重置所有 waveActive=true 的村民（含未加载/跨维度）
-        // 这处理了 activeHordes 已被清空，但村民附件/调度表仍有 waveActive=true 的情况
+        // 【关键修复】扫描 VillagerScheduleData，无条件把 waveActive 写回 false（权威数据源）
         VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(
                 VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
         for (var entry : schedule.getAllSchedules().entrySet()) {
             UUID villagerUuid = entry.getKey();
             var sched = entry.getValue();
             if (sched.waveActive()) {
+                // 1) 权威调度表置 false
+                schedule.put(villagerUuid, new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
+                        sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false
+                ));
+                // 2) 若实体已加载，同步重置附件
                 var villagerEntity = level.getEntity(villagerUuid);
                 if (villagerEntity instanceof net.minecraft.world.entity.npc.Villager villager) {
                     var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
@@ -882,15 +882,9 @@ public class HordeSpawner {
                                 new com.enik.zombietide.attachments.VillagerHordeData(
                                         vData.modDay(), vData.lastTriggerDay(), vData.waveCount(), false
                                 ));
-                        EnikZombietide.LOGGER.debug("村民 {} 调度表兜底重置 waveActive=false（forceScatterAll）", villagerUuid);
                     }
-                } else {
-                    // 实体不存在（已死/卸载/跨维度），直接重置调度表条目
-                    schedule.put(villagerUuid, new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
-                            sched.modDay(), 0, sched.waveCount(), false
-                    ));
-                    EnikZombietide.LOGGER.debug("村民 {} 调度表兜底重置 waveActive=false（实体未加载，forceScatterAll）", villagerUuid);
                 }
+                EnikZombietide.LOGGER.debug("村民 {} 强制四散重置 waveActive=false（调度表+附件）", villagerUuid);
             }
         }
 
@@ -1265,6 +1259,16 @@ public class HordeSpawner {
                         new com.enik.zombietide.attachments.VillagerHordeData(
                                 vData.modDay(), vData.lastTriggerDay(), vData.waveCount(), false));
                 EnikZombietide.LOGGER.debug("村民 {} waveActive 已重置为 false（尸潮完成）", targetId);
+            }
+            // 同步权威调度表：否则区块重载后 onEntityJoinLevel 会把 true 抄回附件
+            VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(
+                    VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
+            if (schedule.getAllSchedules().containsKey(targetId)) {
+                VillagerScheduleData.ScheduleEntry sched = schedule.get(targetId);
+                if (sched.waveActive()) {
+                    schedule.put(targetId, new VillagerScheduleData.ScheduleEntry(
+                            sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false));
+                }
             }
         }
     }

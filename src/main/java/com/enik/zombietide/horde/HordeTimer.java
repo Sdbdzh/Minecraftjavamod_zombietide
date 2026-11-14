@@ -334,7 +334,7 @@ public class HordeTimer {
                 if (p.distanceToSqr(villager) <= 128.0 * 128.0) {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), modDay,
-                            villager.getX(), villager.getY(), villager.getZ());
+                            villager.getX(), villager.getY(), villager.getZ(), true);
                 }
             }
         }
@@ -490,7 +490,7 @@ public class HordeTimer {
                 if (p.distanceToSqr(villager) <= 128.0 * 128.0) {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), targetModDay,
-                            villager.getX(), villager.getY(), villager.getZ());
+                            villager.getX(), villager.getY(), villager.getZ(), true);
                 }
             }
         }
@@ -581,7 +581,7 @@ public class HordeTimer {
                 if (p.distanceToSqr(villager) <= 128.0 * 128.0) {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), modDay,
-                            villager.getX(), villager.getY(), villager.getZ());
+                            villager.getX(), villager.getY(), villager.getZ(), true);
                 }
             }
         }

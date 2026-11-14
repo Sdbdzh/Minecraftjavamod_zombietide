@@ -44,6 +44,9 @@ public class ZombietideHud {
     /** 村民位置缓存（UUID -> x/y/z，用于 HUD 距离过滤） */
     private static final Map<UUID, double[]> villagerPos = new HashMap<>();
 
+    /** 村民尸潮是否进行中（UUID -> waveActive；由服务端同步，用于信息层显示真实状态） */
+    private static final Map<UUID, Boolean> villagerWaveActive = new HashMap<>();
+
     /** 客户端缓存的 mod info 常驻显示开关（由服务端通过 InfoOverlayPayload 同步） */
     private static boolean infoOverlayEnabled = false;
 
@@ -64,8 +67,9 @@ public class ZombietideHud {
     }
 
     /** 接收服务端同步的村民模组天数（VillagerModDayPayload） */
-    public static void onVillagerModDayReceived(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z) {
+    public static void onVillagerModDayReceived(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive) {
         villagerModDays.put(villagerUuid, modDay);
+        villagerWaveActive.put(villagerUuid, waveActive);
         thisBatchVillagers.add(villagerUuid); // 记录本批次收到的村民
         // 客户端本地化：直接使用 Minecraft Java 原版标准译名（entity.minecraft.villager.*）
         String localizedProfession = ModMessages.localizeProfession(registryKey);
@@ -99,6 +103,7 @@ public class ZombietideHud {
         villagerModDays.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
         villagerProfessions.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
         villagerPos.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
+        villagerWaveActive.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
     }
 
     /**
@@ -332,7 +337,7 @@ public class ZombietideHud {
                     + (vHordeDay ? " §c§l←尸潮日" : "")
                     + " §e距离: §f" + dist + "格"
                     + " §e间隔: §f" + villagerInterval + "天"
-                    + " §e进行中: §f" + (villagerModDays.get(entry.getKey()) != null ? "§c是" : "§a否"), startX, startY + lineCount * lineHeight, 0xFFFFFF);
+                    + " §e进行中: §f" + (villagerWaveActive.getOrDefault(entry.getKey(), false) ? "§c是" : "§a否"), startX, startY + lineCount * lineHeight, 0xFFFFFF);
             lineCount++;
             villagerShown++;
         }

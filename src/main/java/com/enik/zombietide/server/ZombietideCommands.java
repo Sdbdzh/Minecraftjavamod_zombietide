@@ -202,6 +202,16 @@ public class ZombietideCommands {
                 VillagerHordeData data = ModAttachments.getVillagerHordeData(villager);
                 villager.setData(ModAttachments.VILLAGER_HORDE.get(),
                         new VillagerHordeData(data.modDay(), 0, 0, false));
+                // 同步权威调度表，避免区块重载后 onEntityJoinLevel 把旧状态抄回附件
+                if (villager.level() instanceof ServerLevel sl) {
+                    var schedule = sl.getDataStorage().computeIfAbsent(
+                            com.enik.zombietide.config.VillagerScheduleData.FACTORY,
+                            com.enik.zombietide.config.VillagerScheduleData.ID);
+                    if (schedule.getAllSchedules().containsKey(villager.getUUID())) {
+                        schedule.put(villager.getUUID(), new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
+                                data.modDay(), 0, 0, false));
+                    }
+                }
                 final String villagerMsg = "已重置村民 " + villager.getName().getString()
                         + " (UUID=" + villager.getStringUUID() + ") 的波次、触发日（modDay 保留为 DAY " + data.modDay() + "，如需改 modDay 请用 /time）";
                 source.sendSuccess(() -> Component.literal(villagerMsg).withStyle(ChatFormatting.AQUA), false);
