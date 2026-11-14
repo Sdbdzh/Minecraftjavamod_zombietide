@@ -1,0 +1,56 @@
+name: 问题反馈
+description: 报告一个 Bug 或异常行为
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。提交前请先搜索已有 Issue，避免重复。
+        **提问前请确认模组版本号**（设置页左下角显示）。
+
+  - type: input
+    id: mod-version
+    attributes:
+      label: 模组版本
+      description: 设置页左下角显示的「版本号：x.y.z」
+      placeholder: 0.1.21
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: 运行环境
+      description: Minecraft 版本 / NeoForge 版本 / 是否装其他模组
+      placeholder: 1.21.1 / 21.1.265 / 仅本模组
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 现象描述
+      description: 发生了什么？你预期应该是什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 新建世界，难度普通
+        2. 把间隔改成 1
+        3. 等到黄昏……
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: 贴 `logs/latest.log` 里相关片段，或直接拖截图进来
+      render: shell
+    validations:
+      required: false

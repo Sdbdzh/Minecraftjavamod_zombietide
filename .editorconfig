@@ -1,0 +1,26 @@
+root = true
+
+# 全局默认：UTF-8 / LF / 4 空格
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# JSON / YAML 用 2 空格
+[*.{json,yml,yaml}]
+indent_size = 2
+
+# Markdown 保留行尾空格（换行语义）
+[*.md]
+trim_trailing_whitespace = false
+
+# Windows 脚本必须是 CRLF
+[*.{bat,cmd}]
+end_of_line = crlf
+
+# Gradle wrapper 脚本必须 LF，否则 Git Bash 报 \r 错误
+[gradlew]
+end_of_line = lf

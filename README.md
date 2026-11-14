@@ -2,6 +2,11 @@
 
 # Zombie Tide（尸潮）
 
+[![Build](https://github.com/Sdbdzh/Minecraftjavamod_zombietide/actions/workflows/build.yml/badge.svg)](https://github.com/Sdbdzh/Minecraftjavamod_zombietide/actions/workflows/build.yml)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-62b47a)
+![NeoForge](https://img.shields.io/badge/NeoForge-21.1.x-ea8b1a)
+![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-lightgrey)
+
 > Minecraft 1.21.1 · NeoForge 21.1.265 · Java 21
 
 一个受《7 Days to Die》启发的周期性尸潮模组：每隔一段时间，成群的僵尸会在黄昏锁定你（或村民）穷追不舍；撑到日出它们会退散，没清掉的会变成下一波额外的压力。
@@ -26,11 +31,18 @@
 
 ## 安装
 
+从 [Releases](https://github.com/Sdbdzh/Minecraftjavamod_zombietide/releases) 下载最新 jar，或自行构建。
+
 1. 安装 Minecraft 1.21.1 + NeoForge 21.1.x；
-2. 把构建出的 `enik_zombietide-<版本号>.jar` 放进 `.minecraft/mods/`；
+2. 把 `enik_zombietide-<版本号>.jar` 放进 `.minecraft/mods/`；
 3. 启动游戏。先到 **选项 → 控制 → 按键绑定 → 「尸潮」分类**，给「打开尸潮设置」绑定一个按键（**默认未绑定**）；进入存档后按该键打开设置界面。
 
 ## 构建
+
+需要 **JDK 21**。若系统默认 `java` 不是 21，任选一种方式指定：
+
+- **环境变量**（推荐，CI 走这条）：`JAVA_HOME=/path/to/jdk-21`
+- **用户级 Gradle 配置**（不改仓库文件）：在 `~/.gradle/gradle.properties` 中写 `org.gradle.java.home=/path/to/jdk-21`
 
 ```sh
 # Windows
@@ -44,7 +56,7 @@ gradlew.bat build
 
 > 版本号只有一个来源：`gradle.properties` 的 `mod_version`。它同时决定 jar 文件名、`neoforge.mods.toml` 的 version 和设置页左下角显示的「版本号」，**不要在别处手写版本号**。
 
-> `gradle.properties` 里的 `org.gradle.java.home` 指向本机 Java 21 运行时；换机器构建时请改成自己的 JDK 21 路径，或删除该行。
+> ⚠️ **不要**把 `org.gradle.java.home` 写进仓库的 `gradle.properties` —— 那是本机绝对路径，会让别人 clone 后构建直接失败。
 
 ## 文档
 
@@ -74,4 +86,6 @@ Sdbdzh（Enik）
 
 ## 许可
 
-All Rights Reserved（保留所有权利）。未经作者许可，请勿转载、分发或用于商业用途。
+All Rights Reserved（保留所有权利）。完整条款见 [LICENSE](LICENSE)。
+
+未经作者许可，请勿转载、分发或用于商业用途；整合包收录、二次开发请先联系作者。
