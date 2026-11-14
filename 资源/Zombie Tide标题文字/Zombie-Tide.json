@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "data": {
+    "fontId": "Minecraft Ten",
+    "texts": [
+      {
+        "content": "Zombie Tide",
+        "opts": {
+          "size": 6,
+          "depth": 5,
+          "x": 0,
+          "y": 8,
+          "z": 0,
+          "rotY": 0,
+          "rotX": 0,
+          "rotZ": 0,
+          "materials": {
+            "front": {
+              "mode": "gradient",
+              "colorGradualStart": "rgb(73,0,0)",
+              "colorGradualEnd": "#ff4d4d",
+              "repeat": 1.5,
+              "offset": 0
+            },
+            "back": {
+              "mode": "gradient",
+              "colorGradualStart": "#ff9a9a",
+              "colorGradualEnd": "#ff4d4d",
+              "repeat": 1,
+              "offset": 0
+            },
+            "up": {
+              "mode": "color",
+              "color": "#800000"
+            },
+            "down": {
+              "mode": "gradient",
+              "colorGradualStart": "#b52525",
+              "colorGradualEnd": "#780000",
+              "repeat": 1,
+              "offset": 0
+            },
+            "left": {
+              "mode": "color",
+              "color": "#800000"
+            },
+            "right": {
+              "mode": "color",
+              "color": "#800000"
+            },
+            "outline": {
+              "mode": "color",
+              "color": "rgb(255,161,161)"
+            }
+          },
+          "outlineWidth": 0.4,
+          "letterSpacing": 2.1,
+          "spacingWidth": 0.4,
+          "overlay": "overlay.highlightInnerHighlight"
+        },
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      }
+    ]
+  }
+}

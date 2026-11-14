@@ -1,3 +1,5 @@
+![Zombie Tide](https://github.com/Sdbdzh/Minecraftjavamod_zombietide/blob/main/%E8%B5%84%E6%BA%90/Zombie%20Tide%E6%A0%87%E9%A2%98%E6%96%87%E5%AD%97/screenshot.png)
+
 # Zombie Tide（尸潮）
 
 > Minecraft 1.21.1 · NeoForge 21.1.265 · Java 21
