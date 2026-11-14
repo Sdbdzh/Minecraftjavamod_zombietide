@@ -85,8 +85,8 @@ public final class HordeZombieBehavior {
         }
         mob.goalSelector.addGoal(9, new HordeZombieGoal(mob, targetUUID));
 
-        // 注：日光燃烧开关（config.daylightBurn()）原版无 public API 可关闭——
-        // Mob.isSunSensitive() 与 Mob.isSunBurnTick() 均为 protected。
-        // Phase 2 计划通过 Mixin/Accessor 覆写 isSunSensitive() 实现，当前保持原版燃烧行为。
+        // 注：日光燃烧开关（config.daylightBurn()）通过 DaylightBurnMixin 覆写 Mob.isSunSensitive()
+        // 实现：仅带 zombietide_horde_target 标记的尸潮僵尸在 daylightBurn=false 时不燃烧；
+        // 自然生成的僵尸/骷髅等仍保持原版燃烧行为。
     }
 }
