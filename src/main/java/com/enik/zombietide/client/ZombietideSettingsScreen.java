@@ -462,11 +462,31 @@ public class ZombietideSettingsScreen extends Screen {
                         config.warningTitle(), centerX, y,
                         (cb, v) -> config = config.withWarningTitle(v), false);
                 y += ROW_HEIGHT;
-                addCheckbox("声音警告", Scope.WORLD,
-                        "触发时播放僵尸嘶吼",
-                        "仅「启用警告」开启时生效。",
+                addCheckbox("尸潮触发音效", Scope.WORLD,
+                        "触发时播放定制音效",
+                        "对应「尸潮触发.mp3」，已替换原版僵尸敲木门声；仅「启用警告」开启时生效，村民尸潮附近玩家也能听到。",
                         config.warningSound(), centerX, y,
                         (cb, v) -> config = config.withWarningSound(v), false);
+                y += ROW_HEIGHT;
+
+                y = addSection("定制音频", centerX, y);
+                addCheckbox("清晨提醒音效", Scope.WORLD,
+                        "尸潮日清晨提醒时播放",
+                        "对应「清晨提醒.mp3」；只发给收到提醒的玩家本人，受「启用警告」总开关控制。",
+                        config.morningWarningSound(), centerX, y,
+                        (cb, v) -> config = config.withMorningWarningSound(v), false);
+                y += ROW_HEIGHT;
+                addCheckbox("四散音效", Scope.WORLD,
+                        "日出前四散时播放",
+                        "对应「四散触发.mp3」；只发给玩家尸潮触发者，村民尸潮不播放。",
+                        config.scatterSound(), centerX, y,
+                        (cb, v) -> config = config.withScatterSound(v), false);
+                y += ROW_HEIGHT;
+                addCheckbox("尸潮背景音乐", Scope.WORLD,
+                        "尸潮期间随机间隔播放背景音乐",
+                        "每 30 秒~2 分钟随机播放一段（5 段素材随机选取）；只有玩家尸潮触发者能听到，村民尸潮不播放；波次结束自动停止。",
+                        config.hordeBgmSound(), centerX, y,
+                        (cb, v) -> config = config.withHordeBgmSound(v), false);
                 y += ROW_HEIGHT;
 
                 y = addSection("范围", centerX, y);

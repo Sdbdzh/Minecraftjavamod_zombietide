@@ -2,13 +2,13 @@ package com.enik.zombietide.horde;
 
 import com.enik.zombietide.EnikZombietide;
 import com.enik.zombietide.config.ZombietideConfig;
+import com.enik.zombietide.sound.ModSounds;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.npc.Villager;
 
@@ -17,8 +17,8 @@ import java.util.Random;
 /**
  * 警告系统：尸潮清晨提醒、触发瞬间警报（设计文档 7.1 / 7.2 / 7.3）。
  * <p>
- * - warnMorningHorde：玩家/村民尸潮清晨提醒（尸潮日黎明后 0-1000）：仅聊天文案，无标题/音效；
- * - triggerPlayerHorde：玩家尸潮触发瞬间：大标题 + 僵尸嘶吼 + 突袭旁白；
+ * - warnMorningHorde：玩家尸潮清晨提醒（尸潮日黎明后 0-1000）：聊天文案 + 定制清晨提醒音效，无标题；
+ * - triggerPlayerHorde：玩家尸潮触发瞬间：大标题 + 定制触发音效 + 突袭旁白；
  * - triggerVillagerHorde：村民尸潮触发瞬间（同触发警报语义，突袭旁白同样适用）。
  * <p>
  * 标题/字幕通过原版 TitleCommand 同款数据包发送
@@ -40,7 +40,7 @@ public class HordeWarning {
 
     /**
      * 清晨尸潮提醒：尸潮日黎明后（0-1000）调用。
-     * 仅发送聊天文案（随机抽 1 段），无大标题、无音效，避免与触发警报混淆。
+     * 发送聊天文案（随机抽 1 段）+ 定制清晨提醒音效（受 morningWarningSound 开关控制），无大标题。
      *
      * @param level  服务端世界
      * @param player 接收提醒的玩家
@@ -54,12 +54,17 @@ public class HordeWarning {
         int index = RANDOM.nextInt(MORNING_LINE_COUNT) + 1;
         player.sendSystemMessage(Component.translatable("zombietide.morning." + index));
 
+        // 定制音频：清晨提醒音效只发给收到提醒的玩家本人
+        if (config.morningWarningSound()) {
+            ModSounds.playToPlayer(player, ModSounds.MORNING_WARNING, SoundSource.HOSTILE, 0.8F, 1.0F);
+        }
+
         EnikZombietide.LOGGER.info("清晨尸潮提醒已发送给玩家 {} (Day {})", player.getScoreboardName(), modDay);
     }
 
     /**
      * 玩家尸潮触发警报：尸潮触发瞬间调用（设计文档 7.2）。
-     * 大标题"尸潮" + 副标题 + 短促刺耳的僵尸嘶吼（僵尸攻击木门声）+ 突袭旁白（文案库随机抽 1 段）。
+     * 大标题「夜潮」+ 副标题 + 定制触发音效（尸潮触发.mp3，替换原版僵尸敲木门声）+ 突袭旁白（文案库随机抽 1 段）。
      *
      * @param level  服务端世界
      * @param player 被警报的玩家（尸潮触发目标）
@@ -68,17 +73,17 @@ public class HordeWarning {
     public static void triggerPlayerHorde(ServerLevel level, ServerPlayer player, ZombietideConfig config) {
         if (config == null || !config.warningEnabled()) return;
 
-        // 大标题"尸潮" + 副标题
+        // 大标题「夜潮」+ 副标题（语言键驱动）
         if (config.warningTitle()) {
             player.connection.send(new ClientboundSetTitlesAnimationPacket(5, 60, 20));
             player.connection.send(new ClientboundSetTitleTextPacket(TITLE_TEXT));
             player.connection.send(new ClientboundSetSubtitleTextPacket(SUBTITLE_TEXT));
         }
 
-        // 音效：短促刺耳的僵尸嘶吼（僵尸攻击木门声）
+        // 定制音频：替换原版 ZOMBIE_ATTACK_WOODEN_DOOR；保持广播语义（村民尸潮附近玩家也能听到）
         if (config.warningSound()) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.ZOMBIE_ATTACK_WOODEN_DOOR, SoundSource.HOSTILE, 1.0F, 1.0F);
+                    ModSounds.HORDE_TRIGGER.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
         }
 
         // 突袭旁白：逾期立即触发时从语言文件随机抽 1 段

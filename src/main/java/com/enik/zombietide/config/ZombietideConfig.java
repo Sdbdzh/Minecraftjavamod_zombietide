@@ -197,24 +197,34 @@ public record ZombietideConfig(
     public record WarningConfig(
             boolean warningEnabled,
             boolean warningTitle,
-            boolean warningSound,
-            boolean blockNaturalSpawn
+            boolean warningSound,          // 尸潮触发音效（原「声音警告」）
+            boolean blockNaturalSpawn,
+            boolean morningWarningSound,   // 清晨提醒音效
+            boolean scatterSound,          // 四散音效
+            boolean hordeBgmSound          // 尸潮背景音乐（仅玩家尸潮触发者）
     ) {
         public static final Codec<WarningConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.BOOL.fieldOf("warningEnabled").forGetter(WarningConfig::warningEnabled),
                 Codec.BOOL.fieldOf("warningTitle").forGetter(WarningConfig::warningTitle),
                 Codec.BOOL.fieldOf("warningSound").forGetter(WarningConfig::warningSound),
-                Codec.BOOL.fieldOf("blockNaturalSpawn").forGetter(WarningConfig::blockNaturalSpawn)
+                Codec.BOOL.fieldOf("blockNaturalSpawn").forGetter(WarningConfig::blockNaturalSpawn),
+                // 新增字段用 optionalFieldOf：旧存档 NBT 缺少这些键时读取默认值 true，不会解码失败
+                Codec.BOOL.optionalFieldOf("morningWarningSound", true).forGetter(WarningConfig::morningWarningSound),
+                Codec.BOOL.optionalFieldOf("scatterSound", true).forGetter(WarningConfig::scatterSound),
+                Codec.BOOL.optionalFieldOf("hordeBgmSound", true).forGetter(WarningConfig::hordeBgmSound)
         ).apply(instance, WarningConfig::new));
 
         public static WarningConfig defaults() {
-            return new WarningConfig(true, true, true, true);
+            return new WarningConfig(true, true, true, true, true, true, true);
         }
 
-        public WarningConfig withWarningEnabled(boolean v) { return new WarningConfig(v, warningTitle, warningSound, blockNaturalSpawn); }
-        public WarningConfig withWarningTitle(boolean v) { return new WarningConfig(warningEnabled, v, warningSound, blockNaturalSpawn); }
-        public WarningConfig withWarningSound(boolean v) { return new WarningConfig(warningEnabled, warningTitle, v, blockNaturalSpawn); }
-        public WarningConfig withBlockNaturalSpawn(boolean v) { return new WarningConfig(warningEnabled, warningTitle, warningSound, v); }
+        public WarningConfig withWarningEnabled(boolean v) { return new WarningConfig(v, warningTitle, warningSound, blockNaturalSpawn, morningWarningSound, scatterSound, hordeBgmSound); }
+        public WarningConfig withWarningTitle(boolean v) { return new WarningConfig(warningEnabled, v, warningSound, blockNaturalSpawn, morningWarningSound, scatterSound, hordeBgmSound); }
+        public WarningConfig withWarningSound(boolean v) { return new WarningConfig(warningEnabled, warningTitle, v, blockNaturalSpawn, morningWarningSound, scatterSound, hordeBgmSound); }
+        public WarningConfig withBlockNaturalSpawn(boolean v) { return new WarningConfig(warningEnabled, warningTitle, warningSound, v, morningWarningSound, scatterSound, hordeBgmSound); }
+        public WarningConfig withMorningWarningSound(boolean v) { return new WarningConfig(warningEnabled, warningTitle, warningSound, blockNaturalSpawn, v, scatterSound, hordeBgmSound); }
+        public WarningConfig withScatterSound(boolean v) { return new WarningConfig(warningEnabled, warningTitle, warningSound, blockNaturalSpawn, morningWarningSound, v, hordeBgmSound); }
+        public WarningConfig withHordeBgmSound(boolean v) { return new WarningConfig(warningEnabled, warningTitle, warningSound, blockNaturalSpawn, morningWarningSound, scatterSound, v); }
     }
 
     public record HudConfig(
@@ -315,6 +325,9 @@ public record ZombietideConfig(
     public boolean warningTitle() { return warning.warningTitle(); }
     public boolean warningSound() { return warning.warningSound(); }
     public boolean blockNaturalSpawn() { return warning.blockNaturalSpawn(); }
+    public boolean morningWarningSound() { return warning.morningWarningSound(); }
+    public boolean scatterSound() { return warning.scatterSound(); }
+    public boolean hordeBgmSound() { return warning.hordeBgmSound(); }
 
     public boolean hudEnabled() { return hud.hudEnabled(); }
     public String hudPosition() { return hud.hudPosition(); }
@@ -391,6 +404,9 @@ public record ZombietideConfig(
     public ZombietideConfig withWarningTitle(boolean v) { return withWarning(warning.withWarningTitle(v)); }
     public ZombietideConfig withWarningSound(boolean v) { return withWarning(warning.withWarningSound(v)); }
     public ZombietideConfig withBlockNaturalSpawn(boolean v) { return withWarning(warning.withBlockNaturalSpawn(v)); }
+    public ZombietideConfig withMorningWarningSound(boolean v) { return withWarning(warning.withMorningWarningSound(v)); }
+    public ZombietideConfig withScatterSound(boolean v) { return withWarning(warning.withScatterSound(v)); }
+    public ZombietideConfig withHordeBgmSound(boolean v) { return withWarning(warning.withHordeBgmSound(v)); }
 
     // HudConfig wither
     public ZombietideConfig withHudEnabled(boolean v) { return withHud(hud.withHudEnabled(v)); }

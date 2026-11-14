@@ -3,6 +3,7 @@ package com.enik.zombietide;
 import com.enik.zombietide.attachments.ModAttachments;
 import com.enik.zombietide.client.ZombietideClientEvents;
 import com.enik.zombietide.server.ZombietideServerEvents;
+import com.enik.zombietide.sound.ModSounds;
 import com.mojang.logging.LogUtils;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -22,6 +23,9 @@ public class EnikZombietide {
 
         // 1. 注册 Data Attachments（mod bus）
         ModAttachments.register(modEventBus);
+
+        // 1b. 注册定制音效（mod bus）
+        ModSounds.register(modEventBus);
 
         // 2. ModMessages 通过 @EventBusSubscriber 自动注册网络 payload（mod bus）
 

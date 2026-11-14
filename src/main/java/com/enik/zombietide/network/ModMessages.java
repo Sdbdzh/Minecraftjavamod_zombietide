@@ -234,6 +234,10 @@ public class ModMessages {
                 buf.writeBoolean(c.warningTitle());
                 buf.writeBoolean(c.warningSound());
                 buf.writeBoolean(c.blockNaturalSpawn());
+                // 定制音频开关
+                buf.writeBoolean(c.morningWarningSound());
+                buf.writeBoolean(c.scatterSound());
+                buf.writeBoolean(c.hordeBgmSound());
                 // HUD
                 buf.writeBoolean(c.hudEnabled());
                 buf.writeBoolean(c.showVillagerHorde());
@@ -299,6 +303,10 @@ public class ModMessages {
                 boolean warningTitle = buf.readBoolean();
                 boolean warningSound = buf.readBoolean();
                 boolean blockNaturalSpawn = buf.readBoolean();
+                // 定制音频开关
+                boolean morningWarningSound = buf.readBoolean();
+                boolean scatterSound = buf.readBoolean();
+                boolean hordeBgmSound = buf.readBoolean();
                 // HUD
                 boolean hudEnabled = buf.readBoolean();
                 boolean showVillagerHorde = buf.readBoolean();
@@ -334,7 +342,8 @@ public class ModMessages {
                                 debtMode, debtCap, despawnSeconds, villagerWarningRange, villagerSleepBlockRange
                         ),
                         new ZombietideConfig.WarningConfig(
-                                warningEnabled, warningTitle, warningSound, blockNaturalSpawn
+                                warningEnabled, warningTitle, warningSound, blockNaturalSpawn,
+                                morningWarningSound, scatterSound, hordeBgmSound
                         ),
                         new ZombietideConfig.HudConfig(
                                 hudEnabled, showVillagerHorde, hudPosition, hudX, hudY,

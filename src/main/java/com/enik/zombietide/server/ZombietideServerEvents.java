@@ -8,6 +8,7 @@ import com.enik.zombietide.config.ConfigManager;
 import com.enik.zombietide.config.VillagerScheduleData;
 import com.enik.zombietide.config.ZombietideConfig;
 import com.enik.zombietide.config.ZombietideConfigData;
+import com.enik.zombietide.horde.HordeBgmScheduler;
 import com.enik.zombietide.horde.HordeSpawner;
 import com.enik.zombietide.horde.HordeTimer;
 import com.enik.zombietide.network.ModMessages;
@@ -42,6 +43,7 @@ public class ZombietideServerEvents {
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
         MinecraftServer server = event.getServer();
+        HordeBgmScheduler.reset(); // 单机换世界/服务器重启时清掉上一次的调度状态
         EnikZombietide.LOGGER.info("Zombietide server started");
     }
 
@@ -141,7 +143,7 @@ public class ZombietideServerEvents {
         }
     }
 
-    /** 每 tick：驱动尸潮刷怪引擎 + 尸潮时机检测 + 村民模组天数周期性广播（每 100 tick = 5 秒） */
+    /** 每 tick：驱动尸潮刷怪引擎 + 尸潮时机检测 + BGM 调度 + 村民模组天数周期性广播（每 20 tick = 1 秒） */
     private static int villagerModDayBroadcastTick = 0;
 
     @SubscribeEvent
@@ -156,6 +158,9 @@ public class ZombietideServerEvents {
         HordeTimer.onServerTick(overworld, data.getConfig());
         // 分批刷怪
         HordeSpawner.update(overworld, data.getConfig());
+
+        // 定制背景音乐调度（仅玩家尸潮触发者，每 30s~2min 随机播放一段）
+        HordeBgmScheduler.onServerTick(overworld, data.getConfig());
 
         // 周期性广播村民模组天数给客户端（每 20 tick = 1 秒），确保 HUD 村民尸潮信息实时刷新
         villagerModDayBroadcastTick++;

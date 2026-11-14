@@ -4,6 +4,7 @@ import com.enik.zombietide.EnikZombietide;
 import com.enik.zombietide.config.VillagerScheduleData;
 import com.enik.zombietide.config.ZombietideConfig;
 import com.enik.zombietide.network.ModMessages;
+import com.enik.zombietide.sound.ModSounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.UUIDUtil;
@@ -11,6 +12,7 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -537,6 +539,16 @@ public class HordeSpawner {
 
         // 向目标玩家（或村民周围玩家）发送一条汇总四散提醒，避免每只僵尸一条消息刷屏
         notifyScatterTargetsWithCount(level, config, scatterTargets, scatterCountByTarget);
+
+        // 定制音频：四散音效只发给玩家尸潮触发者（村民尸潮不播放）
+        if (config.scatterSound()) {
+            for (UUID targetId : scatterTargets) {
+                var target = level.getEntity(targetId);
+                if (target instanceof ServerPlayer player) {
+                    ModSounds.playToPlayer(player, ModSounds.HORDE_SCATTER, SoundSource.HOSTILE, 0.8F, 1.0F);
+                }
+            }
+        }
 
         // 【t37 修复】四散完成后重置目标 waveActive=false，避免 debug info 始终显示“进行中”
         for (UUID targetId : scatterTargets) {
