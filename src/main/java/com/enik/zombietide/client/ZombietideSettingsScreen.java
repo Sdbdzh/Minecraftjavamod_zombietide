@@ -134,7 +134,7 @@ public class ZombietideSettingsScreen extends Screen {
             ResourceLocation.fromNamespaceAndPath(EnikZombietide.MODID, "textures/gui/settings_cover.png");
     /** 封面贴图的真实像素尺寸：必须与 settings_cover.png 完全一致，否则采样会错位 */
     private static final int COVER_TEX_W = 1024;
-    private static final int COVER_TEX_H = 149;
+    private static final int COVER_TEX_H = 156;
     /** 封面在界面上的高度上下限（GUI 像素）：窗口越窄自动越小，避免压住「完成」按钮 */
     private static final int COVER_MAX_H = 28;
     private static final int COVER_MIN_H = 14;
