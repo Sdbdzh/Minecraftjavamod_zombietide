@@ -206,17 +206,20 @@ public class ZombietideCommands {
 
     // ========== reset ==========
 
-    /** 重置血债、波次、触发日、进行中标记（modDay 保留，提示用 /time） */
+    /** 重置血债、波次、触发日、进行中标记，并取消该目标的活跃尸潮（清除其尸潮僵尸）；modDay 保留，提示用 /time */
     private static int reset(CommandSourceStack source, Collection<? extends Entity> targets) throws CommandSyntaxException {
+        ServerLevel hordeLevel = overworld(source);
         int successCount = 0;
         for (Entity entity : targets) {
             if (entity instanceof ServerPlayer player) {
                 PlayerHordeData data = ModAttachments.getPlayerHordeData(player);
                 player.setData(ModAttachments.PLAYER_HORDE.get(),
                         new PlayerHordeData(data.modDay(), 0, 0, 0, false));
+                // 取消该玩家的活跃波次并清除其尸潮僵尸，避免 reset 后继续刷怪/结算
+                HordeSpawner.cancelHorde(hordeLevel, player.getUUID());
                 source.sendSuccess(() -> Component.literal("已重置玩家 " + player.getScoreboardName() + " (UUID=")
                         .append(clickableUUID(player.getUUID()))
-                        .append(Component.literal(") 的血债、波次、触发日（modDay 保留为 DAY " + data.modDay() + "，如需改 modDay 请用 /time）"))
+                        .append(Component.literal(") 的血债、波次、触发日，并取消活跃波次（modDay 保留为 DAY " + data.modDay() + "，如需改 modDay 请用 /time）"))
                         .withStyle(ChatFormatting.AQUA), false);
                 successCount++;
             } else if (entity instanceof Villager villager) {
@@ -233,9 +236,11 @@ public class ZombietideCommands {
                                 data.modDay(), 0, 0, false));
                     }
                 }
+                // 取消该村民的活跃波次并清除其尸潮僵尸
+                HordeSpawner.cancelHorde(hordeLevel, villager.getUUID());
                 source.sendSuccess(() -> Component.literal("已重置村民 " + villager.getName().getString() + " (UUID=")
                         .append(clickableUUID(villager.getUUID()))
-                        .append(Component.literal(") 的波次、触发日（modDay 保留为 DAY " + data.modDay() + "，如需改 modDay 请用 /time）"))
+                        .append(Component.literal(") 的波次、触发日，并取消活跃波次（modDay 保留为 DAY " + data.modDay() + "，如需改 modDay 请用 /time）"))
                         .withStyle(ChatFormatting.AQUA), false);
                 successCount++;
             }

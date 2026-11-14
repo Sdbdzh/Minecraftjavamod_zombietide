@@ -1273,6 +1273,25 @@ public class HordeSpawner {
     }
 
     /**
+     * 取消指定目标的活跃尸潮（供 /zombietide reset 使用）：
+     * 清理内部刷怪状态，并丢弃该目标已刷出的尸潮僵尸。
+     * 否则 reset 后引擎仍会按 activeHordes 继续刷怪，且残留僵尸会在黎明结算时把血债重新加回来。
+     */
+    public static void cancelHorde(ServerLevel level, UUID targetId) {
+        clearInternalState(targetId);
+        for (var entity : level.getEntities().getAll()) {
+            if (!(entity instanceof net.minecraft.world.entity.monster.Zombie ||
+                  entity instanceof net.minecraft.world.entity.monster.Stray)) continue;
+            CompoundTag tag = entity.getPersistentData();
+            if (!tag.hasUUID(HORDE_TARGET_UUID_KEY)) continue;
+            if (!tag.getUUID(HORDE_TARGET_UUID_KEY).equals(targetId)) continue;
+            hordeZombieUuids.remove(entity.getUUID());
+            scatteringZombies.remove(entity.getUUID());
+            entity.discard();
+        }
+    }
+
+    /**
      * 对账：结束「跨天残留」的尸潮。
      * <p>
      * 判定规则：{@code waveActive=true && lastTriggerDay < 当前 modDay} —— 触发日已过，
