@@ -217,7 +217,6 @@ public class ModMessages {
                 buf.writeInt(c.villagerRadius());
                 buf.writeBoolean(c.spawnByBiome());
                 buf.writeInt(c.minSpawnDist());
-                buf.writeInt(c.maxSpawnDist());
                 buf.writeInt(c.spawnAttempts());
                 buf.writeFloat(c.distanceWeight());
                 buf.writeFloat(c.darkWeight());
@@ -286,7 +285,6 @@ public class ModMessages {
                 int villagerRadius = buf.readInt();
                 boolean spawnByBiome = buf.readBoolean();
                 int minSpawnDist = buf.readInt();
-                int maxSpawnDist = buf.readInt();
                 int spawnAttempts = buf.readInt();
                 float distanceWeight = buf.readFloat();
                 float darkWeight = buf.readFloat();
@@ -337,7 +335,7 @@ public class ModMessages {
                         ),
                         new ZombietideConfig.SpawnConfig(
                                 batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome,
-                                minSpawnDist, maxSpawnDist, spawnAttempts, distanceWeight, darkWeight
+                                minSpawnDist, spawnAttempts, distanceWeight, darkWeight
                         ),
                         new ZombietideConfig.WorldConfig(
                                 globalCap, daylightBurn, blockSleep,

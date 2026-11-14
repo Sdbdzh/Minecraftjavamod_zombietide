@@ -171,7 +171,6 @@ public class ZombietideSettingsScreen extends Screen {
     private EditBox villagerRadiusEdit;
     private Checkbox spawnByBiomeCheckbox;
     private EditBox minSpawnDistEdit;
-    private EditBox maxSpawnDistEdit;
     private EditBox spawnAttemptsEdit;
     private EditBox distanceWeightEdit;
     private EditBox darkWeightEdit;
@@ -412,40 +411,34 @@ public class ZombietideSettingsScreen extends Screen {
                 addIntField("zombietide.settings.spawn.item7.name", Scope.WORLD,
                         "zombietide.settings.spawn.item7.desc",
                         "zombietide.settings.spawn.item7.tip",
-                        config.maxSpawnDist(), centerX, y, 1,
-                        v -> config = config.withMaxSpawnDist(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.spawn.item8.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item8.desc",
-                        "zombietide.settings.spawn.item8.tip",
                         config.spawnAttempts(), centerX, y, 1,
                         v -> config = config.withSpawnAttempts(v), false);
                 y += ROW_HEIGHT;
 
                 y = addSection("zombietide.settings.common.text9", centerX, y);
-                addCheckbox("zombietide.settings.spawn.item9.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item9.desc",
-                        "zombietide.settings.spawn.item9.tip",
+                addCheckbox("zombietide.settings.spawn.item8.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item8.desc",
+                        "zombietide.settings.spawn.item8.tip",
                         config.spawnByBiome(), centerX, y,
                         (cb, v) -> config = config.withSpawnByBiome(v), false);
+                y += ROW_HEIGHT;
+                addIntField("zombietide.settings.spawn.item9.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item9.desc",
+                        "zombietide.settings.spawn.item9.tip",
+                        Math.round(config.distanceWeight() * 100), centerX, y, 0,
+                        v -> config = config.withDistanceWeight(v / 100.0f), false);
                 y += ROW_HEIGHT;
                 addIntField("zombietide.settings.spawn.item10.name", Scope.WORLD,
                         "zombietide.settings.spawn.item10.desc",
                         "zombietide.settings.spawn.item10.tip",
-                        Math.round(config.distanceWeight() * 100), centerX, y, 0,
-                        v -> config = config.withDistanceWeight(v / 100.0f), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.spawn.item11.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item11.desc",
-                        "zombietide.settings.spawn.item11.tip",
                         Math.round(config.darkWeight() * 100), centerX, y, 0,
                         v -> config = config.withDarkWeight(v / 100.0f), false);
                 y += ROW_HEIGHT;
 
                 y = addSection("zombietide.settings.common.text10", centerX, y);
-                addIntField("zombietide.settings.spawn.item12.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item12.desc",
-                        "zombietide.settings.spawn.item12.tip",
+                addIntField("zombietide.settings.spawn.item11.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item11.desc",
+                        "zombietide.settings.spawn.item11.tip",
                         config.globalCap(), centerX, y, 1,
                         v -> config = config.withGlobalCap(v), false);
                 y += ROW_HEIGHT;

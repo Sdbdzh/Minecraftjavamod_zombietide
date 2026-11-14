@@ -1157,10 +1157,9 @@ public class HordeSpawner {
      * 在目标周围的安全地表点中挑一个刷怪位置。
      * <p>「生成性能」分页里与刷点相关的参数全部在这里生效，不再有摆设项：
      * <ul>
-     *   <li>{@code radius}（玩家/村民生成半径）——搜索范围硬上限；</li>
-     *   <li>{@code minSpawnDist} / {@code maxSpawnDist}——实际落点与目标的距离环带，
-     *       外圈再与 {@code radius} 取小；环带内按面积均匀采样（sqrt），不会挤在中心；
-     *       两者任一为 0 或负数时按「无此限制」处理（最大距离 0 → 用 radius）；</li>
+     *   <li>{@code radius}（玩家/村民生成半径）——**最远落点距离**，尸潮不会刷到比这更远；</li>
+     *   <li>{@code minSpawnDist}——**最近落点距离**，避免刷在目标脸上；落点就在
+     *       {@code [minSpawnDist, radius]} 这个环带内按面积均匀采样（sqrt），不会挤在中心；</li>
      *   <li>{@code spawnAttempts}——采样次数，越大越容易同时命中「背后 + 有空间 + 高评分」；</li>
      *   <li>{@code distanceWeight} / {@code darkWeight}——候选点评分权重（越远、越暗得分越高），
      *       在「背后」和「任意」两个优先级内各取最高分；两者都为 0 时退化为先到先得。</li>
@@ -1171,11 +1170,10 @@ public class HordeSpawner {
                                          double radius, ZombietideConfig config) {
         int attempts = config.spawnAttempts() > 0 ? Math.min(500, config.spawnAttempts()) : 60;
 
-        // 距离环带：内圈 = minSpawnDist，外圈 = min(radius, maxSpawnDist)
+        // 距离环带：内圈 = minSpawnDist，外圈 = 生成半径（玩家/村民各一项，半径本身就是最远落点距离）
         double inner = Math.max(0.0, config.minSpawnDist());
-        int maxCfg = config.maxSpawnDist();
-        double outer = maxCfg > 0 ? Math.min(radius, maxCfg) : radius;
-        if (outer < inner) outer = inner; // 容错：最大 < 最小时退化为同一圈
+        double outer = Math.max(0.0, radius);
+        if (outer < inner) outer = inner; // 容错：最小距离大于半径时退化为同一圈
         double minSq = inner * inner;
         double spanSq = Math.max(0.0, outer * outer - minSq);
 
