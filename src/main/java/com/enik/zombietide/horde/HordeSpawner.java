@@ -116,6 +116,9 @@ public class HordeSpawner {
             villagerHordeRadii.remove(targetId);
         }
 
+        // 持久化剩余待刷数：服务器重启后由 update() 的恢复逻辑继续刷
+        com.enik.zombietide.config.HordeProgressData.get(level).setRemaining(targetId, total, isVillager);
+
         EnikZombietide.LOGGER.info("尸潮触发：目标 {}，数量 {}，类型 {}", targetId, total, isVillager ? "村民" : "玩家");
 
         // 根据目标所在生物群系预测僵尸变种分布
@@ -163,6 +166,46 @@ public class HordeSpawner {
 
     /** 每 tick 更新尸潮刷怪状态（分批生成）+ 更新四散僵尸计时器 */
     public static void update(ServerLevel level, ZombietideConfig config) {
+        // 【重启恢复】按 HordeProgressData 重建被重启清空的刷怪状态。
+        // 校验目标仍处于当天波次中才恢复；校验不过（波次已结束/跨天）则 remove 自愈。
+        var progress = com.enik.zombietide.config.HordeProgressData.get(level);
+        if (!progress.getAll().isEmpty()) {
+            long today = level.getDayTime() / 24000L;
+            for (var it = progress.getAll().entrySet().iterator(); it.hasNext(); ) {
+                var e = it.next();
+                UUID targetId = e.getKey();
+                var entry = e.getValue();
+                if (activeHordes.containsKey(targetId)) continue;
+                if (entry.remaining() <= 0) {
+                    it.remove(); progress.setDirty(); continue;
+                }
+                boolean stillActive;
+                if (entry.villager()) {
+                    var sched = level.getDataStorage().computeIfAbsent(
+                            com.enik.zombietide.config.VillagerScheduleData.FACTORY,
+                            com.enik.zombietide.config.VillagerScheduleData.ID).getScheduleOrNull(targetId);
+                    stillActive = sched != null && sched.waveActive() && sched.lastTriggerDay() == (int) today;
+                } else {
+                    var player = level.getServer().getPlayerList().getPlayer(targetId);
+                    if (player == null) continue;   // 离线玩家：保留进度，等上线后再恢复
+                    var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
+                    stillActive = data.waveActive() && data.lastTriggerDay() == (int) today;
+                }
+                if (!stillActive) {
+                    it.remove(); progress.setDirty(); continue;
+                }
+                activeHordes.put(targetId, entry.remaining());
+                spawnedCount.put(targetId, 0);
+                totalCount.put(targetId, entry.remaining());
+                batchTimer.put(targetId, Math.max(1, config.batchTick()));
+                if (entry.villager()) {
+                    villagerHordeRadii.put(targetId, (double) config.villagerRadius());
+                }
+                EnikZombietide.LOGGER.info("服务器重启恢复：尸潮 {} 剩余 {} 只继续生成（类型 {}）",
+                        targetId, entry.remaining(), entry.villager() ? "村民" : "玩家");
+            }
+        }
+
         if (activeHordes.isEmpty() && scatteringZombies.isEmpty()) return;
 
         // 1. 更新正在进行的尸潮刷怪
@@ -224,6 +267,10 @@ public class HordeSpawner {
                     activeHordes.put(targetId, remaining - toSpawn);
                     EnikZombietide.LOGGER.warn("尸潮 {} 本批次生成失败（{} 只），剩余已递减至 {}，跳过本批次", targetId, toSpawn, remaining - toSpawn);
                 }
+                // 同步持久化进度（<=0 时自动 remove）
+                var progressData = com.enik.zombietide.config.HordeProgressData.get(level);
+                Integer newRemaining = activeHordes.get(targetId);
+                progressData.setRemaining(targetId, newRemaining == null ? 0 : newRemaining, isVillager);
 
                 // 设置下一批次计时（保护：batchTick 不能为0，否则会瞬间全部生成）
                 batchTimer.put(targetId, Math.max(1, config.batchTick()));
@@ -1493,6 +1540,23 @@ public class HordeSpawner {
         }
     }
 
+    /**
+     * 僵尸实体加载时重注册（服务器重启后 hordeZombieUuids / scatteringZombies 为空，
+     * 已生成的僵尸会既不继续追人也不被四散清理，成为孤儿）。由 onEntityJoinLevel 调用。
+     * @param state 0=追踪中（hordeZombieUuids），1=四散中（scatteringZombies 倒计时）
+     */
+    public static void retrackZombie(ServerLevel level, UUID zombieUuid, int state) {
+        if (state == 1) {
+            // 与 scatterZombies 相同的公式：倒计时到起火时刻 23460 移除
+            long dayPhase = level.getDayTime() % 24000L;
+            int ticks = (int)(23460 - dayPhase);
+            if (ticks < 1) ticks = 1;
+            scatteringZombies.put(zombieUuid, ticks);
+        } else {
+            hordeZombieUuids.add(zombieUuid);
+        }
+    }
+
     /** 供调试命令使用：清空所有活跃尸潮（原 Map，非副本）并重置所有目标的 waveActive 与触发记录（测试可重复触发） */
     public static void clearActiveHordes(ServerLevel level) {
         // 重置所有玩家和村民的 waveActive + lastTriggerDay（clear 用于测试，必须允许同一天重新触发）
@@ -1534,6 +1598,7 @@ public class HordeSpawner {
         warnedNightBefore.clear();
         if (level != null) {
             com.enik.zombietide.config.PlayerDebtData.get(level).clearAll();
+            com.enik.zombietide.config.HordeProgressData.get(level).clearAll();
         }
 
         EnikZombietide.LOGGER.info("已清空所有活跃尸潮并重置所有目标 waveActive/lastTriggerDay（可重新触发）");

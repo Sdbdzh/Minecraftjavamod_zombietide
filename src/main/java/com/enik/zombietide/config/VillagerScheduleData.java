@@ -57,6 +57,11 @@ public class VillagerScheduleData extends SavedData {
         return schedules.computeIfAbsent(villagerUuid, k -> new ScheduleEntry(0, -1, 0, false));
     }
 
+    /** 只读查询（不建条目）：恢复逻辑用，避免为无关 UUID 建空调度 */
+    public ScheduleEntry getScheduleOrNull(UUID villagerUuid) {
+        return schedules.get(villagerUuid);
+    }
+
     public void put(UUID villagerUuid, ScheduleEntry entry) {
         schedules.put(villagerUuid, entry);
         setDirty();

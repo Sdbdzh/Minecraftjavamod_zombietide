@@ -134,6 +134,19 @@ public class ZombietideServerEvents {
                 com.enik.zombietide.config.PlayerDebtData.get(level.getServer().overworld()).register(player.getUUID());
             }
             EnikZombietide.LOGGER.info("玩家 {} 进入世界（登录/换维度），modDay 对齐为当前游戏日={}", player.getScoreboardName(), currentWorldDay);
+        } else if (event.getEntity() instanceof net.minecraft.world.entity.Mob mob
+                && (mob instanceof net.minecraft.world.entity.monster.Zombie
+                    || mob instanceof net.minecraft.world.entity.monster.Stray)) {
+            // 【重启恢复】尸潮僵尸重注册：重启后 hordeZombieUuids / scatteringZombies 清空，
+            // 已生成的僵尸既不被四散清理也不锁定目标（Goal 不持久化），会变成孤儿。
+            // 这里按 NBT 标记重新纳入追踪集合并重注入 AI。
+            net.minecraft.nbt.CompoundTag tag = mob.getPersistentData();
+            if (tag.hasUUID("zombietide_horde_target")) {
+                int state = tag.getInt("zombietide_state");
+                HordeSpawner.retrackZombie(level, mob.getUUID(), state);
+                var config = ConfigManager.getConfigData(level).getConfig();
+                com.enik.zombietide.horde.HordeZombieBehavior.apply(mob, tag.getUUID("zombietide_horde_target"), config);
+            }
         } else if (event.getEntity() instanceof Villager villager) {
             // 村民加载时：从调度表恢复数据，并把 modDay 对齐为当前游戏日（modDay = gameDay 铁律）
             VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(

@@ -83,7 +83,13 @@ public final class HordeZombieBehavior {
         for (Goal g : toRemove) {
             mob.targetSelector.removeGoal(g);
         }
-        mob.goalSelector.addGoal(9, new HordeZombieGoal(mob, targetUUID));
+        // 幂等：僵尸实体加载时 onEntityJoinLevel 会重新 apply（恢复重启后丢失的 AI），
+        // 若已注入过 HordeZombieGoal 则跳过，避免 goalSelector 中出现多份锁定 Goal
+        boolean alreadyInjected = mob.goalSelector.getAvailableGoals().stream()
+                .anyMatch(wrapped -> wrapped.getGoal() instanceof HordeZombieGoal);
+        if (!alreadyInjected) {
+            mob.goalSelector.addGoal(9, new HordeZombieGoal(mob, targetUUID));
+        }
 
         // 注：日光燃烧开关（config.daylightBurn()）通过 DaylightBurnMixin 覆写 Mob.isSunSensitive()
         // 实现：仅带 zombietide_horde_target 标记的尸潮僵尸在 daylightBurn=false 时不燃烧；
