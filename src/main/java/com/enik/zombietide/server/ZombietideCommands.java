@@ -54,12 +54,14 @@ public class ZombietideCommands {
                         .executes(ctx -> status(ctx.getSource()))
                         .then(Commands.argument("targets", EntityArgument.entities())
                                 .executes(ctx -> status(ctx.getSource(), EntityArgument.getEntities(ctx, "targets")))))
-                // trigger
+                // trigger（无参：玩家=自己，控制台=所有在线玩家）
                 .then(Commands.literal("trigger")
+                        .executes(ctx -> trigger(ctx.getSource(), defaultTargets(ctx.getSource())))
                         .then(Commands.argument("targets", EntityArgument.entities())
                                 .executes(ctx -> trigger(ctx.getSource(), EntityArgument.getEntities(ctx, "targets")))))
-                // reset（仅玩家：村民没有血债）
+                // reset（仅玩家：村民没有血债；无参语义同 trigger）
                 .then(Commands.literal("reset")
+                        .executes(ctx -> reset(ctx.getSource(), defaultPlayers(ctx.getSource())))
                         .then(Commands.argument("targets", EntityArgument.players())
                                 .executes(ctx -> reset(ctx.getSource(), EntityArgument.getPlayers(ctx, "targets")))))
                 // debug
@@ -80,11 +82,40 @@ public class ZombietideCommands {
         return ow != null ? ow : source.getLevel();
     }
 
+    /**
+     * 无参命令的默认目标：玩家执行时是自己，控制台/命令方块执行时是所有在线玩家。
+     * <p>控制台没有玩家实体，直接 {@code getPlayerOrException()} 会抛「需要玩家」异常，
+     * 导致命令在服务器控制台完全不可用。
+     */
+    private static java.util.Collection<? extends Entity> defaultTargets(CommandSourceStack source) {
+        if (source.getEntity() instanceof ServerPlayer sp) {
+            return java.util.List.of(sp);
+        }
+        return source.getServer().getPlayerList().getPlayers();
+    }
+
+    /** 同 {@link #defaultTargets}，但只取玩家（reset 仅对玩家生效） */
+    private static java.util.Collection<? extends ServerPlayer> defaultPlayers(CommandSourceStack source) {
+        if (source.getEntity() instanceof ServerPlayer sp) {
+            return java.util.List.of(sp);
+        }
+        return source.getServer().getPlayerList().getPlayers();
+    }
+
     // ========== status ==========
 
     /** 查看指定实体的模组天数、血债、波次状态（自动识别玩家/村民） */
     private static int status(CommandSourceStack source) throws CommandSyntaxException {
-        return status(source, List.of(source.getPlayerOrException()));
+        if (source.getEntity() instanceof ServerPlayer sp) {
+            return status(source, List.of(sp));
+        }
+        // 控制台：列出所有在线玩家
+        var players = source.getServer().getPlayerList().getPlayers();
+        if (players.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("§7(无在线玩家；可用 /zombietide status <目标> 指定实体)"), false);
+            return 0;
+        }
+        return status(source, players);
     }
 
     private static int status(CommandSourceStack source, Collection<? extends Entity> targets) throws CommandSyntaxException {
@@ -242,8 +273,7 @@ public class ZombietideCommands {
     // ========== 调试命令 ==========
 
     /** 显示模组完整调试信息（分区、彩色、全汉化，UUID 可点击填入） */
-    private static int debugInfo(CommandSourceStack source) throws CommandSyntaxException {
-        ServerPlayer player = source.getPlayerOrException();
+    private static int debugInfo(CommandSourceStack source) {
         ServerLevel level = overworld(source);
         ZombietideConfig config = ConfigManager.getConfigData(level).getConfig();
 
@@ -257,18 +287,30 @@ public class ZombietideCommands {
                 + " §e全局上限: §f" + config.globalCap()
                 + " §e血债模式: §f" + config.debtMode()), false);
 
-        // 玩家尸潮区
-        PlayerHordeData pData = ModAttachments.getPlayerHordeData(player);
+        // 玩家尸潮区：玩家执行时显示自己，控制台执行时列出所有在线玩家
         source.sendSuccess(() -> Component.literal("§b--- 玩家尸潮 ---"), false);
-        source.sendSuccess(() -> Component.literal("§e玩家名: §f" + player.getScoreboardName()
-                + " §eUUID: ")
-                .append(clickableUUID(player.getUUID()))
-                .append(Component.literal(" §eModDay: §f" + pData.modDay() + "天"
-                + " §e间隔: §f" + (config.playerIntervalRandom()
-                        ? config.playerIntervalMin() + "~" + config.playerIntervalMax() + "天(随机)"
-                        : config.playerIntervalDays() + "天")
-                + " §e血债: §f" + com.enik.zombietide.config.PlayerDebtData.get(source.getServer().overworld()).getDebt(player.getUUID())
-                + " §e进行中: §f" + (pData.waveActive() ? "§a是" : "§c否"))), false);
+        java.util.List<ServerPlayer> debugPlayers;
+        if (source.getEntity() instanceof ServerPlayer sp) {
+            debugPlayers = java.util.List.of(sp);
+        } else {
+            debugPlayers = new java.util.ArrayList<>(source.getServer().getPlayerList().getPlayers());
+        }
+        if (debugPlayers.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("§7(无在线玩家)"), false);
+        }
+        var debtData = com.enik.zombietide.config.PlayerDebtData.get(source.getServer().overworld());
+        for (ServerPlayer player : debugPlayers) {
+            PlayerHordeData pData = ModAttachments.getPlayerHordeData(player);
+            source.sendSuccess(() -> Component.literal("§e玩家名: §f" + player.getScoreboardName()
+                    + " §eUUID: ")
+                    .append(clickableUUID(player.getUUID()))
+                    .append(Component.literal(" §eModDay: §f" + pData.modDay() + "天"
+                    + " §e间隔: §f" + (config.playerIntervalRandom()
+                            ? config.playerIntervalMin() + "~" + config.playerIntervalMax() + "天(随机)"
+                            : config.playerIntervalDays() + "天")
+                    + " §e血债: §f" + debtData.getDebt(player.getUUID())
+                    + " §e进行中: §f" + (pData.waveActive() ? "§a是" : "§c否"))), false);
+        }
 
         // 村民尸潮区 - 扫描全世界村民，不限距离
         source.sendSuccess(() -> Component.literal("§b--- 村民尸潮 ---"), false);
