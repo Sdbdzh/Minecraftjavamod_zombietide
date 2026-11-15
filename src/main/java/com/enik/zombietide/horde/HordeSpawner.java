@@ -80,10 +80,8 @@ public class HordeSpawner {
     private static final Map<UUID, Integer> warnedNightBefore = new ConcurrentHashMap<>();
 
     // 已结算血债的游戏日（target UUID -> gameDay），防止同一天重复结算（四散完成/起火结算/黎明 onDawn 共用）
-    private static final Map<UUID, Long> lastDebtSettledDay = new ConcurrentHashMap<>();
 
     // 待血债结算的目标（四散开始时加入，23460 起火时刻按实时存活数结算，然后移除）
-    private static final Set<UUID> pendingDebtSettle = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     /**
      * 随机尸潮数量：对 min/max 做容错（配置可能被改成 min > max）。
@@ -370,47 +368,82 @@ public class HordeSpawner {
             }
         }
 
-        // 累加血债到目标附件（仅玩家尸潮），并处理全灭清零
+        // 累加血债到世界级存储（不再依赖实体是否在线），并处理全灭清零
         long today = level.getDayTime() / 24000L;
+        com.enik.zombietide.config.PlayerDebtData debtData =
+                com.enik.zombietide.config.PlayerDebtData.get(level);
+        // 村民尸潮：按设计不累加血债，只重置 waveActive 并同步 HUD（血债表里没有村民，isKnown=false）
         for (UUID targetId : allHordeTargets) {
+            if (debtData.isKnown(targetId)) continue;
+            if (!(findTarget(level, targetId) instanceof net.minecraft.world.entity.npc.Villager villager)) continue;
             int count = survivorCount.getOrDefault(targetId, 0);
-            var target = findTarget(level, targetId);
+            var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
+            villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
+                    new com.enik.zombietide.attachments.VillagerHordeData(
+                            vData.modDay(), vData.lastTriggerDay(), vData.waveCount(), false
+                    ));
+            EnikZombietide.LOGGER.debug("村民 {} 尸潮结束，存活僵尸 {}，waveActive 已重置为 false", targetId, count);
+            // 【BUG3 修复】waveActive 重置后立即同步村民模组天数给附近玩家，HUD 实时反映状态变化
+            for (var entity : level.getEntities().getAll()) {
+                if (entity instanceof ServerPlayer p && p.distanceToSqr(villager) <= 128.0 * 128.0) {
+                    ModMessages.sendVillagerModDay(p, villager.getUUID(),
+                            ModMessages.extractVillagerRegistryKey(villager),
+                            vData.modDay(),
+                            villager.getX(), villager.getY(), villager.getZ(), false,
+                            HordeTimer.isHordeDay(villager.getUUID(), vData.modDay(), vData.lastTriggerDay(), config, true));
+                }
+            }
+        }
 
-            if (target instanceof ServerPlayer player) {
-                // 【去重】同一天若已通过四散结束结算过，黎明结算跳过，防止双重计债
-                Long settled = lastDebtSettledDay.get(targetId);
-                if (settled != null && settled == today) {
-                    // 已结算过：只重置 waveActive，不再加债
+        // 玩家血债结算
+        for (UUID targetId : allHordeTargets) {
+            // 血债只记玩家：离线玩家实体为 null，无法再用 instanceof 判断，改以「是否注册过」为准
+            if (!debtData.isKnown(targetId)) continue;
+            int count = survivorCount.getOrDefault(targetId, 0);
+            ServerPlayer player = level.getServer().getPlayerList().getPlayer(targetId);
+
+            // 【去重】同一天若已通过四散结束结算过，黎明结算跳过，防止双重计债
+            if (debtData.isSettled(targetId, today)) {
+                // 已结算过：只重置 waveActive，不再加债
+                if (player != null) {
                     var data0 = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
                     player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                             new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data0.modDay(), data0.lastTriggerDay(), data0.bloodDebt(), data0.waveCount(), false));
-                    continue;
+                                    data0.modDay(), data0.lastTriggerDay(), data0.waveCount(), false));
                 }
-                lastDebtSettledDay.put(targetId, today);
-                var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
-                // 血债模式：累积制（默认）
-                String debtMode = config.debtMode();
-                int newDebt;
-                if ("last_only".equals(debtMode)) {
-                    // 只记上波
-                    newDebt = Math.min(config.debtCap(), count);
-                } else if ("none".equals(debtMode)) {
-                    // 不结转
-                    newDebt = 0;
-                } else {
-                    // 累积制（默认）
-                    newDebt = Math.min(config.debtCap(), data.bloodDebt() + count);
-                }
-                // 全灭清零：某波一只不剩 → 血债清零
-                if (count == 0) {
-                    newDebt = 0;
-                }
-                player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
-                        new com.enik.zombietide.attachments.PlayerHordeData(
-                                data.modDay(), data.lastTriggerDay(), newDebt, data.waveCount(), false
-                        ));
-                EnikZombietide.LOGGER.info("玩家 {} 血债结算：+{}，当前血债 {}（模式：{}）", player.getScoreboardName(), count, newDebt, debtMode);
+                continue;
+            }
+            debtData.markSettled(targetId, today);
+            // 血债模式：累积制（默认）
+            String debtMode = config.debtMode();
+            int newDebt;
+            if ("last_only".equals(debtMode)) {
+                // 只记上波
+                newDebt = Math.min(config.debtCap(), count);
+            } else if ("none".equals(debtMode)) {
+                // 不结转
+                newDebt = 0;
+            } else {
+                // 累积制（默认）
+                newDebt = Math.min(config.debtCap(), debtData.getDebt(targetId) + count);
+            }
+            // 全灭清零：某波一只不剩 → 血债清零
+            if (count == 0) {
+                newDebt = 0;
+            }
+            debtData.setDebt(targetId, newDebt);
+
+            if (player == null) {
+                EnikZombietide.LOGGER.info("玩家 {} 离线，黎明血债已写入世界数据：+{}，当前血债 {}（模式：{}）",
+                        targetId, count, newDebt, debtMode);
+                continue;
+            }
+            var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
+            player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
+                    new com.enik.zombietide.attachments.PlayerHordeData(
+                            data.modDay(), data.lastTriggerDay(), data.waveCount(), false
+                    ));
+            EnikZombietide.LOGGER.info("玩家 {} 血债结算：+{}，当前血债 {}（模式：{}）", player.getScoreboardName(), count, newDebt, debtMode);
                 // 【关键修复】发送血债结算聊天提示给全服非生存/非冒险模式玩家
                 net.minecraft.network.chat.Component targetUuidComp = net.minecraft.network.chat.Component.literal(targetId.toString())
                         .withStyle(net.minecraft.network.chat.Style.EMPTY
@@ -432,25 +465,6 @@ public class HordeSpawner {
                 for (ServerPlayer p : level.getPlayers(p2 -> p2.gameMode.getGameModeForPlayer() != GameType.SURVIVAL && p2.gameMode.getGameModeForPlayer() != GameType.ADVENTURE)) {
                     p.sendSystemMessage(debtMsg);
                 }
-            } else if (target instanceof net.minecraft.world.entity.npc.Villager villager) {
-                // 村民尸潮：按设计不累加血债，仅清理僵尸；重置 waveActive 为 false，避免状态卡住
-                var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
-                villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
-                        new com.enik.zombietide.attachments.VillagerHordeData(
-                                vData.modDay(), vData.lastTriggerDay(), vData.waveCount(), false
-                        ));
-                EnikZombietide.LOGGER.debug("村民 {} 尸潮结束，存活僵尸 {}，waveActive 已重置为 false", targetId, count);
-                // 【BUG3 修复】waveActive 重置后立即同步村民模组天数给附近玩家，HUD 实时反映状态变化
-                for (var entity : level.getEntities().getAll()) {
-                    if (entity instanceof ServerPlayer p && p.distanceToSqr(villager) <= 128.0 * 128.0) {
-                        ModMessages.sendVillagerModDay(p, villager.getUUID(),
-                                ModMessages.extractVillagerRegistryKey(villager),
-                                vData.modDay(),
-                                villager.getX(), villager.getY(), villager.getZ(), false,
-                                HordeTimer.isHordeDay(villager.getUUID(), vData.modDay(), vData.lastTriggerDay(), config, true));
-                    }
-                }
-            }
         }
 
         // 【修复】黎明兜底：调度表是权威数据源，必须无条件把 waveActive 写回 false。
@@ -543,8 +557,10 @@ public class HordeSpawner {
         }
 
         // 四散开始：将目标标记为待血债结算（在 23460 起火时刻按实时存活数结算）
+        com.enik.zombietide.config.PlayerDebtData debtData =
+                com.enik.zombietide.config.PlayerDebtData.get(level);
         for (UUID targetId : scatterTargets) {
-            pendingDebtSettle.add(targetId);
+            if (debtData.isKnown(targetId)) debtData.markPending(targetId);
         }
 
         // 向目标玩家（或村民周围玩家）发送一条汇总四散提醒，避免每只僵尸一条消息刷屏
@@ -568,7 +584,7 @@ public class HordeSpawner {
                 if (data.waveActive()) {
                     player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                             new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data.modDay(), data.lastTriggerDay(), data.bloodDebt(), data.waveCount(), false
+                                    data.modDay(), data.lastTriggerDay(), data.waveCount(), false
                             ));
                     EnikZombietide.LOGGER.debug("玩家 {} waveActive 已重置为 false（四散完成）", targetId);
                 }
@@ -595,7 +611,7 @@ public class HordeSpawner {
                 if (data.waveActive()) {
                     player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                             new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data.modDay(), data.lastTriggerDay(), data.bloodDebt(), data.waveCount(), false
+                                    data.modDay(), data.lastTriggerDay(), data.waveCount(), false
                             ));
                     EnikZombietide.LOGGER.debug("玩家 {} 四散兜底重置 waveActive=false（全灭/无存活僵尸）", targetId);
                 }
@@ -643,58 +659,20 @@ public class HordeSpawner {
         }
     }
 
-    /**
-     * 玩家登出时提前结算血债（Issue #51）。
-     * <p>离线玩家没有实体、无法访问附件，若等到 23460 起火结算时才因「目标不在线」跳过，
-     * 本波幸存数对应的血债会永久丢失。因此在登出瞬间按当前存活数结算，并标记
-     * {@code lastDebtSettledDay} 防止 23460 时重复计债。
-     */
-    public static void settleDebtOnLogout(ServerLevel level, ServerPlayer player, ZombietideConfig config) {
-        var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
-        if (!data.waveActive()) return;
-
-        long today = level.getDayTime() / 24000L;
-        Long settled = lastDebtSettledDay.get(player.getUUID());
-        if (settled != null && settled == today) return;   // 今天已结算过
-
-        int survivorCount = countHordeZombiesByTarget(level, player.getUUID());
-        String debtMode = config.debtMode();
-        int newDebt;
-        if ("last_only".equals(debtMode)) {
-            newDebt = Math.min(config.debtCap(), survivorCount);
-        } else if ("none".equals(debtMode)) {
-            newDebt = 0;
-        } else {
-            newDebt = Math.min(config.debtCap(), data.bloodDebt() + survivorCount);
-        }
-        if (survivorCount == 0) newDebt = 0;
-
-        lastDebtSettledDay.put(player.getUUID(), today);
-        player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
-                new com.enik.zombietide.attachments.PlayerHordeData(
-                        data.modDay(), data.lastTriggerDay(), newDebt, data.waveCount(), false));
-
-        EnikZombietide.LOGGER.info("玩家 {} 登出时仍在波次中，已提前结算血债：本波存活 {}，血债 {}（模式 {}）",
-                player.getScoreboardName(), survivorCount, newDebt, debtMode);
-    }
-
     /** 起火时刻血债结算（dayPhase >= 23460，僵尸开始着火，按实时存活数结算血债） */
     public static void settleDebtAtBurnTime(ServerLevel level, ZombietideConfig config) {
         long today = level.getDayTime() / 24000L;
-        java.util.List<UUID> toSettle = new java.util.ArrayList<>(pendingDebtSettle);
-        pendingDebtSettle.clear();
+        com.enik.zombietide.config.PlayerDebtData debtData =
+                com.enik.zombietide.config.PlayerDebtData.get(level);
+        java.util.List<UUID> toSettle = debtData.drainPending();
 
         for (UUID targetId : toSettle) {
-            Long settled = lastDebtSettledDay.get(targetId);
-            if (settled != null && settled == today) continue; // 今天已结算过
-            lastDebtSettledDay.put(targetId, today);
+            // 血债只记玩家：离线玩家实体为 null，无法再用 instanceof 判断，改以「是否注册过」为准
+            if (!debtData.isKnown(targetId)) continue;
+            if (debtData.isSettled(targetId, today)) continue; // 今天已结算过
+            debtData.markSettled(targetId, today);
 
             int survivorCount = countHordeZombiesByTarget(level, targetId);
-
-            var target = findTarget(level, targetId);
-            if (!(target instanceof ServerPlayer player)) continue; // 血债仅玩家；村民无血债
-
-            var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
             String debtMode = config.debtMode();
             int newDebt;
             if ("last_only".equals(debtMode)) {
@@ -702,13 +680,22 @@ public class HordeSpawner {
             } else if ("none".equals(debtMode)) {
                 newDebt = 0;
             } else {
-                newDebt = Math.min(config.debtCap(), data.bloodDebt() + survivorCount);
+                newDebt = Math.min(config.debtCap(), debtData.getDebt(targetId) + survivorCount);
             }
             if (survivorCount == 0) newDebt = 0; // 全灭清零
+            debtData.setDebt(targetId, newDebt);
 
+            ServerPlayer player = level.getServer().getPlayerList().getPlayer(targetId);
+            if (player == null) {
+                EnikZombietide.LOGGER.info("玩家 {} 离线，起火时刻血债已写入世界数据：幸存 {}，当前血债 {}（模式：{}）",
+                        targetId, survivorCount, newDebt, debtMode);
+                continue;
+            }
+
+            var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
             player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                     new com.enik.zombietide.attachments.PlayerHordeData(
-                            data.modDay(), data.lastTriggerDay(), newDebt, data.waveCount(), false));
+                            data.modDay(), data.lastTriggerDay(), data.waveCount(), false));
             EnikZombietide.LOGGER.info("玩家 {} 起火时刻血债结算：幸存 {}，当前血债 {}（模式：{}）",
                     player.getScoreboardName(), survivorCount, newDebt, debtMode);
 
@@ -752,7 +739,7 @@ public class HordeSpawner {
 
             // 清除完成后重置对应目标的 waveActive
             for (UUID targetId : clearedTargets) {
-                pendingDebtSettle.remove(targetId);
+                if (level != null) com.enik.zombietide.config.PlayerDebtData.get(level).clearPending(targetId);
                 resetTargetWaveActive(level, targetId);
             }
         }
@@ -840,8 +827,10 @@ public class HordeSpawner {
         }
 
         // 强制四散同样将目标标记为待血债结算（在 23460 起火时刻按实时存活数结算）
+        com.enik.zombietide.config.PlayerDebtData debtData =
+                com.enik.zombietide.config.PlayerDebtData.get(level);
         for (UUID targetId : scatterTargets) {
-            pendingDebtSettle.add(targetId);
+            if (debtData.isKnown(targetId)) debtData.markPending(targetId);
         }
 
         // 【R43-012】强制四散时清理 activeHordes、spawnedCount、totalCount、batchTimer
@@ -859,9 +848,10 @@ public class HordeSpawner {
                     // 【R43-012】清理血债和 lastTriggerDay，防止尸潮复活
                     player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                             new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data.modDay(), 0, 0, data.waveCount(), false
+                                    data.modDay(), 0, data.waveCount(), false
                             ));
-                    EnikZombietide.LOGGER.debug("玩家 {} 强制四散清理：waveActive=false, bloodDebt=0, lastTriggerDay=0", targetId);
+                    com.enik.zombietide.config.PlayerDebtData.get(level).setDebt(targetId, 0);
+                    EnikZombietide.LOGGER.debug("玩家 {} 强制四散清理：waveActive=false, 血债=0, lastTriggerDay=0", targetId);
                 }
                 // 清理 activeHordes 相关状态
                 activeHordes.remove(targetId);
@@ -1375,13 +1365,13 @@ public class HordeSpawner {
     }
 
     /** 清理某个目标的刷怪/四散内部状态（不触碰附件与调度表） */
-    private static void clearInternalState(UUID targetId) {
+    private static void clearInternalState(ServerLevel level, UUID targetId) {
         activeHordes.remove(targetId);
         spawnedCount.remove(targetId);
         totalCount.remove(targetId);
         batchTimer.remove(targetId);
         villagerHordeRadii.remove(targetId);
-        pendingDebtSettle.remove(targetId);
+        if (level != null) com.enik.zombietide.config.PlayerDebtData.get(level).clearPending(targetId);
     }
 
     /**
@@ -1406,8 +1396,8 @@ public class HordeSpawner {
             if (data.lastTriggerDay() < currentDay) {
                 player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                         new com.enik.zombietide.attachments.PlayerHordeData(
-                                data.modDay(), data.lastTriggerDay(), data.bloodDebt(), data.waveCount(), false));
-                clearInternalState(player.getUUID());
+                                data.modDay(), data.lastTriggerDay(), data.waveCount(), false));
+                clearInternalState(level, player.getUUID());
                 EnikZombietide.LOGGER.info("对账：玩家 {} 的尸潮为跨天残留（触发日 DAY {} < 当前 DAY {}），已结束",
                         player.getScoreboardName(), data.lastTriggerDay(), currentDay);
             } else {
@@ -1432,7 +1422,7 @@ public class HordeSpawner {
                             new com.enik.zombietide.attachments.VillagerHordeData(
                                     sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false));
                 }
-                clearInternalState(villagerUuid);
+                clearInternalState(level, villagerUuid);
                 EnikZombietide.LOGGER.info("对账：村民 {} 的尸潮为跨天残留（触发日 DAY {} < 当前 DAY {}），已结束",
                         villagerUuid, sched.lastTriggerDay(), currentDay);
             } else {
@@ -1443,7 +1433,7 @@ public class HordeSpawner {
         // 3) 清理 activeHordes 中已无活跃目标的条目
         for (UUID targetId : new ArrayList<>(activeHordes.keySet())) {
             if (!stillActive.contains(targetId)) {
-                clearInternalState(targetId);
+                clearInternalState(level, targetId);
             }
         }
 
@@ -1479,7 +1469,7 @@ public class HordeSpawner {
             if (data.waveActive()) {
                 player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                         new com.enik.zombietide.attachments.PlayerHordeData(
-                                data.modDay(), data.lastTriggerDay(), data.bloodDebt(), data.waveCount(), false));
+                                data.modDay(), data.lastTriggerDay(), data.waveCount(), false));
                 EnikZombietide.LOGGER.debug("玩家 {} waveActive 已重置为 false（尸潮完成）", targetId);
             }
         } else if (target instanceof net.minecraft.world.entity.npc.Villager villager) {
@@ -1512,7 +1502,7 @@ public class HordeSpawner {
                     var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
                     player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                             new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data.modDay(), -1, data.bloodDebt(), data.waveCount(), false
+                                    data.modDay(), -1, data.waveCount(), false
                             ));
                 }
             }
@@ -1542,8 +1532,9 @@ public class HordeSpawner {
         scatteringZombies.clear();
         villagerHordeRadii.clear();
         warnedNightBefore.clear();
-        pendingDebtSettle.clear();
-        lastDebtSettledDay.clear();
+        if (level != null) {
+            com.enik.zombietide.config.PlayerDebtData.get(level).clearAll();
+        }
 
         EnikZombietide.LOGGER.info("已清空所有活跃尸潮并重置所有目标 waveActive/lastTriggerDay（可重新触发）");
     }

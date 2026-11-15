@@ -165,7 +165,7 @@ public class HordeTimer {
 
                 player.setData(ModAttachments.PLAYER_HORDE.get(),
                         new PlayerHordeData(
-                                newModDay, data.lastTriggerDay(), data.bloodDebt(),
+                                newModDay, data.lastTriggerDay(),
                                 data.waveCount(), data.waveActive()
                         ));
 
@@ -302,13 +302,20 @@ public class HordeTimer {
             if (config.playerCountRandom()) {
                 hordeSize = HordeSpawner.rollHordeSize(config.playerCountMin(), config.playerCountMax());
             }
-            int totalHorde = hordeSize + hordeData.bloodDebt();
+            com.enik.zombietide.config.PlayerDebtData debtData =
+                    com.enik.zombietide.config.PlayerDebtData.get(overworld);
+            int debt = debtData.getDebt(player.getUUID());
+            int totalHorde = hordeSize + debt;
 
             EnikZombietide.LOGGER.info("checkPlayerHordes: 触发玩家 {} 尸潮 modDay={} hordeSize={} bloodDebt={} total={}",
-                    player.getScoreboardName(), modDay, hordeSize, hordeData.bloodDebt(), totalHorde);
+                    player.getScoreboardName(), modDay, hordeSize, debt, totalHorde);
+
+            // 注册玩家（血债表的「已知玩家」标记），本波已计入的血债随即清零
+            debtData.register(player.getUUID());
+            debtData.setDebt(player.getUUID(), 0);
 
             player.setData(ModAttachments.PLAYER_HORDE.get(),
-                    new PlayerHordeData(hordeData.modDay(), modDay, 0,
+                    new PlayerHordeData(hordeData.modDay(), modDay,
                             hordeData.waveCount() + 1, true));
 
             HordeWarning.triggerPlayerHorde(overworld, player, config);
@@ -441,10 +448,14 @@ public class HordeTimer {
             if (config.playerCountRandom()) {
                 hordeSize = HordeSpawner.rollHordeSize(config.playerCountMin(), config.playerCountMax());
             }
-            int totalHorde = hordeSize + hordeData.bloodDebt();
+            com.enik.zombietide.config.PlayerDebtData debtData =
+                    com.enik.zombietide.config.PlayerDebtData.get(overworld);
+            int totalHorde = hordeSize + debtData.getDebt(player.getUUID());
+            debtData.register(player.getUUID());
+            debtData.setDebt(player.getUUID(), 0);
 
             player.setData(ModAttachments.PLAYER_HORDE.get(),
-                    new PlayerHordeData(hordeData.modDay(), targetModDay, 0,
+                    new PlayerHordeData(hordeData.modDay(), targetModDay,
                             hordeData.waveCount() + 1, true));
 
             HordeWarning.triggerPlayerHorde(overworld, player, config);
@@ -528,10 +539,14 @@ public class HordeTimer {
             if (config.playerCountRandom()) {
                 hordeSize = HordeSpawner.rollHordeSize(config.playerCountMin(), config.playerCountMax());
             }
-            int totalHorde = hordeSize + hordeData.bloodDebt();
+            com.enik.zombietide.config.PlayerDebtData debtData =
+                    com.enik.zombietide.config.PlayerDebtData.get(overworld);
+            int totalHorde = hordeSize + debtData.getDebt(player.getUUID());
+            debtData.register(player.getUUID());
+            debtData.setDebt(player.getUUID(), 0);
 
             player.setData(ModAttachments.PLAYER_HORDE.get(),
-                    new PlayerHordeData(hordeData.modDay(), modDay, 0,
+                    new PlayerHordeData(hordeData.modDay(), modDay,
                             hordeData.waveCount() + 1, true));
 
             HordeWarning.triggerPlayerHorde(overworld, player, config);

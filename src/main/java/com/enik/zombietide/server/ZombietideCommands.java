@@ -96,7 +96,7 @@ public class ZombietideCommands {
                 source.sendSuccess(() -> Component.literal("玩家 " + player.getScoreboardName() + " (UUID=")
                         .append(clickableUUID(player.getUUID()))
                         .append(Component.literal(")：模组天数 DAY " + data.modDay()
-                        + "，血债 " + data.bloodDebt()
+                        + "，血债 " + com.enik.zombietide.config.PlayerDebtData.get(source.getServer().overworld()).getDebt(player.getUUID())
                         + "，波次 " + data.waveCount()
                         + "，上次触发日 DAY " + data.lastTriggerDay()
                         + (data.waveActive() ? "（尸潮进行中）" : "（无尸潮）"))), false);
@@ -147,7 +147,7 @@ public class ZombietideCommands {
                 int totalHorde = hordeSize;
 
                 player.setData(ModAttachments.PLAYER_HORDE.get(),
-                        new PlayerHordeData(data.modDay(), data.modDay(), data.bloodDebt(), data.waveCount() + 1, true));
+                        new PlayerHordeData(data.modDay(), data.modDay(), data.waveCount() + 1, true));
 
                 HordeWarning.triggerPlayerHorde(player.serverLevel(), player, config);
                 HordeSpawner.startHorde(player.serverLevel(), player.getUUID(), player, totalHorde, config, false, config.playerRadius());
@@ -212,10 +212,8 @@ public class ZombietideCommands {
     private static int reset(CommandSourceStack source, Collection<? extends ServerPlayer> targets) {
         int successCount = 0;
         for (ServerPlayer player : targets) {
-            PlayerHordeData data = ModAttachments.getPlayerHordeData(player);
-            // 只把血债归零，其它字段原样保留
-            player.setData(ModAttachments.PLAYER_HORDE.get(),
-                    new PlayerHordeData(data.modDay(), data.lastTriggerDay(), 0, data.waveCount(), data.waveActive()));
+            // 只把血债归零，其它字段（波次/触发日/进行中状态）原样保留
+            com.enik.zombietide.config.PlayerDebtData.get(source.getServer().overworld()).setDebt(player.getUUID(), 0);
             source.sendSuccess(() -> Component.literal("已重置玩家 " + player.getScoreboardName() + " (UUID=")
                     .append(clickableUUID(player.getUUID()))
                     .append(Component.literal(") 的血债为 0（波次/触发日/进行中状态保留；清除尸潮请用 /zombietide debug clear）"))
@@ -269,7 +267,7 @@ public class ZombietideCommands {
                 + " §e间隔: §f" + (config.playerIntervalRandom()
                         ? config.playerIntervalMin() + "~" + config.playerIntervalMax() + "天(随机)"
                         : config.playerIntervalDays() + "天")
-                + " §e血债: §f" + pData.bloodDebt()
+                + " §e血债: §f" + com.enik.zombietide.config.PlayerDebtData.get(source.getServer().overworld()).getDebt(player.getUUID())
                 + " §e进行中: §f" + (pData.waveActive() ? "§a是" : "§c否"))), false);
 
         // 村民尸潮区 - 扫描全世界村民，不限距离
