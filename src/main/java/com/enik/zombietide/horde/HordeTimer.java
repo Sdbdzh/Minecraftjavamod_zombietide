@@ -276,7 +276,7 @@ public class HordeTimer {
         }
 
         if (!loggedPlayerDuskCheckThisWindow) {
-            EnikZombietide.LOGGER.info("checkPlayerHordes: 黄昏时段检查触发，dayTime={}", dayTime);
+            EnikZombietide.LOGGER.debug("checkPlayerHordes: 黄昏时段检查触发，dayTime={}", dayTime);
             loggedPlayerDuskCheckThisWindow = true;
         }
 
@@ -292,7 +292,7 @@ public class HordeTimer {
             int modDay = hordeData.modDay();
             if (!isHordeDay(player.getUUID(), modDay, hordeData.lastTriggerDay(), config, false)) continue;
             if (hordeData.lastTriggerDay() == modDay && hordeData.waveCount() > 0) {
-                EnikZombietide.LOGGER.info("checkPlayerHordes: 玩家 {} 今日(DAY {})已触发过，跳过（lastTriggerDay={}, waveCount={}）",
+                EnikZombietide.LOGGER.debug("checkPlayerHordes: 玩家 {} 今日(DAY {})已触发过，跳过（lastTriggerDay={}, waveCount={}）",
                         player.getScoreboardName(), modDay, hordeData.lastTriggerDay(), hordeData.waveCount());
                 continue;
             }
@@ -334,7 +334,7 @@ public class HordeTimer {
         }
 
         if (!loggedVillagerDuskCheckThisWindow) {
-            EnikZombietide.LOGGER.info("checkVillagerHordes: 黄昏时段检查触发，dayTime={}", dayTime);
+            EnikZombietide.LOGGER.debug("checkVillagerHordes: 黄昏时段检查触发，dayTime={}", dayTime);
             loggedVillagerDuskCheckThisWindow = true;
         }
 
