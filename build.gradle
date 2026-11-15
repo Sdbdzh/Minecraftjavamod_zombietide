@@ -42,14 +42,6 @@ neoForge {
             }
         }
     }
-    // runServer 默认不转发控制台输入，导致无法在终端敲 op/stop 等命令。
-    // RunGameTask 继承 JavaExec，这里把 stdin 接上。
-    tasks.matching { it.name == 'runServer' }.configureEach {
-        if (it instanceof JavaExec) {
-            it.standardInput = System.in
-        }
-    }
-
     // 控制台中文乱码：JVM 默认按 UTF-8 输出，而 Windows 控制台是 GBK(CP936)，
     // 于是「玩家 sdbdzh 进入世界」会变成「鐜╁ sdbdzh 杩涘叆涓栫晫」。
     // 这里让 stdout/stderr 按平台默认编码输出（日志文件仍是 UTF-8，不受影响）。
@@ -106,5 +98,13 @@ jar {
                 "Implementation-Vendor"   : mod_authors,
                 "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
+    }
+}
+
+// runServer 默认不转发控制台输入，导致无法在终端敲 op/stop 等命令。
+// 必须放在 neoForge 块外：runs{} 里的任务在块内尚未注册，named() 会找不到。
+tasks.named('runServer').configure {
+    if (it instanceof JavaExec) {
+        it.standardInput = System.in
     }
 }
