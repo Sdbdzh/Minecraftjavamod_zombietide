@@ -108,6 +108,12 @@ public class HordeSpawner {
      * @param radius 生成半径
      */
     public static void startHorde(ServerLevel level, UUID targetId, LivingEntity target, int total, ZombietideConfig config, boolean isVillager, double radius) {
+        // 防御：若已有未刷完的批次，覆盖会丢弃前一波剩余。调用方（trigger 命令）已拦截，
+        // 这里保留 warn 以便其它调用路径出问题时能从日志发现。
+        int previous = getActiveRemaining(targetId);
+        if (previous > 0) {
+            EnikZombietide.LOGGER.warn("尸潮 {} 仍在生成中（剩余 {} 只），本次 startHorde 将覆盖并丢弃该进度", targetId, previous);
+        }
         seenHordesThisSession.add(targetId);
         activeHordes.put(targetId, total);
         spawnedCount.put(targetId, 0);
@@ -1550,6 +1556,15 @@ public class HordeSpawner {
                 }
             }
         }
+    }
+
+    /**
+     * 查询某目标当前还有多少只未生成（0 表示没有进行中的刷怪批次）。
+     * 供 /zombietide trigger 判断是否允许重复触发。
+     */
+    public static int getActiveRemaining(UUID targetId) {
+        Integer remaining = activeHordes.get(targetId);
+        return remaining == null ? 0 : Math.max(0, remaining);
     }
 
     /**

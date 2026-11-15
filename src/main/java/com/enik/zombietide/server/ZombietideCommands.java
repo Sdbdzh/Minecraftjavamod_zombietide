@@ -179,6 +179,14 @@ public class ZombietideCommands {
                             + "：仅主世界且非和平模式可触发").withStyle(ChatFormatting.GRAY), false);
                     continue;
                 }
+                // 一波未刷完不允许再开一波：否则 startHorde 会覆盖 activeHordes，
+                // 前一波剩余被静默丢弃，且触发消息/标题/音效会刷屏。
+                int inProgress = HordeSpawner.getActiveRemaining(player.getUUID());
+                if (inProgress > 0) {
+                    source.sendFailure(Component.literal("玩家 " + player.getScoreboardName() + " 的尸潮正在生成中（剩余 "
+                            + inProgress + " 只未刷出），已跳过。如需强制重开，请先执行 /zombietide debug clear"));
+                    continue;
+                }
                 PlayerHordeData data = ModAttachments.getPlayerHordeData(player);
                 int hordeSize = config.playerCount();
                 if (config.playerCountRandom()) {
@@ -202,6 +210,12 @@ public class ZombietideCommands {
                 successCount++;
 
             } else if (entity instanceof Villager villager) {
+                int inProgress = HordeSpawner.getActiveRemaining(villager.getUUID());
+                if (inProgress > 0) {
+                    source.sendFailure(Component.literal("村民 " + villager.getName().getString() + " 的尸潮正在生成中（剩余 "
+                            + inProgress + " 只未刷出），已跳过。如需强制重开，请先执行 /zombietide debug clear"));
+                    continue;
+                }
                 // 村民尸潮
                 if (!villager.isAlive()) continue;
                 if (!(villager.level() instanceof ServerLevel villagerLevel)) continue;
