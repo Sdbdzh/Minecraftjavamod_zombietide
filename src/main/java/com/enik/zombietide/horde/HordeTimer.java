@@ -222,7 +222,6 @@ public class HordeTimer {
         return map;
     }
 
-    /** 检查玩家尸潮触发（仅主世界、非和平、黄昏窗口） */
     /**
      * 判断指定目标在 modDay 是否为尸潮日。
      * <p>固定间隔：{@code modDay % interval == interval - 1}。
@@ -233,6 +232,10 @@ public class HordeTimer {
      */
     public static boolean isHordeDay(UUID targetId, int modDay, int lastTriggerDay,
                                      ZombietideConfig config, boolean isVillager) {
+        // 当天已触发过 → 仍视为尸潮日（HUD 红字保持整天）。
+        // 与触发判定解耦：触发路径另有 `lastTriggerDay == modDay && waveCount > 0` 去重，不会重复触发。
+        if (lastTriggerDay == modDay) return true;
+
         int interval = isVillager ? config.villagerIntervalDays() : config.playerIntervalDays();
         if (interval <= 0) return false;
 
@@ -262,6 +265,7 @@ public class HordeTimer {
         return min + (int) Math.floorMod(h, (long) (max - min + 1));
     }
 
+    /** 检查玩家尸潮触发（仅主世界、非和平、黄昏窗口） */
     private static void checkPlayerHordes(ServerLevel overworld, ZombietideConfig config) {
         if (!config.playerHordeEnabled()) return;
 

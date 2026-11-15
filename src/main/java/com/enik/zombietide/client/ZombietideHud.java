@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 客户端 HUD：在屏幕左上角显示当前模组天数（"DAY X"），可选显示附近村民列表。
  * <p>
  * - 单行显示：`DAY X`（如 `DAY 5`），X 为该玩家的模组天数
- * - 尸潮当天（`modDay % interval == interval - 1`）：`DAY X` **红色字体**显示
+ * - 尸潮当天：`DAY X` **红色字体**显示（判定由服务端 `HordeTimer.isHordeDay` 算好，随 `PlayerModDayPayload.hordeDay` 同步）
  * - 其余天数：正常颜色；未同步到时显示 `DAY --`
  * - 模组天数来自服务端同步（`PlayerModDayPayload`），客户端不再用世界时间推算
  * - 位置完全由本机 `ClientHudConfig` 的 `hudX` / `hudY` 决定（屏幕绝对坐标，左上为原点）；

@@ -48,6 +48,16 @@ public class ZombietideServerEvents {
     }
 
     /** 玩家登入：将当前配置发送给客户端，同步模组天数 */
+    /** 玩家登出：若仍在波次中，立即结算血债，避免离线错过 23460 起火结算导致永久丢失（Issue #51） */
+    @SubscribeEvent
+    public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (player.level().dimension() != Level.OVERWORLD) return;
+        ServerLevel level = player.serverLevel();
+        ZombietideConfig config = ConfigManager.getConfigData(level).getConfig();
+        HordeSpawner.settleDebtOnLogout(level, player, config);
+    }
+
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
@@ -129,7 +139,7 @@ public class ZombietideServerEvents {
             // 新玩家 modDay 直接 = 当前游戏日
             player.setData(ModAttachments.PLAYER_HORDE.get(),
                     new PlayerHordeData(currentWorldDay, data.lastTriggerDay(), data.bloodDebt(), data.waveCount(), data.waveActive()));
-            EnikZombietide.LOGGER.info("玩家 {} 首次加入，modDay 设为当前游戏日={}", player.getScoreboardName(), currentWorldDay);
+            EnikZombietide.LOGGER.info("玩家 {} 进入世界（登录/换维度），modDay 对齐为当前游戏日={}", player.getScoreboardName(), currentWorldDay);
         } else if (event.getEntity() instanceof Villager villager) {
             // 村民加载时：从调度表恢复数据，并把 modDay 对齐为当前游戏日（modDay = gameDay 铁律）
             VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(

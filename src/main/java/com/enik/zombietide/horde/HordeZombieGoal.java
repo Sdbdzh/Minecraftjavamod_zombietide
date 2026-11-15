@@ -24,7 +24,7 @@ import java.util.UUID;
  * 核心行为（设计文档 §5.5）：
  * <ul>
  *   <li>主目标在视线内/可达时：强制锁定主目标为仇恨（优先打你）</li>
- *   <li>主目标不可达（太远、被墙挡、无路可走）：不干预，让原版 AI 就近攻击最近可见生物（不挑食）</li>
+ *   <li>主目标不可达（太远、被墙挡、无路可走）：不干预；原版索敌已在 apply() 中移除，因此**不会自动换目标**</li>
  *   <li>主目标死亡/消失：stop()，仇恨交还原版 AI</li>
  *   <li>进入四散状态（state==1）：清空攻击目标，每 tick 用 8 方向评分选点逃跑（天空光照越暗越好 / 背离主目标 / 规避 12 格内威胁），与 FleeGoal 叠加；最终在 23460 起火时刻统一清除</li>
  * </ul>
@@ -91,7 +91,7 @@ public class HordeZombieGoal extends Goal {
      * Goal 执行期间每 tick 调用（requiresUpdateEveryTick()=true 保证逐 tick 调用）。
      * <ul>
      *   <li>state==1（scattering）：持续逃离主目标，偏向暗处，避开玩家/村民/铁傀儡</li>
-     *   <li>state==0（active）：主目标可达时强制刷新仇恨；不可达时不干预，让原版 AI 就近选目标</li>
+     *   <li>state==0（active）：主目标可达时强制刷新仇恨；不可达时不干预，也不会换目标</li>
      * </ul>
      */
     @Override
@@ -139,11 +139,11 @@ public class HordeZombieGoal extends Goal {
             }
         }
 
-        // 只有主目标可达时才强制刷新仇恨；不可达时不干预，让原版 AI 就近攻击最近可见生物
+        // 只有主目标可达时才强制刷新仇恨；不可达时不干预（原版索敌已移除，不会换目标）
         if (isReachable(target)) {
             mob.setTarget(target);
         }
-        // 否则：不调用 setTarget，保留原版 AI 选中的最近目标（“优先打你，但不挑食”）
+        // 否则：不调用 setTarget，僵尸保持无目标状态（原版 NearestAttackableTargetGoal 已被 apply() 移除）
     }
 
     /**

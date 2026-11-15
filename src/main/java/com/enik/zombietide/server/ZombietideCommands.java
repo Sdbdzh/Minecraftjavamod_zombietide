@@ -266,7 +266,9 @@ public class ZombietideCommands {
                 + " §eUUID: ")
                 .append(clickableUUID(player.getUUID()))
                 .append(Component.literal(" §eModDay: §f" + pData.modDay() + "天"
-                + " §e间隔: §f" + config.playerIntervalDays() + "天"
+                + " §e间隔: §f" + (config.playerIntervalRandom()
+                        ? config.playerIntervalMin() + "~" + config.playerIntervalMax() + "天(随机)"
+                        : config.playerIntervalDays() + "天")
                 + " §e血债: §f" + pData.bloodDebt()
                 + " §e进行中: §f" + (pData.waveActive() ? "§a是" : "§c否"))), false);
 
@@ -284,7 +286,9 @@ public class ZombietideCommands {
                         .append(clickableUUID(v.getUUID()))
                         .append(Component.literal(" §e坐标: §f" + (int)v.getX() + "," + (int)v.getY() + "," + (int)v.getZ()
                         + " §eModDay: §f" + vData.modDay() + "天"
-                        + " §e间隔: §f" + interval + "天"
+                        + " §e间隔: §f" + (config.villagerIntervalRandom()
+                        ? config.villagerIntervalMin() + "~" + config.villagerIntervalMax() + "天(随机)"
+                        : interval + "天")
                         + " §e进行中: §f" + (vData.waveActive() ? "§a是" : "§c否"))), false);
             }
         }

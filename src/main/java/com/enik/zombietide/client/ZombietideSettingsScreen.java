@@ -127,7 +127,7 @@ public class ZombietideSettingsScreen extends Screen {
     // ==================== 左下角封面 + 版本号 ====================
     /**
      * 3D 标题封面（"Zombie Tide" 字标）。
-     * <p>原始 2310×335 大图在入包前已等比压到 1024×149，避免几 MB 的图直接进 jar；
+     * <p>原始 2455×373 大图在入包前已等比压到 1024×156，避免几 MB 的图直接进 jar；
      * 背景为透明（RGBA），叠在壁纸上不会出现方形色块。
      */
     private static final ResourceLocation COVER_TEXTURE =

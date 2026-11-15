@@ -368,6 +368,21 @@ public class ModMessages {
                             context.enqueueWork(() -> {
                                 Player player = context.player();
                                 if (player instanceof ServerPlayer serverPlayer) {
+                                    // 权限校验：与 /zombietide 命令保持一致（OP 2）。
+                                    // 单机/局域网仅房主放行（isSingleplayer 对同一进程的所有玩家都为 true，
+                                    // 因此还要比对 UUID，避免局域网访客改全服配置）。
+                                    net.minecraft.server.MinecraftServer server = serverPlayer.server;
+                                    boolean isHost = server.isSingleplayer()
+                                            && server.getSingleplayerProfile() != null
+                                            && serverPlayer.getUUID().equals(server.getSingleplayerProfile().getId());
+                                    if (!isHost && !serverPlayer.hasPermissions(2)) {
+                                        EnikZombietide.LOGGER.warn("拒绝 {} 的配置修改请求：权限不足（需要 OP 2 或单机房主）",
+                                                serverPlayer.getScoreboardName());
+                                        serverPlayer.sendSystemMessage(
+                                                net.minecraft.network.chat.Component.translatable("zombietide.settings.no_permission")
+                                                        .withStyle(net.minecraft.ChatFormatting.RED));
+                                        return;
+                                    }
                                     ServerLevel level = serverPlayer.serverLevel();
                                     ConfigManager.applyRemoteConfig(payload.config(), level);
                                     // 广播给所有在线客户端
@@ -446,22 +461,6 @@ public class ModMessages {
     /** 发送村民模组天数给特定玩家（用于 HUD 显示附近村民） */
     public static void sendVillagerModDay(ServerPlayer player, UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay) {
         PacketDistributor.sendToPlayer(player, new VillagerModDayPayload(villagerUuid, registryKey, modDay, x, y, z, waveActive, hordeDay));
-    }
-
-    /** 广播所有玩家的模组天数给所有在线客户端 */
-    public static void broadcastAllModDays() {
-        if (ServerLifecycleHooks.getCurrentServer() == null) return;
-        ServerLevel overworld = ServerLifecycleHooks.getCurrentServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
-        if (overworld == null) return;
-        ZombietideConfig cfg = com.enik.zombietide.config.ConfigManager.getConfigData(overworld).getConfig();
-        for (ServerPlayer player : overworld.getPlayers(p -> true)) {
-            var data = ModAttachments.getPlayerHordeData(player);
-            boolean canTrigger = player.level().dimension() == net.minecraft.world.level.Level.OVERWORLD
-                    && player.serverLevel().getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL;
-            sendModDay(player, data.modDay(), canTrigger,
-                    com.enik.zombietide.horde.HordeTimer.isHordeDay(
-                            player.getUUID(), data.modDay(), data.lastTriggerDay(), cfg, false));
-        }
     }
 
     /** 广播所有村民的模组天数给范围内的在线客户端（≤128 格，避免全服广播风暴）

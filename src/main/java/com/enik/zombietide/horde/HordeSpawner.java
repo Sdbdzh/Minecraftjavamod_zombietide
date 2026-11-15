@@ -480,7 +480,7 @@ public class HordeSpawner {
      *
      * @param level  服务端世界
      * @param config 配置
-     * @param dayTime 当前世界时间（0-24000，取模后）
+     * @param dayTime 世界时间原始值（**未取模**，方法内部自行 `% 24000`）
      */
     public static void scatterZombies(ServerLevel level, ZombietideConfig config, long dayTime) {
         long dayPhase = dayTime % 24000;
@@ -641,6 +641,41 @@ public class HordeSpawner {
                 EnikZombietide.LOGGER.debug("村民 {} 四散阶段重置 waveActive=false（调度表+附件）", villagerUuid);
             }
         }
+    }
+
+    /**
+     * 玩家登出时提前结算血债（Issue #51）。
+     * <p>离线玩家没有实体、无法访问附件，若等到 23460 起火结算时才因「目标不在线」跳过，
+     * 本波幸存数对应的血债会永久丢失。因此在登出瞬间按当前存活数结算，并标记
+     * {@code lastDebtSettledDay} 防止 23460 时重复计债。
+     */
+    public static void settleDebtOnLogout(ServerLevel level, ServerPlayer player, ZombietideConfig config) {
+        var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
+        if (!data.waveActive()) return;
+
+        long today = level.getDayTime() / 24000L;
+        Long settled = lastDebtSettledDay.get(player.getUUID());
+        if (settled != null && settled == today) return;   // 今天已结算过
+
+        int survivorCount = countHordeZombiesByTarget(level, player.getUUID());
+        String debtMode = config.debtMode();
+        int newDebt;
+        if ("last_only".equals(debtMode)) {
+            newDebt = Math.min(config.debtCap(), survivorCount);
+        } else if ("none".equals(debtMode)) {
+            newDebt = 0;
+        } else {
+            newDebt = Math.min(config.debtCap(), data.bloodDebt() + survivorCount);
+        }
+        if (survivorCount == 0) newDebt = 0;
+
+        lastDebtSettledDay.put(player.getUUID(), today);
+        player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
+                new com.enik.zombietide.attachments.PlayerHordeData(
+                        data.modDay(), data.lastTriggerDay(), newDebt, data.waveCount(), false));
+
+        EnikZombietide.LOGGER.info("玩家 {} 登出时仍在波次中，已提前结算血债：本波存活 {}，血债 {}（模式 {}）",
+                player.getScoreboardName(), survivorCount, newDebt, debtMode);
     }
 
     /** 起火时刻血债结算（dayPhase >= 23460，僵尸开始着火，按实时存活数结算血债） */
@@ -1018,6 +1053,9 @@ public class HordeSpawner {
                 // 与触发判定（HordeTimer.isHordeDay）保持一致，同时支持固定/随机间隔
                 if (!HordeTimer.isHordeDay(player.getUUID(), modDay, data.lastTriggerDay(), config, false)) continue;
                 if (modDay == data.lastTriggerDay()) continue;
+
+                // 记录已提醒，避免 missedDusk 补偿链（sendMorningWarning）对同一天重复提醒（Issue #43）
+                warnedNightBefore.put(player.getUUID(), modDay);
 
                 // 今天是尸潮日，发送清晨聊天提醒
                 HordeWarning.warnMorningHorde(level, player, config, modDay);
