@@ -285,9 +285,11 @@ public class ZombietideHud {
     }
 
     private static void drawModInfoOverlay(GuiGraphics guiGraphics, Minecraft minecraft, ZombietideConfig config, int modDay) {
-        // 必须用 GUI 缩放后的宽度：drawString 用的是 GUI 坐标，用物理像素宽度会把面板推到屏幕外
+        // 必须用 GUI 缩放后的宽度：drawString 用的是 GUI 坐标，用物理像素宽度会把面板推到屏幕外。
+        // 宽度取 360：配置摘要在「随机间隔」模式下（如 5~9天(随机)）文字最宽，280 会被右侧裁掉。
+        // Math.max 保证窄屏时贴左边，不会因为负数坐标画到屏幕外。
         int screenWidth = minecraft.getWindow().getGuiScaledWidth();
-        int startX = screenWidth - 280;
+        int startX = Math.max(4, screenWidth - 360);
         int startY = 10;
         int lineHeight = 11;
         int lineCount = 0;

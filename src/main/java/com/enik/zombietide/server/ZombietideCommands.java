@@ -73,6 +73,10 @@ public class ZombietideCommands {
                         .then(Commands.literal("glow")
                                 .then(Commands.argument("targets", EntityArgument.entities())
                                         .executes(ctx -> debugGlow(ctx.getSource(), EntityArgument.getEntities(ctx, "targets"))))))
+                // overlay：右上角 mod 信息常驻面板（纯客户端渲染，仅玩家可执行）
+                .then(Commands.literal("overlay")
+                        .then(Commands.literal("on").executes(ctx -> overlay(ctx.getSource(), true)))
+                        .then(Commands.literal("off").executes(ctx -> overlay(ctx.getSource(), false))))
         );
     }
 
@@ -88,6 +92,11 @@ public class ZombietideCommands {
      * {@code trigger} 会给所有人刷尸潮、{@code reset} 会清掉所有人血债，属于危险副作用，
      * 必须由执行者显式指定目标。只有玩家执行时才默认作用于自己。
      */
+    /** 需要玩家执行（控制台/命令方块没有客户端渲染环境） */
+    private static final com.mojang.brigadier.exceptions.SimpleCommandExceptionType NEED_PLAYER =
+            new com.mojang.brigadier.exceptions.SimpleCommandExceptionType(
+                    Component.literal("此命令只能由玩家执行：mod 信息面板是客户端渲染，控制台没有客户端"));
+
     private static final com.mojang.brigadier.exceptions.SimpleCommandExceptionType NEED_TARGET =
             new com.mojang.brigadier.exceptions.SimpleCommandExceptionType(
                     Component.literal("此命令需要指定目标（控制台没有玩家上下文）。"
@@ -294,6 +303,34 @@ public class ZombietideCommands {
                         .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, uuid.toString()))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                 Component.literal("点击填入 UUID"))));
+    }
+
+    // ========== overlay（右上角 mod 信息面板） ==========
+
+    /**
+     * 开关右上角 mod 信息常驻面板（内容同 debug info，逐帧实时刷新）。
+     *
+     * <p>该面板是<b>纯客户端渲染</b>：服务端通过 {@code InfoOverlayPayload} 把开关同步给客户端，
+     * 客户端存在静态字段 {@code ZombietideHud.infoOverlayEnabled}，因此<b>客户端重启后状态丢失</b>，
+     * 需要重新执行本命令。控制台/命令方块没有客户端渲染环境，直接拒绝。
+     *
+     * <p>面板还受 HUD 总开关 {@code hudEnabled} 约束（{@code ZombietideHud.render} 开头就 return），
+     * 关闭时给出提示但不阻止命令执行。
+     */
+    private static int overlay(CommandSourceStack source, boolean enable) throws CommandSyntaxException {
+        if (!(source.getEntity() instanceof ServerPlayer player)) {
+            throw NEED_PLAYER.create();
+        }
+        ZombietideConfig config = ConfigManager.getConfigData(overworld(source)).getConfig();
+        if (enable && !config.hud().hudEnabled()) {
+            source.sendSuccess(() -> Component.literal("§e注意：HUD 总开关当前为「关闭」，面板不会显示——请先在设置界面开启 HUD。")
+                    .withStyle(ChatFormatting.YELLOW), false);
+        }
+        ModMessages.sendInfoOverlay(player, enable);
+        source.sendSuccess(() -> Component.literal("§a模组信息面板已" + (enable ? "§l开启" : "§l关闭")
+                + "§r§7（右上角实时刷新；客户端重启后需重新执行）"), false);
+        com.enik.zombietide.EnikZombietide.LOGGER.info("玩家 {} 通过命令{}模组信息面板（右上角）", player.getScoreboardName(), enable ? "开启" : "关闭");
+        return 1;
     }
 
     // ========== 调试命令 ==========
