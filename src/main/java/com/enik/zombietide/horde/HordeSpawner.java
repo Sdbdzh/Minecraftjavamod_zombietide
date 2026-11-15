@@ -75,6 +75,10 @@ public class HordeSpawner {
     // 所有活跃的尸潮僵尸 UUID 集合（用于四散时快速遍历，避免全实体扫描）
     private static final Set<UUID> hordeZombieUuids = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
 
+    // 本次 JVM 进程内已触发/恢复过的尸潮目标。进程重启即清空，因此可用于判断
+    // 恢复日志的原因：首次见到 = 进度来自存档（服务器重启），已见过 = 目标重新上线/加载。
+    private static final Set<UUID> seenHordesThisSession = ConcurrentHashMap.newKeySet();
+
     // 夜前警告已发送的模组天数记录：target UUID -> 已警告的 modDay（避免重复触发）
     // 现用于清晨提醒防重复
     private static final Map<UUID, Integer> warnedNightBefore = new ConcurrentHashMap<>();
@@ -104,6 +108,7 @@ public class HordeSpawner {
      * @param radius 生成半径
      */
     public static void startHorde(ServerLevel level, UUID targetId, LivingEntity target, int total, ZombietideConfig config, boolean isVillager, double radius) {
+        seenHordesThisSession.add(targetId);
         activeHordes.put(targetId, total);
         spawnedCount.put(targetId, 0);
         totalCount.put(targetId, total);
@@ -204,8 +209,12 @@ public class HordeSpawner {
                 if (entry.villager()) {
                     villagerHordeRadii.put(targetId, (double) config.villagerRadius());
                 }
-                EnikZombietide.LOGGER.info("服务器重启恢复：尸潮 {} 剩余 {} 只继续生成（类型 {}）",
-                        targetId, entry.remaining(), entry.villager() ? "村民" : "玩家");
+                // add() 返回 true 表示本次进程首次见到该目标 -> 进度来自存档（服务器重启）；
+                // 返回 false 表示本进程内已触发过 -> 只是目标重新上线 / 重新加载，并非重启。
+                boolean firstSeen = seenHordesThisSession.add(targetId);
+                String reason = firstSeen ? "服务器重启" : "目标重新上线/加载";
+                EnikZombietide.LOGGER.info("尸潮进度恢复（{}）：目标 {} 剩余 {} 只继续生成（类型 {}）",
+                        reason, targetId, entry.remaining(), entry.villager() ? "村民" : "玩家");
             }
         }
 
@@ -1592,6 +1601,7 @@ public class HordeSpawner {
 
         // 清理内部 Map
         activeHordes.clear();
+        seenHordesThisSession.clear();
         spawnedCount.clear();
         totalCount.clear();
         batchTimer.clear();
