@@ -207,7 +207,9 @@ public class HordeSpawner {
                 }
                 // 目标实体未加载 / 不在主世界：保留进度，等实体加载后再恢复。
                 // 否则 spawnZombie 找不到目标会「生成失败仍递减 remaining」，把剩余数量空刷掉。
-                if (level.getEntity(targetId) == null) continue;
+                // 用 findTarget 而非裸 getEntity：ServerLevel 的 UUID 索引对已加载村民不可靠，
+                // 裸查会把「已加载的村民」误判为「未加载」，导致村民尸潮重启后永不恢复。
+                if (findTarget(level, targetId) == null) continue;
                 activeHordes.put(targetId, entry.remaining());
                 spawnedCount.put(targetId, 0);
                 totalCount.put(targetId, entry.remaining());

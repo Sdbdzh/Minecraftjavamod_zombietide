@@ -94,8 +94,11 @@ public class ZombietideServerEvents {
         EnikZombietide.LOGGER.info("  村民显示距离: {}, 最大显示数: {}", 
             config.villagerHordeDisplayRange(), config.villagerHordeMaxEntries());
         
-        // 客户端刚启动时 infoOverlayEnabled 必为 false，服务端记录同步清空，避免 toggle 方向反了
+        // 【面板开关对齐】客户端 infoOverlayEnabled 是静态字段：单机退主菜单再进存档时它仍是 true，
+        // 而服务端记录的开关会随登录清空。若不主动下发一次 false，两边状态会反相，
+        // 玩家想关面板时第一次 toggle 反而会发 enable=true（要按两次）。这里强制归零，保证两边一致。
         ZombietideCommands.resetOverlayState(player.getUUID());
+        ModMessages.sendInfoOverlay(player, false);
         // 同步玩家 HUD 状态（modDay / 尸潮日 / 进行中 / 血债 / 全局统计）
         HordeTimer.syncPlayerHudState(level, config, player);
         // 登录时对账一次：立即结束跨天残留的尸潮（避免白天加载存档后状态卡住）
