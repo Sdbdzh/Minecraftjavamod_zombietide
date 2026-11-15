@@ -1,4 +1,4 @@
-![Zombie Tide](https://github.com/Sdbdzh/Minecraftjavamod_zombietide/blob/main/%E8%B5%84%E6%BA%90/Zombie%20Tide%E6%A0%87%E9%A2%98%E6%96%87%E5%AD%97/screenshot.png)
+![Zombie Tide](https://github.com/Sdbdzh/Minecraftjavamod_zombietide/blob/main/%E8%B5%84%E6%BA%90/mod%E5%B0%81%E9%9D%A2/new/new%E5%B0%81%E9%9D%A2-1920x1200-mcmod.png)
 
 # Zombie Tide（尸潮）
 
