@@ -14,18 +14,32 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+def isWindowsHost = System.getProperty('os.name').toLowerCase().contains('windows')
+
 neoForge {
     version = project.neo_version
     runs {
         client {
             client()
+            if (isWindowsHost) {
+                jvmArgument '-Dstdout.encoding=GBK'
+                jvmArgument '-Dstderr.encoding=GBK'
+            }
         }
         server {
             server()
             programArgument '--nogui'
+            if (isWindowsHost) {
+                jvmArgument '-Dstdout.encoding=GBK'
+                jvmArgument '-Dstderr.encoding=GBK'
+            }
         }
         data {
             data()
+            if (isWindowsHost) {
+                jvmArgument '-Dstdout.encoding=GBK'
+                jvmArgument '-Dstderr.encoding=GBK'
+            }
         }
     }
     // runServer 默认不转发控制台输入，导致无法在终端敲 op/stop 等命令。
@@ -39,13 +53,6 @@ neoForge {
     // 控制台中文乱码：JVM 默认按 UTF-8 输出，而 Windows 控制台是 GBK(CP936)，
     // 于是「玩家 sdbdzh 进入世界」会变成「鐜╁ sdbdzh 杩涘叆涓栫晫」。
     // 这里让 stdout/stderr 按平台默认编码输出（日志文件仍是 UTF-8，不受影响）。
-    if (System.getProperty('os.name').toLowerCase().contains('windows')) {
-        tasks.matching { it.name in ['runClient', 'runServer', 'runData'] }.configureEach {
-            if (it instanceof JavaExec) {
-                it.jvmArgs '-Dstdout.encoding=GBK', '-Dstderr.encoding=GBK'
-            }
-        }
-    }
 
     mods {
         "${mod_id}" {
