@@ -5,40 +5,31 @@ import com.enik.zombietide.config.ConfigManager;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.common.NeoForge;
 
 /**
  * 客户端事件：按键映射、打开设置界面、HUD 渲染。
  * <p>
  * {@link #OPEN_SETTINGS_KEY} 为 {@code private static} 字段（非 final、非 public），
  * 避免 NeoForge 在早期初始化阶段自动发现并重复注册。按键映射仅在
- * {@link #onRegisterKeyMappings} 中通过 {@code event.register()} 注册一次。
- * 所有监听器均在 {@code EnikZombietide} 构造函数中手动 {@code addListener}。
+ * {@link ZombietideClientModEvents#onRegisterKeyMappings} 中通过 {@code event.register()} 注册一次。
+ * <p><b>注意</b>：本类只能通过 {@code @EventBusSubscriber(value = Dist.CLIENT)} 注册，
+ * 绝不能在 {@code EnikZombietide} 构造函数里直接引用——否则专用服务器加载主类时
+ * 会把 {@code Minecraft}/{@code Screen} 等客户端类一起拖进来，直接崩服。
  */
+@EventBusSubscriber(modid = EnikZombietide.MODID, value = Dist.CLIENT)
 public class ZombietideClientEvents {
 
-    /** 模组设置按键（私有非 final，避免 NeoForge 自动发现重复注册） */
-    private static KeyMapping OPEN_SETTINGS_KEY;
+    /** 模组设置按键（包级可见，供 ZombietideClientModEvents 在 mod bus 阶段赋值） */
+    static KeyMapping OPEN_SETTINGS_KEY;
 
     /** 获取模组设置按键映射 */
     public static KeyMapping getOpenSettingsKey() {
         return OPEN_SETTINGS_KEY;
-    }
-
-    /** 注册按键映射（mod bus，仅调用一次 event.register） */
-    @SubscribeEvent
-    public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
-        OPEN_SETTINGS_KEY = new KeyMapping(
-                "key.zombietide.settings",
-                InputConstants.Type.KEYSYM,
-                InputConstants.UNKNOWN.getValue(),
-                "category.zombietide"
-        );
-        event.register(OPEN_SETTINGS_KEY);
     }
 
     /** 按键输入：按下设置键时，仅在游戏内打开模组设置界面（game bus）；防止重复打开多个设置界面

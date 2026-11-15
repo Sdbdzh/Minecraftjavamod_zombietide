@@ -1,7 +1,6 @@
 package com.enik.zombietide;
 
 import com.enik.zombietide.attachments.ModAttachments;
-import com.enik.zombietide.client.ZombietideClientEvents;
 import com.enik.zombietide.server.ZombietideServerEvents;
 import com.enik.zombietide.sound.ModSounds;
 import com.mojang.logging.LogUtils;
@@ -32,11 +31,9 @@ public class EnikZombietide {
         // 3. 注册服务端事件（游戏总线）：ZombietideServerEvents 已通过 @EventBusSubscriber 自动注册，
         // 此处不再手动 register，避免重复触发
         NeoForge.EVENT_BUS.register(this);
-        modEventBus.addListener(ZombietideClientEvents::onRegisterKeyMappings);
-        NeoForge.EVENT_BUS.addListener(ZombietideClientEvents::onKeyInput);
-
-        // 5. 注册客户端 HUD 渲染监听（游戏总线）
-        NeoForge.EVENT_BUS.addListener(ZombietideClientEvents::onRenderHud);
+        // 客户端事件（按键映射 / 按键输入 / HUD 渲染）一律由 @EventBusSubscriber(value = Dist.CLIENT)
+        // 自动注册。此处绝不能引用客户端类，否则专用服务器加载主类时会把 Minecraft/Screen
+        // 拖进 DEDICATED_SERVER 环境，直接导致模组加载失败。
     }
 
     @SubscribeEvent
