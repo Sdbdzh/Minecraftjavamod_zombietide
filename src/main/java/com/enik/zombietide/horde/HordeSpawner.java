@@ -194,6 +194,9 @@ public class HordeSpawner {
                 if (!stillActive) {
                     it.remove(); progress.setDirty(); continue;
                 }
+                // 目标实体未加载 / 不在主世界：保留进度，等实体加载后再恢复。
+                // 否则 spawnZombie 找不到目标会「生成失败仍递减 remaining」，把剩余数量空刷掉。
+                if (level.getEntity(targetId) == null) continue;
                 activeHordes.put(targetId, entry.remaining());
                 spawnedCount.put(targetId, 0);
                 totalCount.put(targetId, entry.remaining());
