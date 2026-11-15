@@ -75,6 +75,8 @@ public class ZombietideCommands {
                                         .executes(ctx -> debugGlow(ctx.getSource(), EntityArgument.getEntities(ctx, "targets"))))))
                 // overlay：右上角 mod 信息常驻面板（纯客户端渲染，仅玩家可执行）
                 .then(Commands.literal("overlay")
+                        // 无参：切换（执行一次开，再执行一次关）
+                        .executes(ctx -> overlayToggle(ctx.getSource()))
                         .then(Commands.literal("on").executes(ctx -> overlay(ctx.getSource(), true)))
                         .then(Commands.literal("off").executes(ctx -> overlay(ctx.getSource(), false))))
         );
@@ -92,6 +94,19 @@ public class ZombietideCommands {
      * {@code trigger} 会给所有人刷尸潮、{@code reset} 会清掉所有人血债，属于危险副作用，
      * 必须由执行者显式指定目标。只有玩家执行时才默认作用于自己。
      */
+    /**
+     * 服务端侧记录每个玩家的面板开关。
+     * <p>客户端的 {@code ZombietideHud.infoOverlayEnabled} 是静态字段，服务端无法查询，
+     * 因此无参 toggle 只能靠服务端自己的记录判断"当前是开还是关"。
+     * 玩家登录时清空（客户端刚启动必然是关），保证两边一致。
+     */
+    private static final java.util.Map<UUID, Boolean> OVERLAY_STATE = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 玩家登录时重置面板开关记录（客户端 JVM 重启后 infoOverlayEnabled 必为 false） */
+    public static void resetOverlayState(UUID playerUuid) {
+        OVERLAY_STATE.remove(playerUuid);
+    }
+
     /** 需要玩家执行（控制台/命令方块没有客户端渲染环境） */
     private static final com.mojang.brigadier.exceptions.SimpleCommandExceptionType NEED_PLAYER =
             new com.mojang.brigadier.exceptions.SimpleCommandExceptionType(
@@ -317,10 +332,20 @@ public class ZombietideCommands {
      * <p>面板还受 HUD 总开关 {@code hudEnabled} 约束（{@code ZombietideHud.render} 开头就 return），
      * 关闭时给出提示但不阻止命令执行。
      */
+    /** 无参：在当前状态上取反 */
+    private static int overlayToggle(CommandSourceStack source) throws CommandSyntaxException {
+        if (!(source.getEntity() instanceof ServerPlayer player)) {
+            throw NEED_PLAYER.create();
+        }
+        boolean next = !OVERLAY_STATE.getOrDefault(player.getUUID(), false);
+        return overlay(source, next);
+    }
+
     private static int overlay(CommandSourceStack source, boolean enable) throws CommandSyntaxException {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
             throw NEED_PLAYER.create();
         }
+        OVERLAY_STATE.put(player.getUUID(), enable);
         ZombietideConfig config = ConfigManager.getConfigData(overworld(source)).getConfig();
         if (enable && !config.hud().hudEnabled()) {
             source.sendSuccess(() -> Component.literal("§e注意：HUD 总开关当前为「关闭」，面板不会显示——请先在设置界面开启 HUD。")
@@ -328,7 +353,7 @@ public class ZombietideCommands {
         }
         ModMessages.sendInfoOverlay(player, enable);
         source.sendSuccess(() -> Component.literal("§a模组信息面板已" + (enable ? "§l开启" : "§l关闭")
-                + "§r§7（右上角实时刷新；客户端重启后需重新执行）"), false);
+                + "§r§7（再次执行 /zombietide overlay 可切换；客户端重启后需重新执行）"), false);
         com.enik.zombietide.EnikZombietide.LOGGER.info("玩家 {} 通过命令{}模组信息面板（右上角）", player.getScoreboardName(), enable ? "开启" : "关闭");
         return 1;
     }
@@ -402,16 +427,8 @@ public class ZombietideCommands {
         // 全局统计
         int activePlayerCount = HordeSpawner.getActivePlayerHordeCount(level);
         int activeVillagerCount = HordeSpawner.getActiveVillagerHordeCount(level);
-        int hordeZombieCount = 0;
-        for (Entity entity : level.getEntities().getAll()) {
-            // Zombie 已覆盖 ZombieVillager/Husk/Drowned；Stray 不是 Zombie 子类，需单独计入
-            if (entity instanceof net.minecraft.world.entity.monster.Zombie
-                    || entity instanceof net.minecraft.world.entity.monster.Stray) {
-                if (entity.getPersistentData().hasUUID("zombietide_horde_target")) {
-                    hordeZombieCount++;
-                }
-            }
-        }
+        // 与 HUD 面板共用同一套统计，保证两处数字一致
+        int hordeZombieCount = HordeSpawner.countAliveHordeZombies(level);
         final int finalHordeZombieCount = hordeZombieCount;
         final int finalActivePlayerCount = activePlayerCount;
         final int finalActiveVillagerCount = activeVillagerCount;

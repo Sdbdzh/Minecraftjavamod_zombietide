@@ -1190,6 +1190,24 @@ public class HordeSpawner {
     }
 
     /** 统计当前存活的尸潮僵尸数（用于全局上限协调） */
+    /**
+     * 统计当前世界存活的尸潮僵尸数（按 NBT 标记扫描实体）。
+     * <p>与 {@code /zombietide debug info} 的「全局统计」同源，保证 HUD 面板与命令输出一致。
+     * 不走 {@code hordeZombieUuids}，因为该集合在重启后可能不完整。
+     */
+    public static int countAliveHordeZombies(ServerLevel level) {
+        int count = 0;
+        for (net.minecraft.world.entity.Entity entity : level.getEntities().getAll()) {
+            if (entity instanceof net.minecraft.world.entity.monster.Zombie
+                    || entity instanceof net.minecraft.world.entity.monster.Stray) {
+                if (entity.getPersistentData().hasUUID("zombietide_horde_target")) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
     private static int countHordeZombies(ServerLevel level) {
         // 改用 hordeZombieUuids Set 统计，避免每 tick 全世界实体扫描（O(全实体数) → O(尸潮僵尸数)）
         // 同时清理已死亡/已揪尸的僵尸UUID，防止僵尸烧死后UUID滞留导致可用名额虚高、持续快速刷新

@@ -39,6 +39,10 @@ public class ZombietideHud {
     private static final Map<UUID, Boolean> syncedWaveActive = new HashMap<>();
     /** 服务端同步的玩家血债（PlayerDebtData.getDebt） */
     private static final Map<UUID, Integer> syncedDebt = new HashMap<>();
+    /** 服务端同步的全局统计（所有玩家共用同一份，按 UUID 存便于保持结构一致） */
+    private static final Map<UUID, Integer> syncedActivePlayerHordes = new HashMap<>();
+    private static final Map<UUID, Integer> syncedActiveVillagerHordes = new HashMap<>();
+    private static final Map<UUID, Integer> syncedAliveHordeZombies = new HashMap<>();
     /** 服务端算好的「今天是否为该玩家的尸潮日」（支持固定/随机间隔） */
     private static final Map<UUID, Boolean> syncedHordeDay = new HashMap<>();
     /** 服务端同步的村民模组天数（UUID -> modDay；用于 HUD 附近村民显示） */
@@ -68,11 +72,15 @@ public class ZombietideHud {
     }
 
     /** 接收服务端同步的玩家模组天数（PlayerModDayPayload） */
-    public static void onModDayReceived(UUID playerUuid, int modDay, boolean hordeDay, boolean waveActive, int bloodDebt) {
+    public static void onModDayReceived(UUID playerUuid, int modDay, boolean hordeDay, boolean waveActive, int bloodDebt,
+                                        int activePlayerHordes, int activeVillagerHordes, int aliveHordeZombies) {
         syncedModDays.put(playerUuid, modDay);
         syncedHordeDay.put(playerUuid, hordeDay);
         syncedWaveActive.put(playerUuid, waveActive);
         syncedDebt.put(playerUuid, bloodDebt);
+        syncedActivePlayerHordes.put(playerUuid, activePlayerHordes);
+        syncedActiveVillagerHordes.put(playerUuid, activeVillagerHordes);
+        syncedAliveHordeZombies.put(playerUuid, aliveHordeZombies);
     }
 
     /** 接收服务端同步的村民模组天数（VillagerModDayPayload） */
@@ -306,14 +314,13 @@ public class ZombietideHud {
         guiGraphics.drawString(minecraft.font, "§r§c§l尸潮 实时信息§r", startX, startY, 0xFFFFFF);
         lineCount++;
 
-        // --- 配置摘要 ---
-        guiGraphics.drawString(minecraft.font, "§b--- 配置 ---", startX, startY + lineCount * lineHeight, 0xFFFFFF);
+        // --- 配置摘要（与 debug info 的「配置摘要」区字段一致；间隔在各目标区单独显示）---
+        guiGraphics.drawString(minecraft.font, "§b--- 配置摘要 ---", startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
         guiGraphics.drawString(minecraft.font, "§e玩家尸潮: §f" + (config.playerHordeEnabled() ? "§a开启" : "§c关闭")
-                + " §e间隔: §f" + intervalText(config, false)
                 + " §e村民尸潮: §f" + (config.villagerHordeEnabled() ? "§a开启" : "§c关闭")
-                + " §e间隔: §f" + intervalText(config, true)
-                + " §e全局上限: §f" + config.globalCap(), startX, startY + lineCount * lineHeight, 0xFFFFFF);
+                + " §e全局上限: §f" + config.globalCap()
+                + " §e血债模式: §f" + config.debtMode(), startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
 
         // --- 玩家尸潮（字段与 /zombietide debug info 的「玩家尸潮」区一致）---
@@ -378,8 +385,12 @@ public class ZombietideHud {
         // --- 全局统计 ---
         guiGraphics.drawString(minecraft.font, "§b--- 全局统计 ---", startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
-        guiGraphics.drawString(minecraft.font, "§e全局上限: §f" + config.globalCap() + " 只"
-                + " §e血债上限: §f" + config.debtCap() + " 只"
+        guiGraphics.drawString(minecraft.font, "§e存活尸潮僵尸: §f" + syncedAliveHordeZombies.getOrDefault(playerUuid, 0)
+                + " §e活跃玩家尸潮: §f" + syncedActivePlayerHordes.getOrDefault(playerUuid, 0)
+                + " §e活跃村民尸潮: §f" + syncedActiveVillagerHordes.getOrDefault(playerUuid, 0)
+                + " §e全局僵尸上限: §f" + config.globalCap(), startX, startY + lineCount * lineHeight, 0xFFFFFF);
+        lineCount++;
+        guiGraphics.drawString(minecraft.font, "§e血债上限: §f" + config.debtCap() + " 只"
                 + " §e自然生成屏蔽: §f" + (config.blockNaturalSpawn() ? "§a开启" : "§c关闭")
                 + " §e阳光燃烧: §f" + (config.daylightBurn() ? "§a开启" : "§c关闭"), startX, startY + lineCount * lineHeight, 0xFFFFFF);
     }

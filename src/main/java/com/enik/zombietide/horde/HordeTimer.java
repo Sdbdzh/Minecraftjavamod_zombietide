@@ -154,9 +154,13 @@ public class HordeTimer {
         hudSyncTick++;
         if (hudSyncTick >= 20) {
             hudSyncTick = 0;
-            if (server != null) {
+            if (server != null && !server.getPlayerList().getPlayers().isEmpty()) {
+                // 全局统计只算一次，分发给所有玩家
+                int activePlayerHordes = HordeSpawner.getActivePlayerHordeCount(overworld);
+                int activeVillagerHordes = HordeSpawner.getActiveVillagerHordeCount(overworld);
+                int aliveHordeZombies = HordeSpawner.countAliveHordeZombies(overworld);
                 for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-                    syncPlayerHudState(overworld, config, p);
+                    syncPlayerHudState(overworld, config, p, activePlayerHordes, activeVillagerHordes, aliveHordeZombies);
                 }
             }
         }
@@ -170,11 +174,21 @@ public class HordeTimer {
      * 字段与 {@code /zombietide debug info} 的「玩家尸潮」区一致。
      */
     public static void syncPlayerHudState(ServerLevel overworld, ZombietideConfig config, ServerPlayer player) {
+        syncPlayerHudState(overworld, config, player,
+                HordeSpawner.getActivePlayerHordeCount(overworld),
+                HordeSpawner.getActiveVillagerHordeCount(overworld),
+                HordeSpawner.countAliveHordeZombies(overworld));
+    }
+
+    /** 批量同步时由调用方先算好全局统计，避免每个玩家重复扫描实体 */
+    public static void syncPlayerHudState(ServerLevel overworld, ZombietideConfig config, ServerPlayer player,
+                                          int activePlayerHordes, int activeVillagerHordes, int aliveHordeZombies) {
         var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
         int debt = com.enik.zombietide.config.PlayerDebtData.get(overworld).getDebt(player.getUUID());
         ModMessages.sendModDay(player, data.modDay(),
                 isHordeDay(player.getUUID(), data.modDay(), data.lastTriggerDay(), config, false),
-                data.waveActive(), debt);
+                data.waveActive(), debt,
+                activePlayerHordes, activeVillagerHordes, aliveHordeZombies);
     }
 
     /** 推进所有在线玩家和所有村民的模组天数（modDay 直接等于主世界游戏日）

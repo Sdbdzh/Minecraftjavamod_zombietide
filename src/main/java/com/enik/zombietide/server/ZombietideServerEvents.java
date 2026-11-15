@@ -94,7 +94,9 @@ public class ZombietideServerEvents {
         EnikZombietide.LOGGER.info("  村民显示距离: {}, 最大显示数: {}", 
             config.villagerHordeDisplayRange(), config.villagerHordeMaxEntries());
         
-        // 同步玩家 HUD 状态（modDay / 尸潮日 / 进行中 / 血债）
+        // 客户端刚启动时 infoOverlayEnabled 必为 false，服务端记录同步清空，避免 toggle 方向反了
+        ZombietideCommands.resetOverlayState(player.getUUID());
+        // 同步玩家 HUD 状态（modDay / 尸潮日 / 进行中 / 血债 / 全局统计）
         HordeTimer.syncPlayerHudState(level, config, player);
         // 登录时对账一次：立即结束跨天残留的尸潮（避免白天加载存档后状态卡住）
         HordeSpawner.reconcileStaleWaves(level, config);
