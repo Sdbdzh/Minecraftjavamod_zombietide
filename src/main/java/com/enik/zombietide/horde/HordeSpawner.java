@@ -420,7 +420,8 @@ public class HordeSpawner {
 
             if (!entity.isAlive()) continue;
 
-            // 已经进入四散状态的僵尸，跳过，避免重复发送四散消息
+            // 已进入四散状态（state==1）的僵尸由起火结算 settleDebtAtBurnTime 统一处理，
+            // 不计入黎明存活统计（此处不发送任何消息，四散通知在 scatterZombies 里）
             if (tag.getInt(HORDE_STATE_KEY) == 1) continue;
 
             survivorCount.merge(targetId, 1, Integer::sum);
@@ -698,35 +699,6 @@ public class HordeSpawner {
                     EnikZombietide.LOGGER.debug("村民 {} waveActive 已重置为 false（四散完成）", targetId);
                 }
             }
-        }
-
-        // 【Bug2 修复】兜底：activeHordes 中有但 scatterTargets 没有的目标（全灭/实体已死），也要重置 waveActive
-        // 这解决了：僵尸全死后没有四散目标，导致 waveActive 永不重置
-        java.util.Set<UUID> allHordeTargets = new java.util.HashSet<>(activeHordes.keySet());
-        for (UUID targetId : allHordeTargets) {
-            if (scatterTargets.contains(targetId)) continue; // 已处理
-            var target = findTarget(level, targetId);
-            if (target instanceof ServerPlayer player) {
-                var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
-                if (data.waveActive()) {
-                    player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
-                            new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data.modDay(), data.lastTriggerDay(), data.waveCount(), false
-                            ));
-                    EnikZombietide.LOGGER.debug("玩家 {} 四散兜底重置 waveActive=false（全灭/无存活僵尸）", targetId);
-                }
-            } else if (target instanceof net.minecraft.world.entity.npc.Villager villager) {
-                var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
-                if (vData.waveActive()) {
-                    villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
-                            new com.enik.zombietide.attachments.VillagerHordeData(
-                                    vData.modDay(), vData.lastTriggerDay(), vData.waveCount(), false
-                            ));
-                    EnikZombietide.LOGGER.debug("村民 {} 四散兜底重置 waveActive=false（全灭/无存活僵尸）", targetId);
-                }
-            }
-            // 实体为 null（已死/卸载）也需要通过调度表/附件重置
-            // 这里暂不处理村民实体为 null 的情况，依靠 onDawn 的调度表兜底
         }
 
         // 【关键修复】扫描 VillagerScheduleData，无条件把 waveActive 写回 false（权威数据源）。
@@ -1052,8 +1024,8 @@ public class HordeSpawner {
     }
 
     /**
-     * 【R43-015】跳变跨过黄昏时发送清晨提醒（为下一个模组天数）
-     * 当从黄昏前（<12000）跳到黄昏后（>14000）时调用
+     * 【当前无调用点，保留备查】跳变跨过黄昏时发送清晨提醒（针对下一个模组天数）。
+     * 当从黄昏前（&lt;12000）跳到黄昏后（&gt;14000）时调用。
      */
     public static void checkNightBeforeWarningForNextModDay(ServerLevel level, ZombietideConfig config) {
         // 检查玩家：下一个模组天数（modDay+1）是否为尸潮日
@@ -1097,8 +1069,12 @@ public class HordeSpawner {
     
 
     /**
-     * 前夜警告检测：如果明天是尸潮日，今晚黄昏发送警告
-     * 使用玩家/村民的**模组天数**判断，而非世界时间
+     * 【当前无调用点，保留备查】黄昏时段（12000-14000）的提醒检测。
+     *
+     * <p><b>实际行为与旧注释不符</b>：判断的是<b>今天</b>（{@code data.modDay()}）是否为尸潮日，
+     * 不是"明天"；命中后调用 {@code HordeWarning.warnMorningHorde}，即文案与音效都是<b>清晨提醒</b>语义。
+     * 方法名与历史注释来自早期设计，重构后未同步；若要重新启用，请先确认想要的语义再改。
+     *
      * @param level 服务端世界
      * @param config 配置
      */

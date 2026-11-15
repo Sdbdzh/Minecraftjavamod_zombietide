@@ -321,7 +321,32 @@ public record ZombietideConfig(
     public boolean blockSleep() { return world.blockSleep(); }
     public String debtMode() { return world.debtMode(); }
     public int debtCap() { return world.debtCap(); }
-    public int despawnSeconds() { return world.despawnSeconds(); }
+    /**
+     * 四散提前秒数（已钳制到安全范围）。
+     *
+     * <p>四散开始时刻 = {@code 23460 - despawnSeconds * 20}。若不钳制，用户在设置界面填大值会让
+     * 「四散窗口」覆盖全天：
+     * <ul>
+     *   <li>{@code despawnSeconds >= 1173} → 起始时刻 {@code <= 0}，判定恒真；</li>
+     *   <li>配合 {@code HordeSpawner} 的四散窗口兜底，{@code update()} 会立即作废所有批次，
+     *       导致<b>尸潮永远刷不出僵尸</b>（核心玩法静默失效）。</li>
+     * </ul>
+     *
+     * <p>上限取 <b>473</b>：黄昏触发窗口是 {@code 13000..14000}，要求四散开始晚于它
+     * （{@code 23460 - 473*20 = 14000}），否则尸潮刚触发就进入四散，同样刷不出来。
+     * 下限取 1（0 或负值会让四散永不触发）。
+     *
+     * <p>用访问器钳制而非 Codec：旧存档若已写入非法值，改 Codec 会让存档直接加载失败；
+     * 钳制在读取侧则始终安全，且设置界面回显的也是生效值。
+     */
+    public int despawnSeconds() {
+        int raw = world.despawnSeconds();
+        if (raw < 1) return 1;
+        return Math.min(raw, MAX_DESPAWN_SECONDS);
+    }
+
+    /** 四散提前秒数的安全上限，见 {@link #despawnSeconds()} */
+    public static final int MAX_DESPAWN_SECONDS = 473;
     public int villagerWarningRange() { return world.villagerWarningRange(); }
     public int villagerSleepBlockRange() { return world.villagerSleepBlockRange(); }
 
