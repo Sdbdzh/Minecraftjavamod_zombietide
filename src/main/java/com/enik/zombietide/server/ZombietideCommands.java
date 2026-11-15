@@ -74,11 +74,9 @@ public class ZombietideCommands {
                                 .then(Commands.argument("targets", EntityArgument.entities())
                                         .executes(ctx -> debugGlow(ctx.getSource(), EntityArgument.getEntities(ctx, "targets"))))))
                 // overlay：右上角 mod 信息常驻面板（纯客户端渲染，仅玩家可执行）
+                // overlay：右上角 mod 信息常驻面板，执行一次开启、再执行一次关闭（纯客户端渲染，仅玩家）
                 .then(Commands.literal("overlay")
-                        // 无参：切换（执行一次开，再执行一次关）
-                        .executes(ctx -> overlayToggle(ctx.getSource()))
-                        .then(Commands.literal("on").executes(ctx -> overlay(ctx.getSource(), true)))
-                        .then(Commands.literal("off").executes(ctx -> overlay(ctx.getSource(), false))))
+                        .executes(ctx -> overlayToggle(ctx.getSource())))
         );
     }
 
@@ -353,7 +351,7 @@ public class ZombietideCommands {
         }
         ModMessages.sendInfoOverlay(player, enable);
         source.sendSuccess(() -> Component.literal("§a模组信息面板已" + (enable ? "§l开启" : "§l关闭")
-                + "§r§7（再次执行 /zombietide overlay 可切换；客户端重启后需重新执行）"), false);
+                + "§r§7（再次执行 /zombietide overlay 切换；客户端重启后需重新执行）"), false);
         com.enik.zombietide.EnikZombietide.LOGGER.info("玩家 {} 通过命令{}模组信息面板（右上角）", player.getScoreboardName(), enable ? "开启" : "关闭");
         return 1;
     }
