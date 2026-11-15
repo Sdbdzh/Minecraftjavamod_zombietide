@@ -83,23 +83,35 @@ public class ZombietideCommands {
     }
 
     /**
-     * 无参命令的默认目标：玩家执行时是自己，控制台/命令方块执行时是所有在线玩家。
-     * <p>控制台没有玩家实体，直接 {@code getPlayerOrException()} 会抛「需要玩家」异常，
-     * 导致命令在服务器控制台完全不可用。
+     * 无参命令缺少目标时的报错。
+     * <p>控制台/命令方块没有玩家实体，<b>不能</b>拿「所有在线玩家」当默认值——
+     * {@code trigger} 会给所有人刷尸潮、{@code reset} 会清掉所有人血债，属于危险副作用，
+     * 必须由执行者显式指定目标。只有玩家执行时才默认作用于自己。
      */
-    private static java.util.Collection<? extends Entity> defaultTargets(CommandSourceStack source) {
+    private static final com.mojang.brigadier.exceptions.SimpleCommandExceptionType NEED_TARGET =
+            new com.mojang.brigadier.exceptions.SimpleCommandExceptionType(
+                    Component.literal("此命令需要指定目标（控制台没有玩家上下文）。"
+                            + "请用 /zombietide <子命令> <目标>，例如 /zombietide trigger @a"));
+
+    /**
+     * 无参命令的默认目标：<b>仅玩家执行时</b>返回自己。
+     * 控制台执行直接抛异常，避免误操作。
+     */
+    private static java.util.Collection<? extends Entity> defaultTargets(CommandSourceStack source)
+            throws CommandSyntaxException {
         if (source.getEntity() instanceof ServerPlayer sp) {
             return java.util.List.of(sp);
         }
-        return source.getServer().getPlayerList().getPlayers();
+        throw NEED_TARGET.create();
     }
 
     /** 同 {@link #defaultTargets}，但只取玩家（reset 仅对玩家生效） */
-    private static java.util.Collection<? extends ServerPlayer> defaultPlayers(CommandSourceStack source) {
+    private static java.util.Collection<? extends ServerPlayer> defaultPlayers(CommandSourceStack source)
+            throws CommandSyntaxException {
         if (source.getEntity() instanceof ServerPlayer sp) {
             return java.util.List.of(sp);
         }
-        return source.getServer().getPlayerList().getPlayers();
+        throw NEED_TARGET.create();
     }
 
     // ========== status ==========
@@ -240,7 +252,7 @@ public class ZombietideCommands {
      * 仅接受玩家目标（村民没有血债字段）。modDay / 波次 / 上次触发日 / 进行中状态**全部原样保留**；
      * 不取消波次、不清僵尸。需要清除尸潮与僵尸请使用 {@code /zombietide debug clear}。
      */
-    private static int reset(CommandSourceStack source, Collection<? extends ServerPlayer> targets) {
+    private static int reset(CommandSourceStack source, Collection<? extends ServerPlayer> targets) throws CommandSyntaxException {
         int successCount = 0;
         for (ServerPlayer player : targets) {
             // 只把血债归零，其它字段（波次/触发日/进行中状态）原样保留
