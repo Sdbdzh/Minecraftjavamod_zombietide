@@ -23,6 +23,11 @@ neoForge {
         server {
             server()
             programArgument '--nogui'
+            // Java 21 在 Windows 上 stdout.encoding 默认取 native.encoding(GBK)，
+            // 与 UTF-8 终端（Windows Terminal / VS Code）不一致导致中文乱码。
+            // 这里强制 UTF-8，配合 run-server.bat 的 chcp 65001 使用。
+            jvmArgument '-Dstdout.encoding=UTF-8'
+            jvmArgument '-Dstderr.encoding=UTF-8'
         }
         data {
             data()
