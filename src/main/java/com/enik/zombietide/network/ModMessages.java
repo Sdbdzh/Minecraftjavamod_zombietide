@@ -66,7 +66,10 @@ public class ModMessages {
     public static final ResourceLocation PLAYER_MOD_DAY_ID = ResourceLocation.fromNamespaceAndPath(
             "enik_zombietide", "player_mod_day");
 
-    public record PlayerModDayPayload(UUID playerUuid, int modDay, boolean canTriggerHorde, boolean hordeDay) implements CustomPacketPayload {
+    /** 玩家 HUD 状态同步。字段与 /zombietide debug info 的「玩家尸潮」区保持一致：
+     *  modDay / 是否尸潮日 / 是否进行中 / 血债（客户端无 attachment 与 SavedData，必须由服务端下发）。 */
+    public record PlayerModDayPayload(UUID playerUuid, int modDay, boolean hordeDay,
+                                      boolean waveActive, int bloodDebt) implements CustomPacketPayload {
         public static final Type<PlayerModDayPayload> TYPE = new Type<>(PLAYER_MOD_DAY_ID);
 
         public static final StreamCodec<FriendlyByteBuf, PlayerModDayPayload> STREAM_CODEC = new StreamCodec<>() {
@@ -74,17 +77,19 @@ public class ModMessages {
             public void encode(FriendlyByteBuf buf, PlayerModDayPayload payload) {
                 buf.writeUUID(payload.playerUuid);
                 buf.writeInt(payload.modDay);
-                buf.writeBoolean(payload.canTriggerHorde);
                 buf.writeBoolean(payload.hordeDay);
+                buf.writeBoolean(payload.waveActive);
+                buf.writeInt(payload.bloodDebt);
             }
 
             @Override
             public PlayerModDayPayload decode(FriendlyByteBuf buf) {
                 UUID uuid = buf.readUUID();
                 int modDay = buf.readInt();
-                boolean canTrigger = buf.readBoolean();
                 boolean hordeDay = buf.readBoolean();
-                return new PlayerModDayPayload(uuid, modDay, canTrigger, hordeDay);
+                boolean waveActive = buf.readBoolean();
+                int bloodDebt = buf.readInt();
+                return new PlayerModDayPayload(uuid, modDay, hordeDay, waveActive, bloodDebt);
             }
         };
 
@@ -404,7 +409,7 @@ public class ModMessages {
                 .playToClient(PlayerModDayPayload.TYPE, PlayerModDayPayload.STREAM_CODEC,
                         (payload, context) -> {
                             context.enqueueWork(() -> {
-                                ZombietideHud.onModDayReceived(payload.playerUuid(), payload.modDay(), payload.canTriggerHorde(), payload.hordeDay());
+                                ZombietideHud.onModDayReceived(payload.playerUuid(), payload.modDay(), payload.hordeDay(), payload.waveActive(), payload.bloodDebt());
                             });
                         })
                 // 服务端 -> 客户端：村民模组天数同步
@@ -454,8 +459,8 @@ public class ModMessages {
     }
 
     /** 发送玩家模组天数给特定玩家 */
-    public static void sendModDay(ServerPlayer player, int modDay, boolean canTriggerHorde, boolean hordeDay) {
-        PacketDistributor.sendToPlayer(player, new PlayerModDayPayload(player.getUUID(), modDay, canTriggerHorde, hordeDay));
+    public static void sendModDay(ServerPlayer player, int modDay, boolean hordeDay, boolean waveActive, int bloodDebt) {
+        PacketDistributor.sendToPlayer(player, new PlayerModDayPayload(player.getUUID(), modDay, hordeDay, waveActive, bloodDebt));
     }
 
     /** 发送村民模组天数给特定玩家（用于 HUD 显示附近村民） */

@@ -43,6 +43,9 @@ public class HordeTimer {
     /** 跨天残留尸潮对账计时（每 40 tick = 2 秒一次） */
     private static int reconcileTick = 0;
 
+    /** HUD 玩家状态定期同步计数器（每 20 tick = 1 秒刷新一次 waveActive / 血债） */
+    private static int hudSyncTick = 0;
+
     /** 每 tick 调用，推进所有玩家和村民的模组天数，检测尸潮触发
      * @param level 触发 tick 的世界（可能是任意维度）
      * @param config 当前配置
@@ -146,7 +149,32 @@ public class HordeTimer {
             HordeSpawner.reconcileStaleWaves(overworld, config);
         }
 
+        // ⑧ HUD 玩家状态定期同步：waveActive 与血债会随触发/结算实时变化，
+        //    只在跨天和登录时同步会让右上角面板一直显示旧值。1 秒一次，包极小。
+        hudSyncTick++;
+        if (hudSyncTick >= 20) {
+            hudSyncTick = 0;
+            if (server != null) {
+                for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+                    syncPlayerHudState(overworld, config, p);
+                }
+            }
+        }
+
         lastDayTime = dayTime;
+    }
+
+    /**
+     * 把单个玩家的 HUD 状态同步给客户端：modDay / 是否尸潮日 / 是否进行中 / 血债。
+     * <p>客户端没有 ModAttachments 与 SavedData，这四个值只能由服务端下发；
+     * 字段与 {@code /zombietide debug info} 的「玩家尸潮」区一致。
+     */
+    public static void syncPlayerHudState(ServerLevel overworld, ZombietideConfig config, ServerPlayer player) {
+        var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
+        int debt = com.enik.zombietide.config.PlayerDebtData.get(overworld).getDebt(player.getUUID());
+        ModMessages.sendModDay(player, data.modDay(),
+                isHordeDay(player.getUUID(), data.modDay(), data.lastTriggerDay(), config, false),
+                data.waveActive(), debt);
     }
 
     /** 推进所有在线玩家和所有村民的模组天数（modDay 直接等于主世界游戏日）
@@ -169,11 +197,8 @@ public class HordeTimer {
                                 data.waveCount(), data.waveActive()
                         ));
 
-                // 同步给客户端（含 canTriggerHorde）
-                boolean canTrigger = player.level().dimension() == Level.OVERWORLD
-                        && player.serverLevel().getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL;
-                ModMessages.sendModDay(player, newModDay, canTrigger,
-                        isHordeDay(player.getUUID(), newModDay, data.lastTriggerDay(), config, false));
+                // 同步给客户端（字段与 debug info 一致）
+                syncPlayerHudState(overworld, config, player);
             }
         }
 

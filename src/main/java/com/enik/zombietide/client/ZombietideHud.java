@@ -35,8 +35,10 @@ public class ZombietideHud {
 
     /** 服务端同步的玩家模组天数（UUID -> modDay） */
     private static final Map<UUID, Integer> syncedModDays = new HashMap<>();
-    /** 服务端同步的玩家是否可触发尸潮（主世界+非和平） */
-    private static final Map<UUID, Boolean> syncedCanTrigger = new HashMap<>();
+    /** 服务端同步的玩家尸潮是否进行中（对应 PlayerHordeData.waveActive） */
+    private static final Map<UUID, Boolean> syncedWaveActive = new HashMap<>();
+    /** 服务端同步的玩家血债（PlayerDebtData.getDebt） */
+    private static final Map<UUID, Integer> syncedDebt = new HashMap<>();
     /** 服务端算好的「今天是否为该玩家的尸潮日」（支持固定/随机间隔） */
     private static final Map<UUID, Boolean> syncedHordeDay = new HashMap<>();
     /** 服务端同步的村民模组天数（UUID -> modDay；用于 HUD 附近村民显示） */
@@ -66,10 +68,11 @@ public class ZombietideHud {
     }
 
     /** 接收服务端同步的玩家模组天数（PlayerModDayPayload） */
-    public static void onModDayReceived(UUID playerUuid, int modDay, boolean canTriggerHorde, boolean hordeDay) {
+    public static void onModDayReceived(UUID playerUuid, int modDay, boolean hordeDay, boolean waveActive, int bloodDebt) {
         syncedModDays.put(playerUuid, modDay);
-        syncedCanTrigger.put(playerUuid, canTriggerHorde);
         syncedHordeDay.put(playerUuid, hordeDay);
+        syncedWaveActive.put(playerUuid, waveActive);
+        syncedDebt.put(playerUuid, bloodDebt);
     }
 
     /** 接收服务端同步的村民模组天数（VillagerModDayPayload） */
@@ -313,37 +316,37 @@ public class ZombietideHud {
                 + " §e全局上限: §f" + config.globalCap(), startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
 
-        // --- 玩家实时状态 ---
+        // --- 玩家尸潮（字段与 /zombietide debug info 的「玩家尸潮」区一致）---
         Integer syncedModDay = syncedModDays.get(playerUuid);
-        Integer pModDay = syncedModDay != null ? syncedModDay : modDay;
-        Boolean canTrigger = syncedCanTrigger.get(playerUuid);
-        int playerInterval = config.playerIntervalDays();
-        // 与主 HUD 一致：用服务端同步的权威值，不自行推算（随机间隔下固定公式会错）
+        int pModDay = syncedModDay != null ? syncedModDay : modDay;
+        // 用服务端同步的权威值，不自行推算（随机间隔下固定公式会错）
         boolean playerHordeDay = Boolean.TRUE.equals(syncedHordeDay.get(playerUuid));
+        boolean playerWaveActive = Boolean.TRUE.equals(syncedWaveActive.get(playerUuid));
+        int playerDebt = syncedDebt.getOrDefault(playerUuid, 0);
 
-        guiGraphics.drawString(minecraft.font, "§b--- 玩家 ---", startX, startY + lineCount * lineHeight, 0xFFFFFF);
+        guiGraphics.drawString(minecraft.font, "§b--- 玩家尸潮 ---", startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
-        guiGraphics.drawString(minecraft.font, "§e玩家: §f" + player.getScoreboardName()
+        guiGraphics.drawString(minecraft.font, "§e玩家名: §f" + player.getScoreboardName()
                 + " §eUUID: §f" + player.getStringUUID(), startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
-        // 客户端没有 ModAttachments，从 syncedModDays 获取基础信息
-        guiGraphics.drawString(minecraft.font, "§eModDay: §fDAY " + pModDay
+        guiGraphics.drawString(minecraft.font, "§eModDay: §f" + pModDay + "天"
                 + (playerHordeDay ? " §c§l←尸潮日" : "")
                 + " §e间隔: §f" + intervalText(config, false)
-                + " §e可触发: §f" + (Boolean.TRUE.equals(canTrigger) ? "§a是" : "§c否"), startX, startY + lineCount * lineHeight, 0xFFFFFF);
+                + " §e血债: §f" + playerDebt
+                + " §e进行中: §f" + (playerWaveActive ? "§a是" : "§c否"), startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
 
-        // --- 村民实时状态（附近 128 格） ---
-        guiGraphics.drawString(minecraft.font, "§b--- 附近村民 ---", startX, startY + lineCount * lineHeight, 0xFFFFFF);
+        // --- 村民尸潮（字段与 debug info 的「村民尸潮」区一致，每个村民两行）---
+        guiGraphics.drawString(minecraft.font, "§b--- 村民尸潮 ---", startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
 
         double playerX = player.getX(), playerY = player.getY(), playerZ = player.getZ();
         double maxDistSqr = 128.0 * 128.0;
         int villagerShown = 0;
-        int villagerInterval = config.villagerIntervalDays();
+        int maxLines = (minecraft.getWindow().getGuiScaledHeight() - startY) / lineHeight;
 
         for (var entry : villagerModDays.entrySet()) {
-            if (villagerShown >= 5) break; // 最多显示 5 个
+            if (lineCount + 2 > maxLines) break; // 每个村民占两行，超出屏幕高度就停
             double[] pos = villagerPos.get(entry.getKey());
             if (pos == null) continue;
             double dx = pos[0] - playerX, dy = pos[1] - playerY, dz = pos[2] - playerZ;
@@ -352,23 +355,28 @@ public class ZombietideHud {
             int vModDay = entry.getValue();
             String prof = villagerProfessions.getOrDefault(entry.getKey(), "村民");
             boolean vHordeDay = Boolean.TRUE.equals(villagerHordeDayMap.get(entry.getKey()));
-            int dist = (int) Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz));
+            boolean vWaveActive = villagerWaveActive.getOrDefault(entry.getKey(), false);
 
-            guiGraphics.drawString(minecraft.font, "§e" + prof + " §fDAY " + vModDay
+            guiGraphics.drawString(minecraft.font, "§e职业名: §f" + prof
+                    + " §eUUID: §f" + entry.getKey()
+                    + " §e坐标: §f" + (int) Math.floor(pos[0]) + "," + (int) Math.floor(pos[1]) + "," + (int) Math.floor(pos[2]),
+                    startX, startY + lineCount * lineHeight, 0xFFFFFF);
+            lineCount++;
+            guiGraphics.drawString(minecraft.font, "§eModDay: §f" + vModDay + "天"
                     + (vHordeDay ? " §c§l←尸潮日" : "")
-                    + " §e距离: §f" + dist + "格"
                     + " §e间隔: §f" + intervalText(config, true)
-                    + " §e进行中: §f" + (villagerWaveActive.getOrDefault(entry.getKey(), false) ? "§c是" : "§a否"), startX, startY + lineCount * lineHeight, 0xFFFFFF);
+                    + " §e进行中: §f" + (vWaveActive ? "§a是" : "§c否"),
+                    startX, startY + lineCount * lineHeight, 0xFFFFFF);
             lineCount++;
             villagerShown++;
         }
         if (villagerShown == 0) {
-            guiGraphics.drawString(minecraft.font, "§7(附近 128 格内无村民)", startX, startY + lineCount * lineHeight, 0xFFFFFF);
+            guiGraphics.drawString(minecraft.font, "§7(当前世界无村民)", startX, startY + lineCount * lineHeight, 0xFFFFFF);
             lineCount++;
         }
 
         // --- 全局统计 ---
-        guiGraphics.drawString(minecraft.font, "§b--- 全局 ---", startX, startY + lineCount * lineHeight, 0xFFFFFF);
+        guiGraphics.drawString(minecraft.font, "§b--- 全局统计 ---", startX, startY + lineCount * lineHeight, 0xFFFFFF);
         lineCount++;
         guiGraphics.drawString(minecraft.font, "§e全局上限: §f" + config.globalCap() + " 只"
                 + " §e血债上限: §f" + config.debtCap() + " 只"

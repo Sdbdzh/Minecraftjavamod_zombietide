@@ -94,12 +94,8 @@ public class ZombietideServerEvents {
         EnikZombietide.LOGGER.info("  村民显示距离: {}, 最大显示数: {}", 
             config.villagerHordeDisplayRange(), config.villagerHordeMaxEntries());
         
-        // 同步玩家模组天数
-        var playerData = ModAttachments.getPlayerHordeData(player);
-        boolean canTrigger = player.level().dimension() == net.minecraft.world.level.Level.OVERWORLD
-                && player.serverLevel().getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL;
-        ModMessages.sendModDay(player, playerData.modDay(), canTrigger,
-                HordeTimer.isHordeDay(player.getUUID(), playerData.modDay(), playerData.lastTriggerDay(), config, false));
+        // 同步玩家 HUD 状态（modDay / 尸潮日 / 进行中 / 血债）
+        HordeTimer.syncPlayerHudState(level, config, player);
         // 登录时对账一次：立即结束跨天残留的尸潮（避免白天加载存档后状态卡住）
         HordeSpawner.reconcileStaleWaves(level, config);
         // 【BUG3 修复】同步附近村民的模组天数给新登录玩家，确保 HUD 立即显示实时村民状态
