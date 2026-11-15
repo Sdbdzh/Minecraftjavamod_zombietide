@@ -244,6 +244,20 @@ public class HordeSpawner {
                     continue;
                 }
 
+                // 【兜底】已进入四散窗口：本波不再生成。
+                // scatterZombies 每日只跑一次，若它已执行过，本函数不应再产出新僵尸
+                // （新僵尸不会被四散清除，会活到白天并被次日黎明二次计入血债）。
+                long phaseNow = level.getDayTime() % 24000L;
+                if (phaseNow >= 23460L - config.despawnSeconds() * 20L) {
+                    activeHordes.remove(targetId);
+                    spawnedCount.remove(targetId);
+                    totalCount.remove(targetId);
+                    batchTimer.remove(targetId);
+                    com.enik.zombietide.config.HordeProgressData.get(level).remove(targetId);
+                    EnikZombietide.LOGGER.info("尸潮 {} 处于四散窗口，停止生成并作废剩余批次", targetId);
+                    continue;
+                }
+
                 // 批次计时
                 Integer timer = batchTimer.get(targetId);
                 if (timer != null && timer > 0) {
@@ -570,6 +584,25 @@ public class HordeSpawner {
         if (dayPhase < scatterStartTick) return;
 
         EnikZombietide.LOGGER.info("尸潮僵尸开始四散：日出前 {} 秒，太阳即将直射", config.despawnSeconds());
+
+        // 【停止刷怪】四散开始后不得再生成新批次。scatterZombies 每游戏日只执行一次
+        // （HordeTimer 的 lastScatterDay 去重），错过本次快照的僵尸会在四散之后才出现：
+        //   1) state=0，不在 scatteringZombies 里 —— 23460 起火时刻不会被清除；
+        //   2) 却被 settleDebtAtBurnTime 的存活统计计入血债；
+        //   3) 若活到次日黎明，onDawn 会按新的一天再结算一次（cumulative 模式重复计债）；
+        //   4) 白天继续锁定追击玩家。
+        // 因此这里直接作废所有进行中波次的剩余量。
+        if (!activeHordes.isEmpty()) {
+            var progressData = com.enik.zombietide.config.HordeProgressData.get(level);
+            for (UUID targetId : new java.util.ArrayList<>(activeHordes.keySet())) {
+                int left = activeHordes.getOrDefault(targetId, 0);
+                if (left > 0) {
+                    EnikZombietide.LOGGER.info("尸潮 {} 四散开始，作废剩余 {} 只未生成批次（不再刷出）", targetId, left);
+                }
+                clearInternalState(level, targetId);
+                progressData.remove(targetId);
+            }
+        }
 
         // 仅遍历尸潮僵尸 UUID 集合，避免每 tick 全实体扫描（O(P×V) → O(尸潮僵尸数)）
         java.util.List<UUID> toProcess = new java.util.ArrayList<>(hordeZombieUuids);

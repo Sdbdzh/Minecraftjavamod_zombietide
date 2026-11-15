@@ -344,12 +344,14 @@ public class ZombietideCommands {
             throw NEED_PLAYER.create();
         }
         OVERLAY_STATE.put(player.getUUID(), enable);
-        ZombietideConfig config = ConfigManager.getConfigData(overworld(source)).getConfig();
-        if (enable && !config.hud().hudEnabled()) {
-            source.sendSuccess(() -> Component.literal("§e注意：HUD 总开关当前为「关闭」，面板不会显示——请先在设置界面开启 HUD。")
-                    .withStyle(ChatFormatting.YELLOW), false);
-        }
+        // 注意：不能读服务端 HudConfig.hudEnabled 判断——面板渲染门控在客户端，
+        // 用的是本机全局配置 ClientHudConfig（config/enik_zombietide-hud.properties），
+        // 服务端读不到，也从未有界面入口修改服务端那份。这里只给中性提示。
         ModMessages.sendInfoOverlay(player, enable);
+        if (enable) {
+            source.sendSuccess(() -> Component.literal("§7若面板未显示，请检查本机 设置 → HUD 页签的「HUD 总开关」。")
+                    .withStyle(ChatFormatting.GRAY), false);
+        }
         source.sendSuccess(() -> Component.literal("§a模组信息面板已" + (enable ? "§l开启" : "§l关闭")
                 + "§r§7（再次执行 /zombietide overlay 切换；客户端重启后需重新执行）"), false);
         com.enik.zombietide.EnikZombietide.LOGGER.info("玩家 {} 通过命令{}模组信息面板（右上角）", player.getScoreboardName(), enable ? "开启" : "关闭");
