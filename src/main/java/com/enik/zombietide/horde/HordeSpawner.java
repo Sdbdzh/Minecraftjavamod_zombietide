@@ -677,7 +677,8 @@ public class HordeSpawner {
             }
         }
 
-        // 【t37 修复】四散开始时（本方法即 23260 的调用点）重置目标 waveActive=false，避免 debug info 始终显示“进行中”
+        // 【t37 修复】四散开始时重置目标 waveActive=false，避免 debug info 始终显示“进行中”。
+        // 调用时刻不是固定的 23260：由 HordeTimer 按 `23460 - despawnSeconds*20` 触发（默认 10 秒 → 23260）。
         for (UUID targetId : scatterTargets) {
             var target = findTarget(level, targetId);
             if (target instanceof ServerPlayer player) {
@@ -1200,11 +1201,12 @@ public class HordeSpawner {
         }
     }
 
-    /** 统计当前存活的尸潮僵尸数（用于全局上限协调） */
     /**
      * 统计当前世界存活的尸潮僵尸数（按 NBT 标记扫描实体）。
      * <p>与 {@code /zombietide debug info} 的「全局统计」同源，保证 HUD 面板与命令输出一致。
      * 不走 {@code hordeZombieUuids}，因为该集合在重启后可能不完整。
+     * <p><b>注意</b>：刷怪的「全局上限协调」用的是 {@link #countHordeZombies}（遍历 UUID 集合、O(尸潮僵尸数)），
+     * 不是本方法——本方法要扫全实体表，只用于玩家可见的统计显示。
      */
     public static int countAliveHordeZombies(ServerLevel level) {
         int count = 0;
@@ -1438,7 +1440,7 @@ public class HordeSpawner {
      * <p>{@code ServerLevel.getEntity} 的 UUID 索引对已加载村民不可靠（见 {@link #buildLoadedVillagerMap}），
      * 因此未命中时兜底遍历实体表，避免村民目标被误判为「已消失」。
      */
-    private static net.minecraft.world.entity.Entity findTarget(ServerLevel level, UUID id) {
+    public static net.minecraft.world.entity.Entity findTarget(ServerLevel level, UUID id) {
         var entity = level.getEntity(id);
         if (entity != null) return entity;
         for (var e : level.getEntities().getAll()) {
@@ -1578,8 +1580,8 @@ public class HordeSpawner {
             VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(
                     VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
             if (schedule.getAllSchedules().containsKey(targetId)) {
-                VillagerScheduleData.ScheduleEntry sched = schedule.get(targetId);
-                if (sched.waveActive()) {
+                VillagerScheduleData.ScheduleEntry sched = schedule.getScheduleOrNull(targetId);
+                if (sched != null && sched.waveActive()) {
                     schedule.put(targetId, new VillagerScheduleData.ScheduleEntry(
                             sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false));
                 }
@@ -1656,6 +1658,8 @@ public class HordeSpawner {
         if (level != null) {
             com.enik.zombietide.config.PlayerDebtData.get(level).clearAll();
             com.enik.zombietide.config.HordeProgressData.get(level).clearAll();
+            // debug clear 是「全清」语义：连 BGM 调度也一起重置，避免清完后残留播放计划
+            HordeBgmScheduler.reset();
         }
 
         EnikZombietide.LOGGER.info("已清空所有活跃尸潮并重置所有目标 waveActive/lastTriggerDay（可重新触发）");

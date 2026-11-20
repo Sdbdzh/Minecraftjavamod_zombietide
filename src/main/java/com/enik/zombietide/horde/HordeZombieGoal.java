@@ -106,11 +106,21 @@ public class HordeZombieGoal extends Goal {
             mob.setLastHurtByMob(null);
             mob.setLastHurtByPlayer(null);
 
-            // 导航未完成时让当前逃跑路径继续走完，避免每 tick 重设路径导致抖动/卡停
+            // 导航未完成时让当前逃跑路径继续走完，避免每 tick 重设路径导致抖动/卡停。
+            // 但途中新出现的威胁必须能被感知：每 THREAT_RESCAN_INTERVAL tick 重扫一次，
+            // 只有真的存在威胁才打断当前路径重选。
             Path current = mob.getNavigation().getPath();
-            if (current != null && !current.isDone()) {
-                return;
+            boolean moving = current != null && !current.isDone();
+            if (moving) {
+                if (++rescanTimer < THREAT_RESCAN_INTERVAL) {
+                    return;
+                }
+                rescanTimer = 0;
+                if (!hasNearbyThreat()) {
+                    return;
+                }
             }
+            rescanTimer = 0;
 
             LivingEntity mainTarget = findTarget();
             pickFleeDestination(mainTarget);
@@ -171,13 +181,18 @@ public class HordeZombieGoal extends Goal {
         return path != null && !path.isDone();
     }
 
-    /** 查找主目标实体（玩家或村民），存活才返回；找不到返回 null */
+    /**
+     * 查找主目标实体（玩家或村民），存活才返回；找不到返回 null。
+     * <p>服务端统一走 {@link HordeSpawner#findTarget}——它自带「getEntity 未命中就遍历实体表」的兜底，
+     * 因为 {@code ServerLevel.getEntity} 的 UUID 索引对<b>已加载村民</b>不可靠。这里若裸查 getEntity，
+     * 村民尸潮的僵尸会随机认为目标已消失而 stop()，而 apply() 已移除原版索敌 Goal → 彻底无目标。
+     */
     private LivingEntity findTarget() {
         if (targetUUID == null) return null;
 
-        Entity entity = null;
+        Entity entity;
         if (mob.level() instanceof ServerLevel serverLevel) {
-            entity = serverLevel.getEntity(targetUUID);
+            entity = HordeSpawner.findTarget(serverLevel, targetUUID);
         } else {
             entity = mob.level().getPlayerByUUID(targetUUID);
         }
@@ -196,8 +211,35 @@ public class HordeZombieGoal extends Goal {
     private static final double FLEE_DISTANCE = 48.0;
     /** 威胁实体（玩家/村民/铁傀儡）规避半径 */
     private static final double THREAT_AVOID_RADIUS = 12.0;
-    /** 每 tick 威胁实体扫描的最大数量（性能上限，超出部分忽略） */
+    /** 单次评估最多收集的威胁实体数（AABB 只取 12 格内，超出部分忽略） */
     private static final int MAX_THREAT_SCAN = 16;
+    /**
+     * 逃跑路径行进中的威胁重扫间隔（tick）。
+     * <p>路径未完成时不能每 tick 重选（会抖动/卡停），但也不能完全不看——
+     * 否则途中新出现的威胁永远感知不到。折中：每 10 tick（0.5 秒）重扫一次，
+     * <b>只有确实存在威胁才打断当前路径</b>，无威胁则继续走完。
+     */
+    private static final int THREAT_RESCAN_INTERVAL = 10;
+    /** 重扫计时器 */
+    private int rescanTimer = 0;
+
+    /**
+     * 12 格内是否存在威胁实体（玩家 / 村民 / 铁傀儡，排除创造与旁观玩家）。
+     * <p>用 AABB 范围查询（{@code getEntitiesOfClass}）而非遍历全实体表，成本 O(附近实体数)。
+     * 供「路径行进中定期重扫」判断是否需要打断当前路径。
+     */
+    private boolean hasNearbyThreat() {
+        if (!(mob.level() instanceof ServerLevel sl)) return false;
+        var box = mob.getBoundingBox().inflate(THREAT_AVOID_RADIUS);
+        for (LivingEntity le : sl.getEntitiesOfClass(LivingEntity.class, box)) {
+            if (!le.isAlive()) continue;
+            if (le instanceof ServerPlayer p && (p.isCreative() || p.isSpectator())) continue;
+            if (le instanceof ServerPlayer || le instanceof Villager || le instanceof IronGolem) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * 选择逃跑目的地：采样 FLEE_DIRECTIONS 个方向，按评分选最优：
@@ -211,22 +253,20 @@ public class HordeZombieGoal extends Goal {
         double mx = mainTarget != null ? mainTarget.getX() : mob.getX();
         double mz = mainTarget != null ? mainTarget.getZ() : mob.getZ();
 
-        // 收集附近威胁实体（玩家/村民/铁傀儡），限量扫描保证性能
-        // 忽略创造/旁观模式玩家
+        // 收集附近威胁实体（玩家/村民/铁傀儡），忽略创造/旁观玩家。
+        // 用 AABB 范围查询而非 getEntities().getAll()：只扫 12 格内，
+        // 成本从 O(全世界实体数) 降到 O(附近实体数)。MAX_THREAT_SCAN 此时才真正起到「收集上限」作用。
         java.util.List<LivingEntity> threats = new java.util.ArrayList<>();
         if (mob.level() instanceof ServerLevel sl) {
-            int scanned = 0;
-            for (var e : sl.getEntities().getAll()) {
-                if (scanned >= MAX_THREAT_SCAN) break;
-                if (!(e instanceof LivingEntity le) || !le.isAlive()) continue;
-                if (e instanceof ServerPlayer player) {
-                    if (player.isCreative() || player.isSpectator() || !player.isAlive()) continue; // 忽略创造/旁观模式
-                }
-                if (e instanceof ServerPlayer || e instanceof Villager || e instanceof IronGolem) {
-                    // 快速距离粗筛（16 格内才算威胁）
+            var box = mob.getBoundingBox().inflate(THREAT_AVOID_RADIUS);
+            for (LivingEntity le : sl.getEntitiesOfClass(LivingEntity.class, box)) {
+                if (threats.size() >= MAX_THREAT_SCAN) break;
+                if (!le.isAlive()) continue;
+                if (le instanceof ServerPlayer p && (p.isCreative() || p.isSpectator())) continue;
+                if (le instanceof ServerPlayer || le instanceof Villager || le instanceof IronGolem) {
+                    // AABB 是方形范围，再用球形距离精确筛一次
                     if (le.distanceToSqr(mob) <= THREAT_AVOID_RADIUS * THREAT_AVOID_RADIUS) {
                         threats.add(le);
-                        scanned++;
                     }
                 }
             }

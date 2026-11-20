@@ -106,13 +106,11 @@ public class ZombietideHud {
         com.enik.zombietide.EnikZombietide.LOGGER.info("[Zombietide] InfoOverlay received: enabled={}", enabled);
     }
 
-    /** 广播批次标记：用于客户端清理不在本批次里的村民（死掉/超出范围的） */
-    private static int currentBroadcastBatch = 0;
+    /** 本批次收到过数据的村民（广播结束时据此清理死掉/超出范围的条目） */
     private static final Set<UUID> thisBatchVillagers = ConcurrentHashMap.newKeySet();
 
     /** 广播开始标记（服务端每批次调用一次） */
     public static void onVillagerBroadcastStart() {
-        currentBroadcastBatch++;
         thisBatchVillagers.clear();
     }
 
@@ -283,7 +281,6 @@ public class ZombietideHud {
         }
     }
 
-    /** 绘制 mod info 常驻屏幕信息（右上角，实时刷新，内容同 debug info） */
     /** 间隔显示文本：固定显示「N天」，随机显示「min~max天(随机)」 */
     private static String intervalText(ZombietideConfig config, boolean isVillager) {
         boolean random = isVillager ? config.villagerIntervalRandom() : config.playerIntervalRandom();
@@ -295,6 +292,7 @@ public class ZombietideHud {
         return min + "~" + max + "天(随机)";
     }
 
+    /** 绘制 mod info 常驻屏幕信息（右上角，实时刷新，内容与 debug info 逐区对应） */
     private static void drawModInfoOverlay(GuiGraphics guiGraphics, Minecraft minecraft, ZombietideConfig config, int modDay) {
         // 必须用 GUI 缩放后的宽度：drawString 用的是 GUI 坐标，用物理像素宽度会把面板推到屏幕外。
         // 宽度取 360：配置摘要在「随机间隔」模式下（如 5~9天(随机)）文字最宽，280 会被右侧裁掉。

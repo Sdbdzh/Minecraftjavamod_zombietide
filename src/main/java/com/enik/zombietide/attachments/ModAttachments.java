@@ -11,8 +11,10 @@ import net.minecraft.world.entity.Entity;
 
 /**
  * Data Attachment 注册表。
- * - PLAYER_HORDE：挂在玩家实体上，记录模组天数、血债等，随玩家存档。
- * - VILLAGER_HORDE：挂在村民实体上，记录每个村民独立的模组天数，随村民区块保存。
+ * - PLAYER_HORDE：挂在玩家实体上，记录模组天数 / 上次触发日 / 波次数 / 是否进行中，随玩家存档。
+ *   <b>不含血债</b>——血债自 v0.1.35 起迁至世界级 {@code PlayerDebtData}（SavedData）。
+ * - VILLAGER_HORDE：挂在村民实体上，记录每个村民独立的模组天数，随村民区块保存；
+ *   权威数据源是 {@code VillagerScheduleData}，本附件只是运行时镜像。
  */
 public class ModAttachments {
 

@@ -103,17 +103,25 @@ public class ZombietideServerEvents {
         HordeTimer.syncPlayerHudState(level, config, player);
         // 登录时对账一次：立即结束跨天残留的尸潮（避免白天加载存档后状态卡住）
         HordeSpawner.reconcileStaleWaves(level, config);
-        // 【BUG3 修复】同步附近村民的模组天数给新登录玩家，确保 HUD 立即显示实时村民状态
+        // 【BUG3 修复】同步附近村民的模组天数给新登录玩家，确保 HUD 立即显示实时村民状态。
+        // 数据源与周期广播保持一致：优先读 VillagerScheduleData（权威），附件只是运行时镜像；
+        // 只在调度表缺条目时回退附件，避免两处读不同来源导致 HUD 数值打架。
+        VillagerScheduleData joinSchedule = level.getDataStorage().computeIfAbsent(
+                VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
         for (var entity : level.getEntities().getAll()) {
             if (entity instanceof net.minecraft.world.entity.npc.Villager villager) {
                 if (player.distanceToSqr(villager) <= 128.0 * 128.0) {
-                    var vData = ModAttachments.getVillagerHordeData(villager);
+                    var sched = joinSchedule.getScheduleOrNull(villager.getUUID());
+                    var fallback = ModAttachments.getVillagerHordeData(villager);
+                    int vModDay = sched != null ? sched.modDay() : fallback.modDay();
+                    int vLastTrigger = sched != null ? sched.lastTriggerDay() : fallback.lastTriggerDay();
+                    boolean vActive = sched != null ? sched.waveActive() : fallback.waveActive();
                     ModMessages.sendVillagerModDay(player, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager),
-                            vData.modDay(),
+                            vModDay,
                             villager.getX(), villager.getY(), villager.getZ(),
-                            vData.waveActive(),
-                            HordeTimer.isHordeDay(villager.getUUID(), vData.modDay(), vData.lastTriggerDay(), config, true));
+                            vActive,
+                            HordeTimer.isHordeDay(villager.getUUID(), vModDay, vLastTrigger, config, true));
                 }
             }
         }
@@ -152,7 +160,8 @@ public class ZombietideServerEvents {
             // 村民加载时：从调度表恢复数据，并把 modDay 对齐为当前游戏日（modDay = gameDay 铁律）
             VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(
                     VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
-            VillagerScheduleData.ScheduleEntry sched = schedule.get(villager.getUUID());
+            // touch 同时刷新 lastSeenDay（村民确实加载了），供调度表陈旧条目清理使用
+            VillagerScheduleData.ScheduleEntry sched = schedule.touch(villager.getUUID(), currentWorldDay);
             if (sched.modDay() != currentWorldDay) {
                 // 调度表滞后（区块长时间未加载）→ 同步为当前 gameDay
                 sched = new VillagerScheduleData.ScheduleEntry(

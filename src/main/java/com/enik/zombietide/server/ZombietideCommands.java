@@ -54,7 +54,7 @@ public class ZombietideCommands {
                         .executes(ctx -> status(ctx.getSource()))
                         .then(Commands.argument("targets", EntityArgument.entities())
                                 .executes(ctx -> status(ctx.getSource(), EntityArgument.getEntities(ctx, "targets")))))
-                // trigger（无参：玩家=自己，控制台=所有在线玩家）
+                // trigger（无参：玩家执行=对自己；控制台执行抛 NEED_TARGET，必须显式指定目标）
                 .then(Commands.literal("trigger")
                         .executes(ctx -> trigger(ctx.getSource(), defaultTargets(ctx.getSource())))
                         .then(Commands.argument("targets", EntityArgument.entities())
@@ -73,7 +73,6 @@ public class ZombietideCommands {
                         .then(Commands.literal("glow")
                                 .then(Commands.argument("targets", EntityArgument.entities())
                                         .executes(ctx -> debugGlow(ctx.getSource(), EntityArgument.getEntities(ctx, "targets"))))))
-                // overlay：右上角 mod 信息常驻面板（纯客户端渲染，仅玩家可执行）
                 // overlay：右上角 mod 信息常驻面板，执行一次开启、再执行一次关闭（纯客户端渲染，仅玩家）
                 .then(Commands.literal("overlay")
                         .executes(ctx -> overlayToggle(ctx.getSource())))
@@ -86,12 +85,6 @@ public class ZombietideCommands {
         return ow != null ? ow : source.getLevel();
     }
 
-    /**
-     * 无参命令缺少目标时的报错。
-     * <p>控制台/命令方块没有玩家实体，<b>不能</b>拿「所有在线玩家」当默认值——
-     * {@code trigger} 会给所有人刷尸潮、{@code reset} 会清掉所有人血债，属于危险副作用，
-     * 必须由执行者显式指定目标。只有玩家执行时才默认作用于自己。
-     */
     /**
      * 服务端侧记录每个玩家的面板开关。
      * <p>客户端的 {@code ZombietideHud.infoOverlayEnabled} 是静态字段，服务端无法查询，
@@ -110,6 +103,12 @@ public class ZombietideCommands {
             new com.mojang.brigadier.exceptions.SimpleCommandExceptionType(
                     Component.literal("此命令只能由玩家执行：mod 信息面板是客户端渲染，控制台没有客户端"));
 
+    /**
+     * 无参命令缺少目标时的报错。
+     * <p>控制台/命令方块没有玩家实体，<b>不能</b>拿「所有在线玩家」当默认值——
+     * {@code trigger} 会给所有人刷尸潮、{@code reset} 会清掉所有人血债，属于危险副作用，
+     * 必须由执行者显式指定目标。只有玩家执行时才默认作用于自己。
+     */
     private static final com.mojang.brigadier.exceptions.SimpleCommandExceptionType NEED_TARGET =
             new com.mojang.brigadier.exceptions.SimpleCommandExceptionType(
                     Component.literal("此命令需要指定目标（控制台没有玩家上下文）。"
@@ -329,8 +328,9 @@ public class ZombietideCommands {
      *
      * <p>面板还受 HUD 总开关 {@code hudEnabled} 约束（{@code ZombietideHud.render} 开头就 return），
      * 关闭时给出提示但不阻止命令执行。
+     *
+     * <p><b>本方法为无参入口</b>：按服务端记录的当前状态取反（执行一次开、再执行一次关）。
      */
-    /** 无参：在当前状态上取反 */
     private static int overlayToggle(CommandSourceStack source) throws CommandSyntaxException {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
             throw NEED_PLAYER.create();

@@ -239,6 +239,8 @@ public class HordeTimer {
             // 同步给已加载的村民实体
             Villager villager = loadedVillagers.get(villagerUuid);
             if (villager != null) {
+                // 确实看到实体 → 刷新「最后见到日」，供 pruneStaleEntries 判定陈旧条目
+                schedule.touch(villagerUuid, newModDay);
                 villager.setData(ModAttachments.VILLAGER_HORDE.get(),
                         new VillagerHordeData(
                                 newModDay, oldEntry.lastTriggerDay(), oldEntry.waveCount(),
@@ -246,6 +248,8 @@ public class HordeTimer {
                         ));
             }
         }
+        // 清理长期未见且从未触发过的陈旧条目，避免 SavedData 无界增长（每天一次，单次上限 64）
+        schedule.pruneStaleEntries(currentWorldDay, 30);
         // 推进完立即广播所有村民模组天数，让客户端 HUD 秒刷新（避免等 2 秒周期广播）
         ModMessages.broadcastAllVillagerModDays();
     }

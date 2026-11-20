@@ -66,8 +66,10 @@ public class ModMessages {
     public static final ResourceLocation PLAYER_MOD_DAY_ID = ResourceLocation.fromNamespaceAndPath(
             "enik_zombietide", "player_mod_day");
 
-    /** 玩家 HUD 状态同步。字段与 /zombietide debug info 的「玩家尸潮」区保持一致：
-     *  modDay / 是否尸潮日 / 是否进行中 / 血债（客户端无 attachment 与 SavedData，必须由服务端下发）。 */
+    /** 玩家 HUD 状态同步（共 8 个字段 = playerUuid + 7 项数据）。
+     *  <p>数据字段：modDay / hordeDay（是否尸潮日）/ waveActive（是否进行中）/ bloodDebt（血债）/
+     *  activePlayerHordes / activeVillagerHordes / aliveHordeZombies（后三项为全局统计）。
+     *  <p>客户端没有 attachment 与 SavedData，这些值只能由服务端下发。 */
     public record PlayerModDayPayload(UUID playerUuid, int modDay, boolean hordeDay,
                                       boolean waveActive, int bloodDebt,
                                       int activePlayerHordes, int activeVillagerHordes,
@@ -116,6 +118,9 @@ public class ModMessages {
     public static final ResourceLocation INFO_OVERLAY_ID = ResourceLocation.fromNamespaceAndPath(
             "enik_zombietide", "info_overlay");
 
+    /** 村民职业 registry key 的编解码长度上限（两侧必须一致）。原版最长约 21 字符，64 留足余量 */
+    public static final int MAX_PROFESSION_KEY_LEN = 64;
+
     public record VillagerModDayPayload(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay) implements CustomPacketPayload {
         public static final Type<VillagerModDayPayload> TYPE = new Type<>(VILLAGER_MOD_DAY_ID);
 
@@ -123,7 +128,13 @@ public class ModMessages {
             @Override
             public void encode(FriendlyByteBuf buf, VillagerModDayPayload payload) {
                 buf.writeUUID(payload.villagerUuid);
-                buf.writeUtf(payload.registryKey());
+                // 编解码上限必须一致：解码侧 readUtf(MAX_PROFESSION_KEY_LEN)，
+                // 编码侧若无上限，超长键会在客户端解码时抛 DecoderException。
+                String profKey = payload.registryKey();
+                if (profKey.length() > MAX_PROFESSION_KEY_LEN) {
+                    profKey = profKey.substring(0, MAX_PROFESSION_KEY_LEN);
+                }
+                buf.writeUtf(profKey, MAX_PROFESSION_KEY_LEN);
                 buf.writeInt(payload.modDay());
                 buf.writeDouble(payload.x());
                 buf.writeDouble(payload.y());
@@ -135,7 +146,7 @@ public class ModMessages {
             @Override
             public VillagerModDayPayload decode(FriendlyByteBuf buf) {
                 UUID uuid = buf.readUUID();
-                String registryKey = buf.readUtf(32);
+                String registryKey = buf.readUtf(MAX_PROFESSION_KEY_LEN);
                 int modDay = buf.readInt();
                 double x = buf.readDouble();
                 double y = buf.readDouble();
@@ -539,9 +550,15 @@ public class ModMessages {
         var profession = villager.getVillagerData().getProfession();
         // VillagerProfession 是记录类，toString() 仅返回职业名（如 "librarian"）而不含命名空间。
         // 使用 BuiltInRegistries.VILLAGER_PROFESSION.getKey() 获取完整 registry key（如 "minecraft:librarian"），最稳健可靠
-        String key = net.minecraft.core.registries.BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession).toString();
-        if (key != null && !key.isEmpty()) {
-            return key;
+        // Registry#getKey(T) 标注 @Nullable：必须先判空再 toString()，
+        // 否则未注册职业会先 NPE，下面的兜底分支永远执行不到。
+        net.minecraft.resources.ResourceLocation key =
+                net.minecraft.core.registries.BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession);
+        if (key != null) {
+            String keyStr = key.toString();
+            if (!keyStr.isEmpty()) {
+                return keyStr;
+            }
         }
         // 极少数边界情况：回退到 toString
         String prof = profession.toString();

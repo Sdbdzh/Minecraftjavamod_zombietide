@@ -91,8 +91,8 @@ public final class HordeZombieBehavior {
             mob.goalSelector.addGoal(9, new HordeZombieGoal(mob, targetUUID));
         }
 
-        // 注：日光燃烧开关（config.daylightBurn()）通过 DaylightBurnMixin 覆写 Mob.isSunSensitive()
-        // 实现：仅带 zombietide_horde_target 标记的尸潮僵尸在 daylightBurn=false 时不燃烧；
-        // 自然生成的僵尸/骷髅等仍保持原版燃烧行为。
+        // 注：日光燃烧开关（config.daylightBurn()）由 DaylightBurnMixin 覆写 Zombie / Husk 的
+        // isSunSensitive() 实现。自 v0.1.29 起该开关是**全局**的：daylightBurn=false 时
+        // 所有僵尸（含自然生成）白天都不燃烧，不再只对带 zombietide_horde_target 标记的尸潮僵尸生效。
     }
 }

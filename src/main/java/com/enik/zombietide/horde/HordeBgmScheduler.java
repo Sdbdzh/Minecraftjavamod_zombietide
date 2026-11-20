@@ -86,7 +86,7 @@ public final class HordeBgmScheduler {
         return MIN_INTERVAL_TICKS + RANDOM.nextInt(MAX_INTERVAL_TICKS - MIN_INTERVAL_TICKS + 1);
     }
 
-    /** 服务器关闭 / debug clear 时清空调度状态。 */
+    /** 清空 BGM 调度状态。调用点：服务器启动时（换世界/重启）与 `/zombietide debug clear`。 */
     public static void reset() {
         NEXT_PLAY_TICK.clear();
     }
