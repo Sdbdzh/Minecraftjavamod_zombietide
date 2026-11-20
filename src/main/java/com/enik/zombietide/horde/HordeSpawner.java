@@ -840,148 +840,102 @@ public class HordeSpawner {
     }
 
     /**
-     * 强制让所有尸潮僵尸进入四散状态（用于 /time set day 等时间跳变场景）。
-     * 不受 dayTime 窗口限制，直接处理所有活跃尸潮僵尸。
-     * 四散倒计时精确到 23460（起火时刻），与正常四散同步。
-     * 【R43-012】清理 activeHordes、血债、lastTriggerDay，防止尸潮复活
+     * 强制清除所有尸潮僵尸（用于 `/time set` 跳到白天等时间跳变场景）。
      *
-     * @param level  服务端世界
-     * @param config 配置
+     * <p><b>语义 = 「这一夜结束」</b>：僵尸立即 {@code discard()}、血债归零、波次状态全部重置。
+     *
+     * <p><b>历史</b>（v0.1.50 修正）：本方法原名 {@code forceScatterAll}，会把僵尸标记为四散
+     * （{@code state=1}）并往 {@code scatteringZombies} 写入「距下一个 23460 还有多少 tick」的倒计时。
+     * 但该倒计时<b>从未被消费</b>（{@code update()} 的倒计时块是空块），真正清除只靠
+     * {@code settleDebtAtBurnTime} 在 {@code curPhase >= 23460} 时执行。结果是：跳到白天后僵尸
+     * 要等约 19 分钟才消失（期间继续游荡），而血债在跳变瞬间已清零、19 分钟后又被
+     * {@code markPending -> drainPending} 二次结算。改为直接清除后语义自洽。
      */
-    public static void forceScatterAll(ServerLevel level, ZombietideConfig config) {
-        long dayPhase = level.getDayTime() % 24000;
-        // 精确到 23460 起火时刻
-        int exactDespawnTicks = (int)(23460 - dayPhase);
-        if (exactDespawnTicks < 1) exactDespawnTicks = 1;
+    public static void forceClearAllHordes(ServerLevel level, ZombietideConfig config) {
+        java.util.Set<UUID> targets = new java.util.HashSet<>();
+        int cleared = 0;
 
-        EnikZombietide.LOGGER.info("强制四散所有尸潮僵尸：检测到时间从夜间跳至白天，将在下一个 23460 起火时刻统一清除（约 {} tick）", exactDespawnTicks);
-
-        // 记录每个目标进入四散的僵尸数量（用于正确的聊天提示）
-        java.util.Map<UUID, Integer> scatterCountByTarget = new java.util.HashMap<>();
-
-        // 遍历尸潮僵尸 UUID 集合，避免全实体扫描
-        java.util.List<UUID> toProcess = new java.util.ArrayList<>(hordeZombieUuids);
-        java.util.Set<UUID> scatterTargets = new java.util.HashSet<>();
-        for (UUID zombieUuid : toProcess) {
-            var entity = level.getEntity(zombieUuid);
-            if (!(entity instanceof net.minecraft.world.entity.monster.Zombie ||
-                  entity instanceof net.minecraft.world.entity.monster.ZombieVillager ||
-                  entity instanceof net.minecraft.world.entity.monster.Husk ||
-                  entity instanceof net.minecraft.world.entity.monster.Drowned ||
-                  entity instanceof net.minecraft.world.entity.monster.Stray)) continue;
+        // 直接扫实体表，不依赖 hordeZombieUuids 的准确性：
+        // 凡带尸潮目标标记的僵尸一律清除（Zombie 已覆盖 ZombieVillager/Husk/Drowned，Stray 单独计入）
+        for (net.minecraft.world.entity.Entity entity : level.getEntities().getAll()) {
+            if (!(entity instanceof net.minecraft.world.entity.monster.Zombie
+                    || entity instanceof net.minecraft.world.entity.monster.Stray)) continue;
             CompoundTag tag = entity.getPersistentData();
             if (!tag.hasUUID(HORDE_TARGET_UUID_KEY)) continue;
-            if (!entity.isAlive()) continue;
-            // 已经进入四散状态的僵尸，跳过
-            if (tag.getInt(HORDE_STATE_KEY) == 1) continue;
-
-            UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
-            scatterTargets.add(targetId);
-            if (entity instanceof Mob mob) {
-                mob.setTarget(null); // 清空攻击目标，停止攻击
-            }
-            tag.putInt(HORDE_STATE_KEY, 1); // 标记为四散状态
-            scatteringZombies.put(entity.getUUID(), exactDespawnTicks);
-
-            // 直接设置四散逃跑导航（背向主目标远距离移动）
-            LivingEntity mainTarget = null;
-            var targetEntity = findTarget(level, targetId);
-            if (targetEntity instanceof LivingEntity le) mainTarget = le;
-            if (mainTarget != null && entity instanceof Mob mob) {
-                double fleeX = mob.getX() + (mob.getX() - mainTarget.getX()) * 3.0;
-                double fleeZ = mob.getZ() + (mob.getZ() - mainTarget.getZ()) * 3.0;
-                mob.getNavigation().moveTo(fleeX, mob.getY(), fleeZ, 1.2);
-                // 加一个高优先级逃跑 Goal，持续运行直到 state!=1
-                mob.goalSelector.addGoal(0, new com.enik.zombietide.horde.FleeGoal(mob, mainTarget));
-            }
-
-            EnikZombietide.LOGGER.debug("尸潮僵尸 {} 强制四散，目标={} {} 秒后移除", entity.getUUID(), targetId, config.despawnSeconds());
-            scatterCountByTarget.merge(targetId, 1, Integer::sum);
+            targets.add(tag.getUUID(HORDE_TARGET_UUID_KEY));
+            entity.discard();
+            cleared++;
         }
+        hordeZombieUuids.clear();
+        scatteringZombies.clear();
 
-        // 强制四散同样将目标标记为待血债结算（在 23460 起火时刻按实时存活数结算）
+        // 还要处理「已触发但尚未生成完」的目标
+        targets.addAll(activeHordes.keySet());
+
         com.enik.zombietide.config.PlayerDebtData debtData =
                 com.enik.zombietide.config.PlayerDebtData.get(level);
-        for (UUID targetId : scatterTargets) {
-            if (debtData.isKnown(targetId)) debtData.markPending(targetId);
-        }
+        com.enik.zombietide.config.HordeProgressData progressData =
+                com.enik.zombietide.config.HordeProgressData.get(level);
 
-        // 【R43-012】强制四散时清理 activeHordes、spawnedCount、totalCount、batchTimer
-        // 防止时间跳变后尸潮残留数据导致"复活"
-        // 同时重置目标的 waveActive、血债、lastTriggerDay
-        java.util.Set<UUID> targetsToClean = new java.util.HashSet<>(scatterTargets);
-        // 也要处理 activeHordes 中尚未生成完的目标
-        targetsToClean.addAll(activeHordes.keySet());
-        
-        for (UUID targetId : targetsToClean) {
+        for (UUID targetId : targets) {
             var target = findTarget(level, targetId);
             if (target instanceof ServerPlayer player) {
                 var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
                 if (data.waveActive()) {
-                    // 【R43-012】清理血债和 lastTriggerDay，防止尸潮复活
                     player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                             new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data.modDay(), 0, data.waveCount(), false
-                            ));
-                    com.enik.zombietide.config.PlayerDebtData.get(level).setDebt(targetId, 0);
-                    EnikZombietide.LOGGER.debug("玩家 {} 强制四散清理：waveActive=false, 血债=0, lastTriggerDay=0", targetId);
+                                    data.modDay(), 0, data.waveCount(), false));
                 }
-                // 清理 activeHordes 相关状态
-                activeHordes.remove(targetId);
-                spawnedCount.remove(targetId);
-                totalCount.remove(targetId);
-                batchTimer.remove(targetId);
-                villagerHordeRadii.remove(targetId);
             } else if (target instanceof net.minecraft.world.entity.npc.Villager villager) {
                 var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
                 if (vData.waveActive()) {
                     villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
                             new com.enik.zombietide.attachments.VillagerHordeData(
-                                    vData.modDay(), 0, vData.waveCount(), false
-                            ));
-                    EnikZombietide.LOGGER.debug("村民 {} 强制四散清理：waveActive=false, lastTriggerDay=0", targetId);
+                                    vData.modDay(), 0, vData.waveCount(), false));
                 }
-                // 清理 activeHordes 相关状态
-                activeHordes.remove(targetId);
-                spawnedCount.remove(targetId);
-                totalCount.remove(targetId);
-                batchTimer.remove(targetId);
-                villagerHordeRadii.remove(targetId);
+            }
+            // 血债归零 + 取消待结算：跳变后这一夜视为结束，
+            // 不该在下一个 23460 被 drainPending 再结算一次（否则血债会"反弹"）
+            if (debtData.isKnown(targetId)) {
+                debtData.setDebt(targetId, 0);
+                debtData.clearPending(targetId);
+            }
+            activeHordes.remove(targetId);
+            spawnedCount.remove(targetId);
+            totalCount.remove(targetId);
+            batchTimer.remove(targetId);
+            villagerHordeRadii.remove(targetId);
+            progressData.remove(targetId);
+
+            if (target instanceof ServerPlayer p) {
+                p.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "[尸潮] 时间跳变至白天，本波尸潮已强制结束，血债清零")
+                        .withStyle(net.minecraft.ChatFormatting.GRAY));
             }
         }
-        
-        // t37 块已删除（Issue #8）：上方 targetsToClean 循环已覆盖 scatterTargets 并全部置
-        // waveActive=false，此处再判 waveActive 恒为 false，属死代码。
 
-        // 【关键修复】扫描 VillagerScheduleData，无条件把 waveActive 写回 false（权威数据源）
+        // 调度表 waveActive 无条件写回 false（权威数据源，避免区块重载把 true 抄回附件）
         VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(
                 VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
         for (var entry : schedule.getAllSchedules().entrySet()) {
             UUID villagerUuid = entry.getKey();
             var sched = entry.getValue();
-            if (sched.waveActive()) {
-                // 1) 权威调度表置 false
-                schedule.put(villagerUuid, new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
-                        sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false
-                ));
-                // 2) 若实体已加载，同步重置附件
-                var villagerEntity = findTarget(level, villagerUuid);
-                if (villagerEntity instanceof net.minecraft.world.entity.npc.Villager villager) {
-                    var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
-                    if (vData.waveActive()) {
-                        villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
-                                new com.enik.zombietide.attachments.VillagerHordeData(
-                                        vData.modDay(), vData.lastTriggerDay(), vData.waveCount(), false
-                                ));
-                    }
+            if (!sched.waveActive()) continue;
+            schedule.put(villagerUuid, new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
+                    sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false));
+            var villagerEntity = findTarget(level, villagerUuid);
+            if (villagerEntity instanceof net.minecraft.world.entity.npc.Villager villager) {
+                var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
+                if (vData.waveActive()) {
+                    villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
+                            new com.enik.zombietide.attachments.VillagerHordeData(
+                                    vData.modDay(), vData.lastTriggerDay(), vData.waveCount(), false));
                 }
-                EnikZombietide.LOGGER.debug("村民 {} 强制四散重置 waveActive=false（调度表+附件）", villagerUuid);
             }
         }
 
-        // 【关键修复】强制四散也要发送聊天通知（复用 scatterZombies 的逻辑）
-        // 否则玩家完全不知道僵尸已经四散了
-        notifyScatterTargetsWithCount(level, config, scatterTargets, scatterCountByTarget);
+        EnikZombietide.LOGGER.info("强制清除 {} 只尸潮僵尸（时间跳变至白天），{} 个目标已重置，血债归零、待结算标记已取消",
+                cleared, targets.size());
     }
 
     /**
@@ -1665,8 +1619,9 @@ public class HordeSpawner {
         EnikZombietide.LOGGER.info("已清空所有活跃尸潮并重置所有目标 waveActive/lastTriggerDay（可重新触发）");
     }
 
-    /** 兼容旧调用（无 level 参数） */
+    /** 兼容旧调用（无 level 参数）。带参版本在 level==null 时跳过清理块，故这里单独重置 BGM 调度 */
     public static void clearActiveHordes() {
         clearActiveHordes(null);
+        HordeBgmScheduler.reset();
     }
 }

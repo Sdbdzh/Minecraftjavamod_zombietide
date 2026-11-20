@@ -46,6 +46,14 @@ public class HordeTimer {
     /** HUD 玩家状态定期同步计数器（每 20 tick = 1 秒刷新一次 waveActive / 血债） */
     private static int hudSyncTick = 0;
 
+    /**
+     * 时间跳变超过这么多天时，只推进 modDay、<b>不做</b>尸潮触发补偿。
+     * <p>逐日补偿循环里 {@code lo < winStart && hi > winEnd} 对每个中间日都成立，
+     * 一次跳 38 天会补偿约 5 个尸潮日、每日触发所有村民 + 玩家 → 聊天刷屏 + 服务器卡顿。
+     * 阈值取 3：正常游戏不会跳天，`/time set` 微调几天仍可补偿，跳几十天不应补发。
+     */
+    private static final long MAX_COMPENSATE_DAYS = 3;
+
     /** 每 tick 调用，推进所有玩家和村民的模组天数，检测尸潮触发
      * @param level 触发 tick 的世界（可能是任意维度）
      * @param config 当前配置
@@ -73,10 +81,15 @@ public class HordeTimer {
         long hi = dayTime;
 
         // ========== ① modDay = gameDay（双向同步，核心铁律） ==========
-        // 正向跨天：逐日推进（保证中间天数的尸潮逻辑不漏触发）
+        // 正向小跨度：逐日推进并补偿被跳过的黄昏窗口
+        // 正向大跨度：只推进到当前日，不做触发补偿（见 MAX_COMPENSATE_DAYS 注释）
         // 反向跳变：单次重同步（/time set 0 → modDay 归 0）
         if (currentGameDay != lastGameDayCheck) {
-            if (currentGameDay > lastGameDayCheck) {
+            long skippedDays = currentGameDay - lastGameDayCheck;
+            if (skippedDays <= 0) {
+                // 反向跳变（重置/回退）：modDay 直接同步为当前 gameDay
+                advanceModDay(overworld, config, (int) currentGameDay);
+            } else if (skippedDays <= MAX_COMPENSATE_DAYS) {
                 for (long d = lastGameDayCheck + 1; d <= currentGameDay; d++) {
                     advanceModDay(overworld, config, (int) d);
                     // 该天的黄昏窗口被本次时间变化完整跳过 → 补偿触发
@@ -88,8 +101,13 @@ public class HordeTimer {
                     }
                 }
             } else {
-                // 反向跳变（重置/回退）：modDay 直接同步为当前 gameDay
+                // 大跨度（如 /time set day 40）：逐日补偿会为每个错过的尸潮日都触发一次
+                // （lo/hi 是绝对 dayTime，判断对每个中间日都成立），导致刷屏与卡顿。
+                // 这里只推进 modDay，不补发尸潮——玩家不在场的那些天补发没有意义。
                 advanceModDay(overworld, config, (int) currentGameDay);
+                EnikZombietide.LOGGER.info(
+                        "时间跳变 {} 天（阈值 {}），仅推进 modDay 到 DAY {}，不补偿触发尸潮",
+                        skippedDays, MAX_COMPENSATE_DAYS, currentGameDay);
             }
             lastGameDayCheck = currentGameDay;
         }
@@ -102,7 +120,7 @@ public class HordeTimer {
             long curPhaseAfterJump = hi % 24000;
             boolean willBurnInSun = curPhaseAfterJump < 12000 || curPhaseAfterJump >= 23460;
             if (willBurnInSun) {
-                HordeSpawner.forceScatterAll(overworld, config);
+                HordeSpawner.forceClearAllHordes(overworld, config);
                 // 注意：跳变补偿的四散不更新 lastScatterDay，避免阻挡当天正常的日出前四散
             }
             // 当前天的黄昏窗口被跳变完整跳过 → missedDusk 补偿
