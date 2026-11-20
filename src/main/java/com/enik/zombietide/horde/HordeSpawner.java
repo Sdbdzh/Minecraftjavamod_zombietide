@@ -842,7 +842,8 @@ public class HordeSpawner {
     /**
      * 强制清除所有尸潮僵尸（用于 `/time set` 跳到白天等时间跳变场景）。
      *
-     * <p><b>语义 = 「这一夜结束」</b>：僵尸立即 {@code discard()}、血债归零、波次状态全部重置。
+     * <p><b>语义 = 「这一夜结束」</b>：僵尸立即 {@code discard()}、波次状态重置、待结算标记取消；
+     * <b>血债保持不变</b>——跳天是外部干预，不清历史累积、也不算玩家打赢。
      *
      * <p><b>历史</b>（v0.1.50 修正）：本方法原名 {@code forceScatterAll}，会把僵尸标记为四散
      * （{@code state=1}）并往 {@code scatteringZombies} 写入「距下一个 23460 还有多少 tick」的倒计时。
@@ -894,10 +895,12 @@ public class HordeSpawner {
                                     vData.modDay(), 0, vData.waveCount(), false));
                 }
             }
-            // 血债归零 + 取消待结算：跳变后这一夜视为结束，
-            // 不该在下一个 23460 被 drainPending 再结算一次（否则血债会"反弹"）
+            // 只取消待结算，**不动血债**：
+            // ① 不能留 pending —— 否则下一个 23460 的 drainPending 会按存活数再结算一次；
+            // ② 不能 setDebt(0) —— 跳天是外部干预，既不该清掉历史累积的血债
+            //    （否则 OP 可以用 /time set day 赖账），也不该因为"僵尸被清除"就当作玩家打赢了。
+            //    /zombietide trigger 也明确承诺"保留血债"，清掉会与之矛盾。
             if (debtData.isKnown(targetId)) {
-                debtData.setDebt(targetId, 0);
                 debtData.clearPending(targetId);
             }
             activeHordes.remove(targetId);
@@ -909,7 +912,7 @@ public class HordeSpawner {
 
             if (target instanceof ServerPlayer p) {
                 p.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                                "[尸潮] 时间跳变至白天，本波尸潮已强制结束，血债清零")
+                                "[尸潮] 时间跳变至白天，本波尸潮已强制结束（血债保留）")
                         .withStyle(net.minecraft.ChatFormatting.GRAY));
             }
         }
@@ -934,7 +937,7 @@ public class HordeSpawner {
             }
         }
 
-        EnikZombietide.LOGGER.info("强制清除 {} 只尸潮僵尸（时间跳变至白天），{} 个目标已重置，血债归零、待结算标记已取消",
+        EnikZombietide.LOGGER.info("强制清除 {} 只尸潮僵尸（时间跳变至白天），{} 个目标已重置，待结算标记已取消（血债保留）",
                 cleared, targets.size());
     }
 
