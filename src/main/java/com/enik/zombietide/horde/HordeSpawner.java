@@ -930,16 +930,19 @@ public class HordeSpawner {
             if (target instanceof ServerPlayer player) {
                 var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
                 if (data.waveActive()) {
+                    // lastTriggerDay 用 -1（从未触发）而不是 0：
+                    // /time set day 会让 modDay=0，若同时写 0，isHordeDay 的
+                    // `lastTriggerDay == modDay` 会成立 → HUD 的 DAY X 继续显示红色
                     player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                             new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data.modDay(), 0, data.waveCount(), false));
+                                    data.modDay(), -1, data.waveCount(), false));
                 }
             } else if (target instanceof net.minecraft.world.entity.npc.Villager villager) {
                 var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
                 if (vData.waveActive()) {
                     villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
                             new com.enik.zombietide.attachments.VillagerHordeData(
-                                    vData.modDay(), 0, vData.waveCount(), false));
+                                    vData.modDay(), -1, vData.waveCount(), false));
                 }
             }
             // 血债已在上方「提前结算」里处理；这里只负责取消待结算标记，
@@ -971,17 +974,23 @@ public class HordeSpawner {
         for (var entry : schedule.getAllSchedules().entrySet()) {
             UUID villagerUuid = entry.getKey();
             var sched = entry.getValue();
-            if (!sched.waveActive()) continue;
+
+            // lastTriggerDay 只对「本次清除涉及的目标」重置为 -1（从未触发），
+            // 让 HUD 的 DAY X 不再因为 `lastTriggerDay == modDay` 而保持红色。
+            // 其他村民保持原值——否则 modDay 跳大后 `modDay + 1 >= need` 会让它们
+            // 全部立刻满足触发条件，下一 tick 批量触发（正是 v0.1.50 修过的刷屏问题）。
+            int newLastTrigger = targets.contains(villagerUuid) ? -1 : sched.lastTriggerDay();
+            boolean needReset = sched.waveActive() || newLastTrigger != sched.lastTriggerDay();
+            if (!needReset) continue;
+
             schedule.put(villagerUuid, new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
-                    sched.modDay(), sched.lastTriggerDay(), sched.waveCount(), false));
+                    sched.modDay(), newLastTrigger, sched.waveCount(), false));
             var villagerEntity = findTarget(level, villagerUuid);
             if (villagerEntity instanceof net.minecraft.world.entity.npc.Villager villager) {
                 var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
-                if (vData.waveActive()) {
-                    villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
-                            new com.enik.zombietide.attachments.VillagerHordeData(
-                                    vData.modDay(), vData.lastTriggerDay(), vData.waveCount(), false));
-                }
+                villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
+                        new com.enik.zombietide.attachments.VillagerHordeData(
+                                vData.modDay(), newLastTrigger, vData.waveCount(), false));
             }
         }
 
