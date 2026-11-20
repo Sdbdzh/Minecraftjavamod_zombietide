@@ -732,6 +732,34 @@ public class HordeSpawner {
         }
     }
 
+    /**
+     * 按存活数结算单个目标的血债（起火结算与时间跳变强制清除共用同一套规则）。
+     *
+     * @param survivors 当前存活的尸潮僵尸数
+     * @param today     当前游戏日，用于 {@code markSettled} 按天去重
+     * @return 结算后的血债值；{@code null} 表示跳过（目标未注册 / 当天已结算过）
+     */
+    private static Integer settleDebtForTarget(ServerLevel level, ZombietideConfig config,
+                                               com.enik.zombietide.config.PlayerDebtData debtData,
+                                               UUID targetId, int survivors, long today) {
+        if (!debtData.isKnown(targetId)) return null;
+        if (debtData.isSettled(targetId, today)) return null;
+        debtData.markSettled(targetId, today);
+
+        String debtMode = config.debtMode();
+        int newDebt;
+        if ("last_only".equals(debtMode)) {
+            newDebt = Math.min(config.debtCap(), survivors);
+        } else if ("none".equals(debtMode)) {
+            newDebt = 0;
+        } else {
+            newDebt = Math.min(config.debtCap(), debtData.getDebt(targetId) + survivors);
+        }
+        if (survivors == 0) newDebt = 0; // 全灭清零
+        debtData.setDebt(targetId, newDebt);
+        return newDebt;
+    }
+
     /** 起火时刻血债结算（dayPhase >= 23460，僵尸开始着火，按实时存活数结算血债） */
     public static void settleDebtAtBurnTime(ServerLevel level, ZombietideConfig config) {
         long today = level.getDayTime() / 24000L;
@@ -842,8 +870,8 @@ public class HordeSpawner {
     /**
      * 强制清除所有尸潮僵尸（用于 `/time set` 跳到白天等时间跳变场景）。
      *
-     * <p><b>语义 = 「这一夜结束」</b>：僵尸立即 {@code discard()}、波次状态重置、待结算标记取消；
-     * <b>血债保持不变</b>——跳天是外部干预，不清历史累积、也不算玩家打赢。
+     * <p><b>语义 = 「提前结算这一夜」</b>：先按当前存活数结算血债（规则同 {@code settleDebtAtBurnTime}），
+     * 再 {@code discard()} 全部尸潮僵尸并重置波次状态。未生成的剩余批次直接作废、不计入血债。
      *
      * <p><b>历史</b>（v0.1.50 修正）：本方法原名 {@code forceScatterAll}，会把僵尸标记为四散
      * （{@code state=1}）并往 {@code scatteringZombies} 写入「距下一个 23460 还有多少 tick」的倒计时。
@@ -853,30 +881,49 @@ public class HordeSpawner {
      * {@code markPending -> drainPending} 二次结算。改为直接清除后语义自洽。
      */
     public static void forceClearAllHordes(ServerLevel level, ZombietideConfig config) {
-        java.util.Set<UUID> targets = new java.util.HashSet<>();
-        int cleared = 0;
+        long today = level.getDayTime() / 24000L;
+        com.enik.zombietide.config.PlayerDebtData debtData =
+                com.enik.zombietide.config.PlayerDebtData.get(level);
+        com.enik.zombietide.config.HordeProgressData progressData =
+                com.enik.zombietide.config.HordeProgressData.get(level);
 
-        // 直接扫实体表，不依赖 hordeZombieUuids 的准确性：
-        // 凡带尸潮目标标记的僵尸一律清除（Zombie 已覆盖 ZombieVillager/Husk/Drowned，Stray 单独计入）
+        // 第一遍扫描：统计每个目标的存活数并收集实体（先不 discard——结算要用存活数）
+        java.util.Map<UUID, Integer> survivorsByTarget = new java.util.HashMap<>();
+        java.util.List<net.minecraft.world.entity.Entity> toDiscard = new java.util.ArrayList<>();
         for (net.minecraft.world.entity.Entity entity : level.getEntities().getAll()) {
             if (!(entity instanceof net.minecraft.world.entity.monster.Zombie
                     || entity instanceof net.minecraft.world.entity.monster.Stray)) continue;
             CompoundTag tag = entity.getPersistentData();
             if (!tag.hasUUID(HORDE_TARGET_UUID_KEY)) continue;
-            targets.add(tag.getUUID(HORDE_TARGET_UUID_KEY));
-            entity.discard();
-            cleared++;
+            survivorsByTarget.merge(tag.getUUID(HORDE_TARGET_UUID_KEY), 1, Integer::sum);
+            toDiscard.add(entity);
+        }
+
+        // 提前结算：跳天等于把 23460 的起火结算「提前」，按当前存活数算血债。
+        // 未生成的剩余批次不计入——它们从未出现在世界里。
+        java.util.Map<UUID, Integer> settledDebt = new java.util.HashMap<>();
+        for (var e : survivorsByTarget.entrySet()) {
+            UUID targetId = e.getKey();
+            int survivors = e.getValue();
+            Integer newDebt = settleDebtForTarget(level, config, debtData, targetId, survivors, today);
+            if (newDebt != null) {
+                settledDebt.put(targetId, newDebt);
+                EnikZombietide.LOGGER.info("时间跳变提前结算：目标 {} 幸存 {} 只 → 血债 {}（模式：{}）",
+                        targetId, survivors, newDebt, config.debtMode());
+            }
+        }
+
+        // 结算完成后清除僵尸
+        for (net.minecraft.world.entity.Entity e : toDiscard) {
+            e.discard();
         }
         hordeZombieUuids.clear();
         scatteringZombies.clear();
 
-        // 还要处理「已触发但尚未生成完」的目标
+        java.util.Set<UUID> targets = new java.util.HashSet<>(survivorsByTarget.keySet());
+        // 还要处理「已触发但尚未生成完」的目标（剩余批次直接作废）
         targets.addAll(activeHordes.keySet());
-
-        com.enik.zombietide.config.PlayerDebtData debtData =
-                com.enik.zombietide.config.PlayerDebtData.get(level);
-        com.enik.zombietide.config.HordeProgressData progressData =
-                com.enik.zombietide.config.HordeProgressData.get(level);
+        int cleared = toDiscard.size();
 
         for (UUID targetId : targets) {
             var target = findTarget(level, targetId);
@@ -895,11 +942,8 @@ public class HordeSpawner {
                                     vData.modDay(), 0, vData.waveCount(), false));
                 }
             }
-            // 只取消待结算，**不动血债**：
-            // ① 不能留 pending —— 否则下一个 23460 的 drainPending 会按存活数再结算一次；
-            // ② 不能 setDebt(0) —— 跳天是外部干预，既不该清掉历史累积的血债
-            //    （否则 OP 可以用 /time set day 赖账），也不该因为"僵尸被清除"就当作玩家打赢了。
-            //    /zombietide trigger 也明确承诺"保留血债"，清掉会与之矛盾。
+            // 血债已在上方「提前结算」里处理；这里只负责取消待结算标记，
+            // 否则下一个 23460 的 drainPending 会按存活数再结算一次（血债"反弹"）
             if (debtData.isKnown(targetId)) {
                 debtData.clearPending(targetId);
             }
@@ -911,8 +955,12 @@ public class HordeSpawner {
             progressData.remove(targetId);
 
             if (target instanceof ServerPlayer p) {
-                p.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                                "[尸潮] 时间跳变至白天，本波尸潮已强制结束（血债保留）")
+                Integer settled = settledDebt.get(targetId);
+                int survivors = survivorsByTarget.getOrDefault(targetId, 0);
+                String msg = settled != null
+                        ? "[尸潮] 时间跳变，本波提前结算：幸存 " + survivors + " 只计入血债，当前血债 " + settled
+                        : "[尸潮] 时间跳变，本波尸潮已强制结束（今天已结算过，血债不变）";
+                p.sendSystemMessage(net.minecraft.network.chat.Component.literal(msg)
                         .withStyle(net.minecraft.ChatFormatting.GRAY));
             }
         }
@@ -937,8 +985,8 @@ public class HordeSpawner {
             }
         }
 
-        EnikZombietide.LOGGER.info("强制清除 {} 只尸潮僵尸（时间跳变至白天），{} 个目标已重置，待结算标记已取消（血债保留）",
-                cleared, targets.size());
+        EnikZombietide.LOGGER.info("强制清除 {} 只尸潮僵尸（时间跳变至白天），{} 个目标已重置，{} 个目标完成提前结算",
+                cleared, targets.size(), settledDebt.size());
     }
 
     /**
