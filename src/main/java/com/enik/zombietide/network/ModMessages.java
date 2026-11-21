@@ -515,6 +515,7 @@ public class ModMessages {
         // 收集主世界所有村民实体（仅一次遍历实体列表）
         java.util.List<net.minecraft.world.entity.npc.Villager> villagers = new java.util.ArrayList<>();
         for (var entity : overworld.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (entity instanceof net.minecraft.world.entity.npc.Villager villager) {
                 villagers.add(villager);
             }
@@ -537,7 +538,8 @@ public class ModMessages {
                         sched.waveActive(),
                         com.enik.zombietide.horde.HordeTimer.isHordeDay(
                                 villager.getUUID(), sched.modDay(), sched.lastTriggerDay(),
-                                com.enik.zombietide.config.ConfigManager.getConfigData(overworld).getConfig(), true));
+                                com.enik.zombietide.config.ConfigManager.getConfigData(overworld).getConfig(), true,
+                                overworld.getDayTime()));
                 }
             }
         }

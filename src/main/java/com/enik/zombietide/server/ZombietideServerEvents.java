@@ -123,6 +123,7 @@ public class ZombietideServerEvents {
         VillagerScheduleData joinSchedule = level.getDataStorage().computeIfAbsent(
                 VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
         for (var entity : level.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (entity instanceof net.minecraft.world.entity.npc.Villager villager) {
                 if (player.distanceToSqr(villager) <= 128.0 * 128.0) {
                     var sched = joinSchedule.getScheduleOrNull(villager.getUUID());
@@ -135,7 +136,7 @@ public class ZombietideServerEvents {
                             vModDay,
                             villager.getX(), villager.getY(), villager.getZ(),
                             vActive,
-                            HordeTimer.isHordeDay(villager.getUUID(), vModDay, vLastTrigger, config, true));
+                            HordeTimer.isHordeDay(villager.getUUID(), vModDay, vLastTrigger, config, true, level.getDayTime()));
                 }
             }
         }
@@ -266,6 +267,7 @@ public class ZombietideServerEvents {
         if (config.villagerHordeEnabled()) {
             double range = config.villagerSleepBlockRange();
             for (var entity : level.getEntities().getAll()) {
+                if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
                 if (!(entity instanceof Villager villager)) continue;
                 var villagerHordeData = ModAttachments.getVillagerHordeData(villager);
                 if (villagerHordeData.waveActive() && player.distanceToSqr(villager) <= range * range) {

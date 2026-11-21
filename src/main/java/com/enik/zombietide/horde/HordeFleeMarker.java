@@ -78,6 +78,7 @@ public final class HordeFleeMarker {
     /** 查找某目标已有的 marker（扫世界里的 Marker 实体） */
     private static Entity findExisting(ServerLevel level, UUID targetId) {
         for (Entity e : level.getEntities().getAll()) {
+            if (e == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (e.getType() != EntityType.MARKER) continue;
             CompoundTag tag = e.getPersistentData();
             if (tag.hasUUID(TAG_TARGET) && targetId.equals(tag.getUUID(TAG_TARGET))) {
@@ -95,6 +96,7 @@ public final class HordeFleeMarker {
      */
     public static void tickAll(ServerLevel level) {
         for (Entity e : level.getEntities().getAll()) {
+            if (e == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (e.getType() != EntityType.MARKER) continue;
             CompoundTag tag = e.getPersistentData();
             if (!tag.hasUUID(TAG_TARGET)) continue;
@@ -162,6 +164,7 @@ public final class HordeFleeMarker {
     /** 移除某目标的 marker */
     public static void discardFor(ServerLevel level, UUID targetId) {
         for (Entity e : level.getEntities().getAll()) {
+            if (e == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (e.getType() != EntityType.MARKER) continue;
             CompoundTag tag = e.getPersistentData();
             if (tag.hasUUID(TAG_TARGET) && targetId.equals(tag.getUUID(TAG_TARGET))) {
@@ -178,6 +181,7 @@ public final class HordeFleeMarker {
     public static void sweepOrphans(ServerLevel level) {
         int removed = 0;
         for (Entity e : level.getEntities().getAll()) {
+            if (e == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (e.getType() != EntityType.MARKER) continue;
             CompoundTag tag = e.getPersistentData();
             if (!tag.hasUUID(TAG_TARGET)) continue;

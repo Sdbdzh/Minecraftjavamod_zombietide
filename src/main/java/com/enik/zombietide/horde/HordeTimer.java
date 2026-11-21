@@ -244,7 +244,7 @@ public class HordeTimer {
         var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
         int debt = com.enik.zombietide.config.PlayerDebtData.get(overworld).getDebt(player.getUUID());
         ModMessages.sendModDay(player, data.modDay(),
-                isHordeDay(player.getUUID(), data.modDay(), data.lastTriggerDay(), config, false),
+                isHordeDay(player.getUUID(), data.modDay(), data.lastTriggerDay(), config, false, overworld.getDayTime()),
                 data.waveActive(), debt,
                 activePlayerHordes, activeVillagerHordes, aliveHordeZombies);
     }
@@ -316,6 +316,7 @@ public class HordeTimer {
     private static java.util.Map<UUID, Villager> buildLoadedVillagerMap(ServerLevel overworld) {
         java.util.Map<UUID, Villager> map = new java.util.HashMap<>();
         for (var entity : overworld.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (entity instanceof Villager v && v.isAlive()) {
                 map.put(v.getUUID(), v);
             }
@@ -324,16 +325,31 @@ public class HordeTimer {
     }
 
     /**
-     * 判断指定目标在 modDay 是否为尸潮日。
-     * <p>固定间隔：{@code modDay % interval == interval - 1}。
-     * <p>随机间隔：基于 {@code (目标 UUID, lastTriggerDay)} 的确定性伪随机间隔。
-     * 同一波次内算出的间隔恒定，跨重启/重登一致，因此无需新增持久化字段。
-     *
-     * @param lastTriggerDay 上次触发日；{@code -1} 表示从未触发（首次按随机间隔等待）
+     * 判断指定目标在 modDay 是否为尸潮日，<b>并限定黄昏触发窗口 13000~14000</b>。
+     * 正常触发与 HUD 红字用这个版本：窗口一过就返回 false，不会再出现「窗口后生成的村民
+     * 被标成尸潮日却永远不会触发」的不一致。
+     * <p>时间跳变补偿 / 清晨提醒请用 5 参的绕过版本。
+     */
+    public static boolean isHordeDay(UUID targetId, int modDay, int lastTriggerDay,
+                                     ZombietideConfig config, boolean isVillager, long dayTime) {
+        long phase = Math.floorMod(dayTime, 24000L);
+        if (phase < 13000L || phase > 14000L) return false;
+        return isHordeDayIgnoringWindow(targetId, modDay, lastTriggerDay, config, isVillager);
+    }
+
+    /**
+     * 【绕过窗口版】只按日历日/间隔判断，不看当前时刻。
+     * 仅供时间跳变补偿（窗口已被跳过）与清晨提醒使用；HUD 与正常触发一律用 6 参版。
      */
     public static boolean isHordeDay(UUID targetId, int modDay, int lastTriggerDay,
                                      ZombietideConfig config, boolean isVillager) {
-        // 当天已触发过 → 仍视为尸潮日（HUD 红字保持整天）。
+        return isHordeDayIgnoringWindow(targetId, modDay, lastTriggerDay, config, isVillager);
+    }
+
+    /** 原判定核心：固定间隔取模 / 随机间隔哈希，不含任何时刻判断。 */
+    private static boolean isHordeDayIgnoringWindow(UUID targetId, int modDay, int lastTriggerDay,
+                                                    ZombietideConfig config, boolean isVillager) {
+        // 当天已触发过 → 仍视为尸潮日（6 参版已在入口把窗口外的情形挡掉）。
         // 与触发判定解耦：触发路径另有 `lastTriggerDay == modDay && waveCount > 0` 去重，不会重复触发。
         if (lastTriggerDay == modDay) return true;
 
@@ -391,7 +407,7 @@ public class HordeTimer {
 
             var hordeData = ModAttachments.getPlayerHordeData(player);
             int modDay = hordeData.modDay();
-            if (!isHordeDay(player.getUUID(), modDay, hordeData.lastTriggerDay(), config, false)) continue;
+            if (!isHordeDay(player.getUUID(), modDay, hordeData.lastTriggerDay(), config, false, overworld.getDayTime())) continue;
             if (hordeData.lastTriggerDay() == modDay && hordeData.waveCount() > 0) {
                 // 今日已触发过：静默跳过（不再打印「已触发过」日志——它与 isHordeDay 的
                 // 「今天是尸潮日」判定放在一起读起来自相矛盾）
@@ -452,7 +468,7 @@ public class HordeTimer {
             VillagerScheduleData.ScheduleEntry sched = entry.getValue();
 
             int modDay = sched.modDay();
-            if (!isHordeDay(villagerUuid, modDay, sched.lastTriggerDay(), config, true)) continue;
+            if (!isHordeDay(villagerUuid, modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime())) continue;
             if (sched.lastTriggerDay() == modDay && sched.waveCount() > 0) continue;
 
             // 实体验证：从已加载村民映射中取（getEntity 的 UUID 索引不可靠）
@@ -488,7 +504,7 @@ public class HordeTimer {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), modDay,
                             villager.getX(), villager.getY(), villager.getZ(), true,
-                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true));
+                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
                 }
             }
         }
@@ -614,7 +630,7 @@ public class HordeTimer {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), targetModDay,
                             villager.getX(), villager.getY(), villager.getZ(), true,
-                            isHordeDay(villager.getUUID(), targetModDay, sched.lastTriggerDay(), config, true));
+                            isHordeDay(villager.getUUID(), targetModDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
                 }
             }
         }
@@ -700,7 +716,7 @@ public class HordeTimer {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), modDay,
                             villager.getX(), villager.getY(), villager.getZ(), true,
-                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true));
+                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
                 }
             }
         }

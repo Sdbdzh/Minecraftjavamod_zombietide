@@ -438,6 +438,7 @@ public class HordeSpawner {
         // 1. 从世界中的尸潮僵尸收集目标（用于 waveActive 重置与幸存者统计）
         // 尸潮实体包括：Zombie、ZombieVillager、Husk、Drowned、Stray（均带有 horde 标记）
         for (var entity : level.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (!(entity instanceof net.minecraft.world.entity.monster.Zombie ||
                   entity instanceof net.minecraft.world.entity.monster.ZombieVillager ||
                   entity instanceof net.minecraft.world.entity.monster.Husk ||
@@ -470,6 +471,7 @@ public class HordeSpawner {
         // 3. 【BUG9 修复】遍历所有村民，收集 waveActive=true 的村民目标
         java.util.List<net.minecraft.world.entity.npc.Villager> villagers = new java.util.ArrayList<>();
         for (var entity : level.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (entity instanceof net.minecraft.world.entity.npc.Villager v) {
                 villagers.add(v);
             }
@@ -499,12 +501,13 @@ public class HordeSpawner {
             EnikZombietide.LOGGER.debug("村民 {} 尸潮结束，存活僵尸 {}，waveActive 已重置为 false", targetId, count);
             // 【BUG3 修复】waveActive 重置后立即同步村民模组天数给附近玩家，HUD 实时反映状态变化
             for (var entity : level.getEntities().getAll()) {
+                if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
                 if (entity instanceof ServerPlayer p && p.distanceToSqr(villager) <= 128.0 * 128.0) {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager),
                             vData.modDay(),
                             villager.getX(), villager.getY(), villager.getZ(), false,
-                            HordeTimer.isHordeDay(villager.getUUID(), vData.modDay(), vData.lastTriggerDay(), config, true));
+                            HordeTimer.isHordeDay(villager.getUUID(), vData.modDay(), vData.lastTriggerDay(), config, true, level.getDayTime()));
                 }
             }
         }
@@ -907,6 +910,7 @@ public class HordeSpawner {
         java.util.Map<UUID, Integer> survivorsByTarget = new java.util.HashMap<>();
         java.util.List<net.minecraft.world.entity.Entity> toDiscard = new java.util.ArrayList<>();
         for (net.minecraft.world.entity.Entity entity : level.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (!(entity instanceof net.minecraft.world.entity.monster.Zombie
                     || entity instanceof net.minecraft.world.entity.monster.Stray)) continue;
             CompoundTag tag = entity.getPersistentData();
@@ -1248,6 +1252,7 @@ public class HordeSpawner {
     public static int countAliveHordeZombies(ServerLevel level) {
         int count = 0;
         for (net.minecraft.world.entity.Entity entity : level.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (entity instanceof net.minecraft.world.entity.monster.Zombie
                     || entity instanceof net.minecraft.world.entity.monster.Stray) {
                 if (entity.getPersistentData().hasUUID("zombietide_horde_target")) {
@@ -1463,6 +1468,7 @@ public class HordeSpawner {
     public static int getActiveVillagerHordeCount(ServerLevel level) {
         int count = 0;
         for (var entity : level.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (entity instanceof net.minecraft.world.entity.npc.Villager villager) {
                 var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
                 if (vData.waveActive()) count++;
@@ -1499,6 +1505,7 @@ public class HordeSpawner {
         var entity = level.getEntity(id);
         if (entity != null) return entity;
         for (var e : level.getEntities().getAll()) {
+            if (e == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (e.getUUID().equals(id)) return e;
         }
         return null;
@@ -1508,6 +1515,7 @@ public class HordeSpawner {
     private static Map<UUID, net.minecraft.world.entity.npc.Villager> buildLoadedVillagerMap(ServerLevel level) {
         Map<UUID, net.minecraft.world.entity.npc.Villager> map = new HashMap<>();
         for (var entity : level.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (entity instanceof net.minecraft.world.entity.npc.Villager v && v.isAlive()) {
                 map.put(v.getUUID(), v);
             }
@@ -1592,6 +1600,7 @@ public class HordeSpawner {
 
         // 4) 丢弃目标已失效的孤儿尸潮僵尸
         for (var entity : level.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (!(entity instanceof net.minecraft.world.entity.monster.Zombie ||
                   entity instanceof net.minecraft.world.entity.monster.ZombieVillager ||
                   entity instanceof net.minecraft.world.entity.monster.Husk ||

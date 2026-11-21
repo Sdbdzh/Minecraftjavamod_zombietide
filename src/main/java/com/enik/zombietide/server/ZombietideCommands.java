@@ -407,6 +407,7 @@ public class ZombietideCommands {
         source.sendSuccess(() -> Component.literal("§b--- 村民尸潮 ---"), false);
         int villagerCount = 0;
         for (var entity : level.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             if (entity instanceof Villager v) {
                 villagerCount++;
                 VillagerHordeData vData = ModAttachments.getVillagerHordeData(v);
@@ -454,6 +455,7 @@ public class ZombietideCommands {
         // 清理存活尸潮僵尸
         int cleared = 0;
         for (Entity entity : level.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
             // Zombie 已覆盖 ZombieVillager/Husk/Drowned；Stray 不是 Zombie 子类，需单独计入
             if (entity instanceof net.minecraft.world.entity.monster.Zombie
                     || entity instanceof net.minecraft.world.entity.monster.Stray) {

@@ -210,6 +210,14 @@ public class ZombietideHud {
         int rowOffset = 12;
         int maxRows = hud.villagerHordeMaxEntries();
         if (maxRows < 1) maxRows = 1;
+        // 【v0.1.66】按 GUI 缩放后的屏幕高度限制行数：之前只受 maxEntries 控制，
+        // 把条目数或 villagerY 配大后，最后几行会被画到屏幕下方之外。
+        // 行距 rowOffset 是 GUI 坐标、不随 pose.scale 变化；字体高度则随 villagerScale 放大。
+        int guiHeight = minecraft.getWindow().getGuiScaledHeight();
+        int textHeightPx = (int) Math.ceil(Math.max(1, minecraft.font.lineHeight) * villagerScale);
+        int usableHeight = guiHeight - villagerY - textHeightPx;
+        int maxRowsByScreen = usableHeight <= 0 ? 0 : usableHeight / rowOffset;
+        int displayRows = Math.min(maxRows, maxRowsByScreen);
         int rowCount = 0;
 
         // 只有开启“显示附近村民尸潮信息”时才渲染村民行
@@ -239,7 +247,7 @@ public class ZombietideHud {
             });
 
             for (var entry : nearbyVillagers) {
-                if (rowCount >= maxRows) break;
+                if (rowCount >= displayRows) break;
                 int villagerModDay = entry.getValue();
                 String profession = villagerProfessions.getOrDefault(entry.getKey(), "村民");
                 // 计算玩家到村民的直线距离（四舍五入整数）

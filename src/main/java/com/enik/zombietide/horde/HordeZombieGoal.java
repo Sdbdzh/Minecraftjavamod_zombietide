@@ -10,6 +10,7 @@ import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.LightLayer;
@@ -186,9 +187,12 @@ public class HordeZombieGoal extends Goal {
             return;
         }
 
-        // 4) 一个都没有 → 不主动设目标，交给原版 NearestAttackableTargetGoal
-        //    （v0.1.57 起不再移除该 Goal，所以僵尸仍会攻击附近的玩家/村民/铁傀儡）
-        if (current != null && !current.isAlive()) {
+        // 4) 一个都没有 → v0.1.66 主动兜底：就近攻击玩家/村民/铁傀儡，避免站着发呆。
+        //    与 refreshTimer 合流（每 20 tick 一次）；L166-170 的「正在反击」已 return，不会被覆盖。
+        LivingEntity fallback = findNearestAttackableFallback();
+        if (fallback != null) {
+            mob.setTarget(fallback);
+        } else if (current != null && !current.isAlive()) {
             mob.setTarget(null);
         }
     }
@@ -269,7 +273,29 @@ public class HordeZombieGoal extends Goal {
     private int repathTimer = 0;
     /** marker 取不到时的日志节流计时器 */
     private int markerMissingLogTimer = 0;
-    /** 「换打其它尸潮触发者」的最大距离（格）：超出就继续追自己的目标，不横穿世界 */
-    private static final double OTHER_TARGET_MAX_DISTANCE = 64.0;
+    /** 「换打其它尸潮触发者」的最大距离（格）：v0.1.66 由 64 增大到 128（约 8 区块） */
+    private static final double OTHER_TARGET_MAX_DISTANCE = 128.0;
+    /** v0.1.66：所有尸潮目标都没有时，就近强索敌的半径（格） */
+    private static final double FALLBACK_TARGET_MAX_DISTANCE = 32.0;
+
+    /** v0.1.66：找附近可攻击的原版目标（玩家/村民/铁傀儡），避免触发者死亡后站着发呆。
+     *  与 20 tick 的 refreshTimer 合流，反击中的目标不会被覆盖（调用方已先 return）。 */
+    private LivingEntity findNearestAttackableFallback() {
+        if (!(mob.level() instanceof ServerLevel sl)) return null;
+        double r = FALLBACK_TARGET_MAX_DISTANCE;
+        AABB box = new AABB(mob.getX() - r, mob.getY() - r, mob.getZ() - r,
+                mob.getX() + r, mob.getY() + r, mob.getZ() + r);
+        java.util.List<net.minecraft.world.entity.Entity> found = sl.getEntities(mob, box,
+                e -> e instanceof ServerPlayer || e instanceof Villager || e instanceof IronGolem);
+        double bestD2 = r * r;
+        LivingEntity best = null;
+        for (net.minecraft.world.entity.Entity e : found) {
+            if (!(e instanceof LivingEntity c) || c == mob || !c.isAlive()) continue;
+            if (c instanceof ServerPlayer p && (p.isCreative() || p.isSpectator())) continue;
+            double d2 = c.distanceToSqr(mob);
+            if (d2 < bestD2) { bestD2 = d2; best = c; }
+        }
+        return best;
+    }
 
 }
