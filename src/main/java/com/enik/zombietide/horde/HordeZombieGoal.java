@@ -156,26 +156,60 @@ public class HordeZombieGoal extends Goal {
         }
         refreshTimer = 0;
 
-        LivingEntity target = findTarget();
-        if (target == null) {
-            // 主目标死亡或消失：停止本 Goal，回退原版 AI
-            stop();
+        // 1) 正在反击攻击者 → 不覆盖。
+        // 用户要求：被攻击时优先反击，而不是一直强索敌。
+        // HurtByTargetGoal 被 setTarget(attacker)，这里保留它至少 20 tick。
+        LivingEntity current = mob.getTarget();
+        LivingEntity attacker = mob.getLastHurtByMob();
+        if (current != null && current == attacker && current.isAlive()) {
             return;
         }
 
-        // 目标变为创造/旁观模式或死亡：停止本 Goal
-        if (target instanceof ServerPlayer player) {
-            if (player.isCreative() || player.isSpectator() || !player.isAlive()) {
-                stop();
-                return;
-            }
+        // 2) 自己的触发者
+        LivingEntity target = findTarget();
+        if (target instanceof ServerPlayer player
+                && (player.isCreative() || player.isSpectator() || !player.isAlive())) {
+            target = null;
         }
 
-        // 无条件刷新仇恨：ZombieAttackGoal 需要 mob.getTarget() != null 才追击。
-        // 之前的 isReachable 判断（没有视线就不 setTarget）会导致僵尸在墙后/远处时
-        // 完全无目标 → ZombieAttackGoal 不启动 → 站着不动 → 20 tick 后碰巧有视线才追一段
-        // → 表现为「走一下停一下」。寻路失败由 ZombieAttackGoal 内部处理，不需要这里拦。
-        mob.setTarget(target);
+        // 3) 自己的触发者已死亡 / 在未加载区块 → 改打附近其它尸潮的触发者
+        if (target == null) {
+            target = findNearestOtherHordeTarget();
+        }
+
+        if (target != null) {
+            mob.setTarget(target);
+            return;
+        }
+
+        // 4) 一个都没有 → 不主动设目标，交给原版 NearestAttackableTargetGoal
+        //    （v0.1.57 起不再移除该 Goal，所以僵尸仍会攻击附近的玩家/村民/铁傀儡）
+        if (current != null && !current.isAlive()) {
+            mob.setTarget(null);
+        }
+    }
+
+    /**
+     * 找附近其它尸潮的触发者（自己的触发者不存在/无效时的次级目标）。
+     * <p>只看 {@code activeHordes} 的 key（个位数），不扫全实体表；
+     * 距离不设上限——尸潮僵尸本来就该主动长途追击。
+     */
+    private LivingEntity findNearestOtherHordeTarget() {
+        if (!(mob.level() instanceof ServerLevel sl)) return null;
+        LivingEntity best = null;
+        double bestD2 = Double.MAX_VALUE;
+        for (UUID otherId : HordeSpawner.getActiveTargetIds()) {
+            if (otherId.equals(targetUUID)) continue;
+            var e = HordeSpawner.findTarget(sl, otherId);
+            if (!(e instanceof LivingEntity le) || !le.isAlive()) continue;
+            if (le instanceof ServerPlayer p && (p.isCreative() || p.isSpectator())) continue;
+            double d2 = le.distanceToSqr(mob);
+            if (d2 < bestD2) {
+                bestD2 = d2;
+                best = le;
+            }
+        }
+        return best;
     }
 
     /**

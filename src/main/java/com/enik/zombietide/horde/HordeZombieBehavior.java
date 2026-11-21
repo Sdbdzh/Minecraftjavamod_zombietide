@@ -74,15 +74,13 @@ public final class HordeZombieBehavior {
         // 把目标重新设回玩家导致“边逃边打”。
         // 先清空 targetSelector 中的 NearestAttackableTargetGoal 与 HurtByTargetGoal，
         // 防止僵尸在四散时被这两个选择器每 tick 重新锁定目标（“边逃边打”根因）。
-        java.util.List<Goal> toRemove = new java.util.ArrayList<>();
-        for (Goal g : mob.targetSelector.getAvailableGoals()) {
-            if (g instanceof NearestAttackableTargetGoal || g instanceof HurtByTargetGoal) {
-                toRemove.add(g);
-            }
-        }
-        for (Goal g : toRemove) {
-            mob.targetSelector.removeGoal(g);
-        }
+        // v0.1.57：**不再移除**原版 NearestAttackableTargetGoal / HurtByTargetGoal。
+        // 之前移除是为了防「四散时边逃边打」，但副作用是触发者死亡/未加载后僵尸彻底没有索敌能力，
+        // 只能站着。现在：
+        //   - state==0：HordeZombieGoal 每 20 tick 强制 setTarget（覆盖索敌选择），
+        //     但检测到「正在反击攻击者」时不覆盖；
+        //   - state==1：HordeZombieGoal 每 tick setTarget(null)，索敌即使选中也会被立刻清掉，
+        //     最多影响 1 tick，不足以形成「边逃边打」。
         // 幂等：僵尸实体加载时 onEntityJoinLevel 会重新 apply（恢复重启后丢失的 AI），
         // 若已注入过 HordeZombieGoal 则跳过，避免 goalSelector 中出现多份锁定 Goal
         boolean alreadyInjected = mob.goalSelector.getAvailableGoals().stream()

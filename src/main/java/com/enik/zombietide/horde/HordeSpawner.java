@@ -1566,6 +1566,15 @@ public class HordeSpawner {
     }
 
     /**
+     * 当前所有活跃尸潮的目标 UUID（快照）。
+     * <p>供 {@code HordeZombieGoal} 在「自己的触发者已死亡/未加载」时找附近其它尸潮的触发者。
+     * 只返回 {@code activeHordes} 的 key，规模是个位数，比扫全实体表便宜。
+     */
+    public static java.util.Set<UUID> getActiveTargetIds() {
+        return new java.util.HashSet<>(activeHordes.keySet());
+    }
+
+    /**
      * 查询某目标当前还有多少只未生成（0 表示没有进行中的刷怪批次）。
      * 供 /zombietide trigger 判断是否允许重复触发。
      */
