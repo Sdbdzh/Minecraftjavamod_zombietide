@@ -484,8 +484,8 @@ public class HordeSpawner {
             int count = survivorCount.getOrDefault(targetId, 0);
             ServerPlayer player = level.getServer().getPlayerList().getPlayer(targetId);
 
-            // 【去重】同一天若已通过四散结束结算过，黎明结算跳过，防止双重计债
-            if (debtData.isSettled(targetId, today)) {
+            // 【去重】同一波若已通过四散/起火结算过，黎明结算跳过，防止双重计债
+            if (debtData.isWaveSettled(targetId, currentWaveSeq(level, targetId))) {
                 // 已结算过：只重置 waveActive，不再加债
                 if (player != null) {
                     var data0 = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
@@ -495,7 +495,7 @@ public class HordeSpawner {
                 }
                 continue;
             }
-            debtData.markSettled(targetId, today);
+            debtData.markWaveSettled(targetId, currentWaveSeq(level, targetId));
             // 血债模式：累积制（默认）
             String debtMode = config.debtMode();
             int newDebt;
@@ -610,6 +610,11 @@ public class HordeSpawner {
         java.util.Set<UUID> scatterTargets = new java.util.HashSet<>();
         // 记录每个目标进入四散的僵尸数量，用于汇总提醒（避免每只僵尸一条消息刷屏）
         java.util.Map<UUID, Integer> scatterCountByTarget = new java.util.HashMap<>();
+        // 本次实际转入四散的僵尸数：为 0 说明全是早已 state==1 的存量，
+        // 此时不发通知，否则 20 tick 重扫会反复刷「四散开始」
+        int newlyScattered = 0;
+        // 每个尸潮只创建一次 marker（避免对每只僵尸都扫一遍世界实体表）
+        java.util.Map<UUID, net.minecraft.world.entity.Entity> markerCache = new java.util.HashMap<>();
         for (UUID zombieUuid : toProcess) {
             var entity = level.getEntity(zombieUuid);
             // 尸潮实体包括：Zombie、ZombieVillager、Husk、Drowned、Stray（均带有 horde 标记）
@@ -628,10 +633,20 @@ public class HordeSpawner {
             UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
             scatterTargets.add(targetId);
             scatterCountByTarget.merge(targetId, 1, Integer::sum);
+            newlyScattered++;
             if (entity instanceof Mob mob) {
                 mob.setTarget(null); // 清空攻击目标，停止攻击
             }
             tag.putInt(HORDE_STATE_KEY, 1); // 标记为四散状态
+
+            // v0.1.55：为该尸潮创建/复用一个不可见 Marker 诱饵，并把它的 UUID 绑到僵尸身上。
+            // 僵尸侧只追这个 marker（见 HordeZombieGoal 的 state==1 分支），
+            // 不再对每只僵尸单独做 8 方向选点 —— 既不会"走走停停"，也不会排队（candidates 提供多个落点）。
+            net.minecraft.world.entity.Entity fleeMarker = markerCache.computeIfAbsent(targetId,
+                    id -> HordeFleeMarker.ensure(level, id, entity.getX(), entity.getY(), entity.getZ()));
+            if (fleeMarker != null && entity instanceof net.minecraft.world.entity.Mob mob) {
+                HordeFleeMarker.bind(mob, fleeMarker);
+            }
 
             // 关键修改：四散倒计时精确到 23460（起火时刻），而不是配置的固定秒数
             // 这样所有四散僵尸在同一 tick (23460) 被一次性清除
@@ -654,7 +669,9 @@ public class HordeSpawner {
         }
 
         // 向目标玩家（或村民周围玩家）发送一条汇总四散提醒，避免每只僵尸一条消息刷屏
-        notifyScatterTargetsWithCount(level, config, scatterTargets, scatterCountByTarget);
+        if (newlyScattered > 0) {
+            notifyScatterTargetsWithCount(level, config, scatterTargets, scatterCountByTarget);
+        }
 
         // 定制音频：四散音效只发给玩家尸潮触发者（村民尸潮不播放）
         if (config.warningEnabled() && config.scatterSound()) {
@@ -722,18 +739,34 @@ public class HordeSpawner {
     }
 
     /**
+     * 取目标当前的波次序号（v0.1.55 血债按波去重用的键）。
+     * <p>玩家读 attachment，村民读调度表（权威源）；**离线/未加载返回 0**，
+     * 而 {@code isWaveSettled} 对 {@code waveSeq <= 0} 恒返回 false —— 即离线目标不参与去重，正常结算。
+     */
+    private static int currentWaveSeq(ServerLevel level, UUID targetId) {
+        ServerPlayer p = level.getServer().getPlayerList().getPlayer(targetId);
+        if (p != null) {
+            return com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(p).waveSeq();
+        }
+        VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(
+                VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
+        var sched = schedule.getScheduleOrNull(targetId);
+        return sched == null ? 0 : sched.waveSeq();
+    }
+
+    /**
      * 按存活数结算单个目标的血债（起火结算与时间跳变强制清除共用同一套规则）。
      *
      * @param survivors 当前存活的尸潮僵尸数
-     * @param today     当前游戏日，用于 {@code markSettled} 按天去重
-     * @return 结算后的血债值；{@code null} 表示跳过（目标未注册 / 当天已结算过）
+     * @param waveSeq   目标当前波次序号；{@code <= 0} 表示无法判定（离线/重置后），不参与去重
+     * @return 结算后的血债值；{@code null} 表示跳过（目标未注册 / 本波已结算过）
      */
     private static Integer settleDebtForTarget(ServerLevel level, ZombietideConfig config,
                                                com.enik.zombietide.config.PlayerDebtData debtData,
-                                               UUID targetId, int survivors, long today) {
+                                               UUID targetId, int survivors, int waveSeq) {
         if (!debtData.isKnown(targetId)) return null;
-        if (debtData.isSettled(targetId, today)) return null;
-        debtData.markSettled(targetId, today);
+        if (debtData.isWaveSettled(targetId, waveSeq)) return null;
+        debtData.markWaveSettled(targetId, waveSeq);
 
         String debtMode = config.debtMode();
         int newDebt;
@@ -759,21 +792,14 @@ public class HordeSpawner {
         for (UUID targetId : toSettle) {
             // 血债只记玩家：离线玩家实体为 null，无法再用 instanceof 判断，改以「是否注册过」为准
             if (!debtData.isKnown(targetId)) continue;
-            if (debtData.isSettled(targetId, today)) continue; // 今天已结算过
-            debtData.markSettled(targetId, today);
 
             int survivorCount = countHordeZombiesByTarget(level, targetId);
+            int waveSeq = currentWaveSeq(level, targetId);
             String debtMode = config.debtMode();
-            int newDebt;
-            if ("last_only".equals(debtMode)) {
-                newDebt = Math.min(config.debtCap(), survivorCount);
-            } else if ("none".equals(debtMode)) {
-                newDebt = 0;
-            } else {
-                newDebt = Math.min(config.debtCap(), debtData.getDebt(targetId) + survivorCount);
-            }
-            if (survivorCount == 0) newDebt = 0; // 全灭清零
-            debtData.setDebt(targetId, newDebt);
+            // 统一走按波次去重（v0.1.55）；返回 null 表示本波已结算过
+            Integer settled = settleDebtForTarget(level, config, debtData, targetId, survivorCount, waveSeq);
+            if (settled == null) continue;
+            int newDebt = settled;
 
             ServerPlayer player = level.getServer().getPlayerList().getPlayer(targetId);
             if (player == null) {
@@ -827,10 +853,11 @@ public class HordeSpawner {
             }
             scatteringZombies.clear();
 
-            // 清除完成后重置对应目标的 waveActive
+            // 清除完成后重置对应目标的 waveActive，并移除对应的四散锚点
             for (UUID targetId : clearedTargets) {
                 if (level != null) com.enik.zombietide.config.PlayerDebtData.get(level).clearPending(targetId);
                 resetTargetWaveActive(level, targetId);
+                HordeFleeMarker.discardFor(level, targetId);
             }
         }
     }
@@ -894,7 +921,8 @@ public class HordeSpawner {
         for (var e : survivorsByTarget.entrySet()) {
             UUID targetId = e.getKey();
             int survivors = e.getValue();
-            Integer newDebt = settleDebtForTarget(level, config, debtData, targetId, survivors, today);
+            Integer newDebt = settleDebtForTarget(level, config, debtData, targetId, survivors,
+                    currentWaveSeq(level, targetId));
             if (newDebt != null) {
                 settledDebt.put(targetId, newDebt);
                 EnikZombietide.LOGGER.info("时间跳变提前结算：目标 {} 幸存 {} 只 → 血债 {}（模式：{}）",
@@ -945,6 +973,8 @@ public class HordeSpawner {
             batchTimer.remove(targetId);
             villagerHordeRadii.remove(targetId);
             progressData.remove(targetId);
+            // 同步移除四散锚点（时间跳变时可能还有 marker 挂在世界上）
+            HordeFleeMarker.discardFor(level, targetId);
 
             if (target instanceof ServerPlayer p) {
                 Integer settled = settledDebt.get(targetId);

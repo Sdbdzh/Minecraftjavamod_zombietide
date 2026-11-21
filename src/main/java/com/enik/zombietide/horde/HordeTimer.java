@@ -35,7 +35,14 @@ public class HordeTimer {
 
     private static long lastGameDayCheck = -1L;
     private static long lastDawnDay = -1L;
-    private static long lastScatterDay = -1L; // 记录最后一次执行 scatterZombies 的游戏日，防止重复
+    /**
+     * 上次执行 scatterZombies 的游戏刻（v0.1.55 起改为按 tick 节流，不再按天去重）。
+     * <p>原先是「一天只四散一次」，导致同一天内新触发的波次（`/zombietide trigger` 或自然触发）
+     * 永远不会进入四散，僵尸在白天继续以 state=0 追击，只能等 23460 被清。
+     * 现在每 20 tick（1 秒）允许重扫一次：{@code scatterZombies} 对 state==1 已跳过（幂等），
+     * 新刷出的僵尸最迟 1 秒内纳入四散，同时把 UUID 遍历成本从 800 次/秒降到 40 次/秒。
+     */
+    private static long lastScatterTick = Long.MIN_VALUE;
     private static long lastBurnSettleDay = -1L; // 记录最后一次起火时刻血债结算的游戏日，防止重复
     private static boolean loggedPlayerDuskCheckThisWindow = false;
     private static boolean loggedVillagerDuskCheckThisWindow = false;
@@ -45,6 +52,9 @@ public class HordeTimer {
 
     /** HUD 玩家状态定期同步计数器（每 20 tick = 1 秒刷新一次 waveActive / 血债） */
     private static int hudSyncTick = 0;
+
+    /** 四散锚点移动计时器（每 5 tick 推进一次，避免每 tick 扫全实体表） */
+    private static int markerTick = 0;
 
     /**
      * 时间跳变超过这么多天时，只推进 modDay、<b>不做</b>尸潮触发补偿。
@@ -121,7 +131,8 @@ public class HordeTimer {
             boolean willBurnInSun = curPhaseAfterJump < 12000 || curPhaseAfterJump >= 23460;
             if (willBurnInSun) {
                 HordeSpawner.forceClearAllHordes(overworld, config);
-                // 注意：跳变补偿的四散不更新 lastScatterDay，避免阻挡当天正常的日出前四散
+                // 注意：跳变补偿走的是 forceClearAllHordes（直接清除），不经过 scatterZombies，
+                // 因此不影响 lastScatterTick 的节拍
             }
             // 当前天的黄昏窗口被跳变完整跳过 → missedDusk 补偿
             long winStart = currentGameDay * 24000L + 13000L;
@@ -146,10 +157,11 @@ public class HordeTimer {
             HordeSpawner.checkMorningWarning(overworld, config);
         }
 
-        // ========== ⑤ 日出前四散（每游戏日一次，阈值 = 23460 - 消失秒数*20） ==========
+        // ========== ⑤ 日出前四散（阈值 = 23460 - 消失秒数*20，每 20 tick 允许重扫） ==========
         long scatterStart = 23460L - config.despawnSeconds() * 20L;
-        if (curPhase >= scatterStart && lastScatterDay != currentGameDay) {
-            lastScatterDay = currentGameDay;
+        long nowTick = overworld.getGameTime();
+        if (curPhase >= scatterStart && nowTick - lastScatterTick >= 20) {
+            lastScatterTick = nowTick;
             HordeSpawner.scatterZombies(overworld, config, hi);
         }
 
@@ -165,6 +177,14 @@ public class HordeTimer {
         if (reconcileTick >= 40) {
             reconcileTick = 0;
             HordeSpawner.reconcileStaleWaves(overworld, config);
+            HordeFleeMarker.sweepOrphans(overworld);
+        }
+
+        // ⑨ 四散锚点移动：每 5 tick 推进一次（marker 沿背离目标方向走 0.30 格/tick）
+        markerTick++;
+        if (markerTick >= 5) {
+            markerTick = 0;
+            HordeFleeMarker.tickAll(overworld);
         }
 
         // ⑧ HUD 玩家状态定期同步：waveActive 与血债会随触发/结算实时变化，
@@ -377,7 +397,7 @@ public class HordeTimer {
 
             player.setData(ModAttachments.PLAYER_HORDE.get(),
                     new PlayerHordeData(hordeData.modDay(), modDay,
-                            hordeData.waveCount() + 1, true));
+                            hordeData.waveCount() + 1, true, hordeData.waveSeq() + 1));
 
             HordeWarning.triggerPlayerHorde(overworld, player, config);
             HordeSpawner.startHorde(overworld, player.getUUID(), player, totalHorde, config, false, config.playerRadius());
@@ -431,13 +451,13 @@ public class HordeTimer {
 
             // 更新调度表
             VillagerScheduleData.ScheduleEntry newSched = new VillagerScheduleData.ScheduleEntry(
-                    sched.modDay(), modDay, sched.waveCount() + 1, true);
+                    sched.modDay(), modDay, sched.waveCount() + 1, true, sched.lastSeenDay(), sched.waveSeq() + 1);
             schedule.put(villagerUuid, newSched);
 
             // 更新实体附件
             villager.setData(ModAttachments.VILLAGER_HORDE.get(),
                     new VillagerHordeData(
-                            sched.modDay(), modDay, sched.waveCount() + 1, true));
+                            sched.modDay(), modDay, sched.waveCount() + 1, true, sched.waveSeq() + 1));
 
             HordeWarning.triggerVillagerHorde(overworld, villager, config);
             HordeSpawner.startHorde(overworld, villager.getUUID(), villager, hordeSize, config, true, config.villagerRadius());
@@ -517,7 +537,7 @@ public class HordeTimer {
 
             player.setData(ModAttachments.PLAYER_HORDE.get(),
                     new PlayerHordeData(hordeData.modDay(), targetModDay,
-                            hordeData.waveCount() + 1, true));
+                            hordeData.waveCount() + 1, true, hordeData.waveSeq() + 1));
 
             HordeWarning.triggerPlayerHorde(overworld, player, config);
             HordeSpawner.startHorde(overworld, player.getUUID(), player, totalHorde, config, false, config.playerRadius());
@@ -559,12 +579,12 @@ public class HordeTimer {
             }
 
             VillagerScheduleData.ScheduleEntry newSched = new VillagerScheduleData.ScheduleEntry(
-                    sched.modDay(), targetModDay, sched.waveCount() + 1, true);
+                    sched.modDay(), targetModDay, sched.waveCount() + 1, true, sched.lastSeenDay(), sched.waveSeq() + 1);
             schedule.put(villagerUuid, newSched);
 
             villager.setData(ModAttachments.VILLAGER_HORDE.get(),
                     new VillagerHordeData(
-                            sched.modDay(), targetModDay, sched.waveCount() + 1, true));
+                            sched.modDay(), targetModDay, sched.waveCount() + 1, true, sched.waveSeq() + 1));
 
             HordeWarning.triggerVillagerHorde(overworld, villager, config);
             HordeSpawner.startHorde(overworld, villager.getUUID(), villager, hordeSize, config, true, config.villagerRadius());
@@ -608,7 +628,7 @@ public class HordeTimer {
 
             player.setData(ModAttachments.PLAYER_HORDE.get(),
                     new PlayerHordeData(hordeData.modDay(), modDay,
-                            hordeData.waveCount() + 1, true));
+                            hordeData.waveCount() + 1, true, hordeData.waveSeq() + 1));
 
             HordeWarning.triggerPlayerHorde(overworld, player, config);
             HordeSpawner.startHorde(overworld, player.getUUID(), player, totalHorde, config, false, config.playerRadius());
@@ -645,12 +665,12 @@ public class HordeTimer {
             }
 
             VillagerScheduleData.ScheduleEntry newSched = new VillagerScheduleData.ScheduleEntry(
-                    sched.modDay(), modDay, sched.waveCount() + 1, true);
+                    sched.modDay(), modDay, sched.waveCount() + 1, true, sched.lastSeenDay(), sched.waveSeq() + 1);
             schedule.put(villagerUuid, newSched);
 
             villager.setData(ModAttachments.VILLAGER_HORDE.get(),
                     new VillagerHordeData(
-                            sched.modDay(), modDay, sched.waveCount() + 1, true));
+                            sched.modDay(), modDay, sched.waveCount() + 1, true, sched.waveSeq() + 1));
 
             HordeWarning.triggerVillagerHorde(overworld, villager, config);
             HordeSpawner.startHorde(overworld, villager.getUUID(), villager, hordeSize, config, true, config.villagerRadius());

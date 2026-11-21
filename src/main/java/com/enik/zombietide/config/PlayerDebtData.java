@@ -49,14 +49,22 @@ public class PlayerDebtData extends SavedData {
             }
     );
 
-    public record Entry(int debt, long lastSettledDay) {
+    public record Entry(int debt, long lastSettledDay, int settledWave) {
         public static final Codec<Entry> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.INT.fieldOf("debt").forGetter(Entry::debt),
-                Codec.LONG.fieldOf("lastSettledDay").forGetter(Entry::lastSettledDay)
+                // lastSettledDay 必须保留为必填字段：删掉会让老存档 Entry 解析失败，
+                // resultOrPartial 会静默丢弃整张表 → 血债全部归 0。
+                Codec.LONG.fieldOf("lastSettledDay").forGetter(Entry::lastSettledDay),
+                // 默认 -1：waveSeq 从 0 起，若默认 0 会让首次结算被误判「已结算」
+                Codec.INT.optionalFieldOf("settledWave", -1).forGetter(Entry::settledWave)
         ).apply(instance, Entry::new));
 
+        public Entry(int debt, long lastSettledDay) {
+            this(debt, lastSettledDay, -1);
+        }
+
         public static Entry empty() {
-            return new Entry(0, Long.MIN_VALUE);
+            return new Entry(0, Long.MIN_VALUE, -1);
         }
     }
 
@@ -97,7 +105,28 @@ public class PlayerDebtData extends SavedData {
     public void setDebt(UUID uuid, int debt) {
         Entry e = entries.get(uuid);
         long day = e == null ? Long.MIN_VALUE : e.lastSettledDay();
-        entries.put(uuid, new Entry(Math.max(0, debt), day));
+        int settled = e == null ? -1 : e.settledWave();   // 保留波次标记，不能丢
+        entries.put(uuid, new Entry(Math.max(0, debt), day, settled));
+        setDirty();
+    }
+
+    /**
+     * 该目标的这一波是否已经结算过血债（按波次去重，v0.1.55 起取代按天去重）。
+     * <p>{@code waveSeq <= 0} 表示波次未分配（初始态 / 重置后），<b>永不判为已结算</b>——
+     * 否则重置路径用 4 参构造写入的 waveSeq=0 会被 settledWave=0 误挡。
+     */
+    public boolean isWaveSettled(UUID uuid, int waveSeq) {
+        if (waveSeq <= 0) return false;
+        Entry e = entries.get(uuid);
+        return e != null && e.settledWave() == waveSeq;
+    }
+
+    /** 标记该目标的这一波已结算 */
+    public void markWaveSettled(UUID uuid, int waveSeq) {
+        Entry e = entries.get(uuid);
+        int debt = e == null ? 0 : e.debt();
+        long day = e == null ? Long.MIN_VALUE : e.lastSettledDay();
+        entries.put(uuid, new Entry(debt, day, waveSeq));
         setDirty();
     }
 
@@ -109,7 +138,8 @@ public class PlayerDebtData extends SavedData {
     public void markSettled(UUID uuid, long day) {
         Entry e = entries.get(uuid);
         int debt = e == null ? 0 : e.debt();
-        entries.put(uuid, new Entry(debt, day));
+        int settled = e == null ? -1 : e.settledWave();   // 保留波次标记
+        entries.put(uuid, new Entry(debt, day, settled));
         setDirty();
     }
 

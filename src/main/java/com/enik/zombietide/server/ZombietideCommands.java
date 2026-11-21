@@ -219,7 +219,7 @@ public class ZombietideCommands {
                 int totalHorde = hordeSize;
 
                 player.setData(ModAttachments.PLAYER_HORDE.get(),
-                        new PlayerHordeData(data.modDay(), data.modDay(), data.waveCount() + 1, true));
+                        new PlayerHordeData(data.modDay(), data.modDay(), data.waveCount() + 1, true, data.waveSeq() + 1));
 
                 HordeWarning.triggerPlayerHorde(player.serverLevel(), player, config);
                 HordeSpawner.startHorde(player.serverLevel(), player.getUUID(), player, totalHorde, config, false, config.playerRadius());
@@ -251,14 +251,14 @@ public class ZombietideCommands {
                 final int finalHordeSize = actualHordeSize;
 
                 villager.setData(ModAttachments.VILLAGER_HORDE.get(),
-                        new VillagerHordeData(data.modDay(), data.modDay(), data.waveCount() + 1, true));
+                        new VillagerHordeData(data.modDay(), data.modDay(), data.waveCount() + 1, true, data.waveSeq() + 1));
                 // 同步权威调度表：HUD / 对账 / 区块重载都以调度表为准。
                 // 不写调度表的话，调试触发的村民尸潮会被 reconcileStaleWaves 当成孤儿在 2 秒内清掉。
                 var schedule = villagerLevel.getDataStorage().computeIfAbsent(
                         com.enik.zombietide.config.VillagerScheduleData.FACTORY,
                         com.enik.zombietide.config.VillagerScheduleData.ID);
                 schedule.put(villager.getUUID(), new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
-                        data.modDay(), data.modDay(), data.waveCount() + 1, true));
+                        data.modDay(), data.modDay(), data.waveCount() + 1, true, -1, data.waveSeq() + 1));
 
                 HordeWarning.triggerVillagerHorde(villagerLevel, villager, config);
                 HordeSpawner.startHorde(villagerLevel, villager.getUUID(), villager, actualHordeSize, config, true, config.villagerRadius());

@@ -42,7 +42,9 @@ public class VillagerScheduleData extends SavedData {
             int waveCount,
             boolean waveActive,
             /** 最后一次确认该村民仍存在的游戏日；<b>-1 表示未知</b>（老存档没有这个字段） */
-            int lastSeenDay
+            int lastSeenDay,
+            /** 波次序号：每次 startHorde 自增，供血债「按波去重」使用（0 = 未分配） */
+            int waveSeq
     ) {
         public static final Codec<ScheduleEntry> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.INT.fieldOf("modDay").forGetter(ScheduleEntry::modDay),
@@ -51,16 +53,18 @@ public class VillagerScheduleData extends SavedData {
                 Codec.BOOL.fieldOf("waveActive").forGetter(ScheduleEntry::waveActive),
                 // 老存档没有该字段 → 默认 -1（未知）。**不能默认 0**：0 会被 pruneStaleEntries
                 // 判成「30 天未见」，首次清理就把全部历史条目删光。
-                Codec.INT.optionalFieldOf("lastSeenDay", -1).forGetter(ScheduleEntry::lastSeenDay)
+                Codec.INT.optionalFieldOf("lastSeenDay", -1).forGetter(ScheduleEntry::lastSeenDay),
+                Codec.INT.optionalFieldOf("waveSeq", 0).forGetter(ScheduleEntry::waveSeq)
         ).apply(instance, ScheduleEntry::new));
 
-        /** 兼容旧构造：lastSeenDay 记为未知，由 {@link #put} 继承旧条目里的已知值 */
+        /** 兼容旧构造：lastSeenDay 记为未知、waveSeq 记为 0，由 {@link #put} 继承旧条目里的已知值 */
         public ScheduleEntry(int modDay, int lastTriggerDay, int waveCount, boolean waveActive) {
-            this(modDay, lastTriggerDay, waveCount, waveActive, -1);
+            this(modDay, lastTriggerDay, waveCount, waveActive, -1, 0);
         }
 
+        /** 保留 waveSeq（v0.1.55 新增）；lastSeenDay 更新时不能把它抹掉 */
         public ScheduleEntry withLastSeenDay(int day) {
-            return new ScheduleEntry(modDay, lastTriggerDay, waveCount, waveActive, day);
+            return new ScheduleEntry(modDay, lastTriggerDay, waveCount, waveActive, day, waveSeq);
         }
     }
 
@@ -99,7 +103,7 @@ public class VillagerScheduleData extends SavedData {
     public ScheduleEntry touch(UUID villagerUuid, int currentDay) {
         ScheduleEntry e = schedules.get(villagerUuid);
         if (e == null) {
-            e = new ScheduleEntry(0, -1, 0, false, currentDay);
+            e = new ScheduleEntry(0, -1, 0, false, currentDay, 0);
             schedules.put(villagerUuid, e);
             setDirty();
             return e;

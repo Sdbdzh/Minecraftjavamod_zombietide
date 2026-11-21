@@ -115,37 +115,26 @@ public class HordeZombieGoal extends Goal {
             // 永久饿死，导致 state==0 的仇恨刷新失效。
             mob.goalSelector.disableControlFlag(Goal.Flag.MOVE);
 
-            // 选点全失败后的冷却：期间保持不动，避免每 tick 重跑 A*
-            if (fleeCooldown > 0) {
-                fleeCooldown--;
+            // v0.1.55：四散导航改为「追一个不可见 Marker 诱饵」。
+            // marker 由 scatterZombies 创建，每 tick 沿背离主目标方向移动 0.30 格（略快于僵尸）。
+            // 关键：用 createPath + moveTo(Path) 而不是坐标版 moveTo(x,y,z,speed)——
+            // 后者在 createPath 失败时把 path 置 null，会把僵尸钉住（这正是旧的「走一段停一下」）。
+            net.minecraft.world.entity.Entity marker = HordeFleeMarker.getFor(mob);
+            if (marker == null || !marker.isAlive()) {
+                // marker 未就绪（重启后丢失/尚未创建）：本 tick 不动，
+                // HordeTimer 的四散重扫会在 ≤20 tick 内 ensure 重建。
                 return;
             }
-            if (repickTimer > 0) {
-                repickTimer--;
-            }
 
-            // 导航未完成时让当前逃跑路径继续走完，避免每 tick 重设路径导致抖动/卡停。
-            // 但途中威胁真的逼近时必须能被感知：每 THREAT_RESCAN_INTERVAL tick 检查一次，
-            // 且两次重选之间至少隔 FLEE_REPICK_MIN_TICKS。
-            Path current = mob.getNavigation().getPath();
-            boolean moving = current != null && !current.isDone();
-            if (moving) {
-                if (++rescanTimer < THREAT_RESCAN_INTERVAL) {
-                    return;
-                }
-                rescanTimer = 0;
-                if (repickTimer > 0) {
-                    return;
-                }
-                if (!hasNearbyThreat()) {
-                    return;
+            var navigation = mob.getNavigation();
+            // 路径走完的当 tick 立刻重发（无空档）；行进中每 20 tick 补发一次（自限流）
+            if (navigation.isDone() || ++repathTimer >= REPATH_INTERVAL_TICKS) {
+                repathTimer = 0;
+                Path path = navigation.createPath(HordeFleeMarker.candidates(marker), 1);
+                if (path != null) {
+                    navigation.moveTo(path, 1.1);
                 }
             }
-            rescanTimer = 0;
-            repickTimer = FLEE_REPICK_MIN_TICKS;
-
-            LivingEntity mainTarget = findTarget();
-            pickFleeDestination(mainTarget);
             return;
         }
 
@@ -227,192 +216,10 @@ public class HordeZombieGoal extends Goal {
 
     // ==================== 四散逃跑逻辑 ====================
 
-    /** 逃跑评分采样方向数（8 方向）；评分采样只需方块查询，开销可控 */
-    private static final int FLEE_DIRECTIONS = 8;
-    /**
-     * 逃跑点距离 = FOLLOW_RANGE × 该比例，并 clamp 到 [MIN, MAX]。
-     * <p><b>不能用固定 48</b>：僵尸 FOLLOW_RANGE 默认 35，而 PathNavigation.createPath
-     * 的搜索区域只有 ±(FOLLOW_RANGE+8)，PathFinder 对距起点 ≥ FOLLOW_RANGE 的节点不再扩展
-     * ——48 格目标必然返回 null，导致「走一段停一下」。
-     * 取 0.7 倍（35 → 24.5）留出余量给地形绕行；上限 28 防属性被修饰符拉高后再次越界。
-     */
-    private static final double FLEE_DISTANCE_RATIO = 0.7;
-    private static final double FLEE_DISTANCE_MIN = 12.0;
-    private static final double FLEE_DISTANCE_MAX = 28.0;
-    /** 威胁实体（玩家/村民/铁傀儡）规避半径 —— 仅用于评分 */
-    private static final double THREAT_AVOID_RADIUS = 12.0;
-    /** 单次评估最多收集的威胁实体数（AABB 只取 12 格内，超出部分忽略） */
-    private static final int MAX_THREAT_SCAN = 16;
-    /** 只有威胁逼近到这个半径内才打断当前逃跑路径（避免 12 格内有玩家就每 0.5 秒重跑 A*） */
-    private static final double THREAT_INTERRUPT_RADIUS = 6.0;
-    /**
-     * 逃跑路径行进中的威胁重扫间隔（tick）。
-     * <p>路径未完成时不能每 tick 重选（会抖动/卡停），但也不能完全不看——
-     * 否则途中新出现的威胁永远感知不到。折中：每 10 tick（0.5 秒）检查一次，
-     * 只有威胁逼近 THREAT_INTERRUPT_RADIUS 内才打断。
-     */
-    private static final int THREAT_RESCAN_INTERVAL = 10;
-    /** 两次重选之间的最小间隔（tick），防止威胁持续存在时反复重跑寻路 */
-    private static final int FLEE_REPICK_MIN_TICKS = 20;
-    /** 对评分最高的前 N 个候选做 createPath 可达性预检 */
-    private static final int FLEE_TOP_N = 3;
-    /** 重扫计时器 */
-    private int rescanTimer = 0;
-    /** 距上次重选的计时器 */
-    private int repickTimer = 0;
-    /** 选点全失败后的冷却（tick）：期间不动 navigation，避免每 tick 重试 A* */
-    private int fleeCooldown = 0;
-
-    /** 当前僵尸的逃跑距离（按 FOLLOW_RANGE 动态计算，clamp 到安全区间） */
-    private double fleeDistance() {
-        double follow = mob.getAttributeValue(
-                net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE);
-        if (follow <= 1.0) follow = 35.0;   // 属性缺失/被清空时兜底
-        return net.minecraft.util.Mth.clamp(follow * FLEE_DISTANCE_RATIO,
-                FLEE_DISTANCE_MIN, FLEE_DISTANCE_MAX);
-    }
-
-    /**
-     * 12 格内是否存在威胁实体（玩家 / 村民 / 铁傀儡，排除创造与旁观玩家）。
-     * <p>用 AABB 范围查询（{@code getEntitiesOfClass}）而非遍历全实体表，成本 O(附近实体数)。
-     * 供「路径行进中定期重扫」判断是否需要打断当前路径。
-     */
-    private boolean hasNearbyThreat() {
-        if (!(mob.level() instanceof ServerLevel sl)) return false;
-        var box = mob.getBoundingBox().inflate(THREAT_INTERRUPT_RADIUS);
-        for (LivingEntity le : sl.getEntitiesOfClass(LivingEntity.class, box)) {
-            if (!le.isAlive()) continue;
-            if (le instanceof ServerPlayer p && (p.isCreative() || p.isSpectator())) continue;
-            if (le instanceof ServerPlayer || le instanceof Villager || le instanceof IronGolem) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 选择逃跑目的地：采样 FLEE_DIRECTIONS 个方向，按评分选最优：
-     *  - 天空光照越暗越好（躲太阳，防止被烧死）
-     *  - 远离主目标越远越好
-     *  - 附近（THREAT_AVOID_RADIUS 内）玩家/村民/铁傀儡越少越好
-     *  - 目标点可寻路（有 Path 才真的会走过去）
-     * 全部不可行时，退化为背向主目标直跑（保证"一直在逃"）。
-     */
-    private void pickFleeDestination(LivingEntity mainTarget) {
-        double mx = mainTarget != null ? mainTarget.getX() : mob.getX();
-        double mz = mainTarget != null ? mainTarget.getZ() : mob.getZ();
-
-        // 收集附近威胁实体（玩家/村民/铁傀儡），忽略创造/旁观玩家。
-        // 用 AABB 范围查询而非 getEntities().getAll()：只扫 12 格内，
-        // 成本从 O(全世界实体数) 降到 O(附近实体数)。MAX_THREAT_SCAN 此时才真正起到「收集上限」作用。
-        java.util.List<LivingEntity> threats = new java.util.ArrayList<>();
-        if (mob.level() instanceof ServerLevel sl) {
-            var box = mob.getBoundingBox().inflate(THREAT_AVOID_RADIUS);
-            for (LivingEntity le : sl.getEntitiesOfClass(LivingEntity.class, box)) {
-                if (threats.size() >= MAX_THREAT_SCAN) break;
-                if (!le.isAlive()) continue;
-                if (le instanceof ServerPlayer p && (p.isCreative() || p.isSpectator())) continue;
-                if (le instanceof ServerPlayer || le instanceof Villager || le instanceof IronGolem) {
-                    // AABB 是方形范围，再用球形距离精确筛一次
-                    if (le.distanceToSqr(mob) <= THREAT_AVOID_RADIUS * THREAT_AVOID_RADIUS) {
-                        threats.add(le);
-                    }
-                }
-            }
-        }
-
-        double dist = fleeDistance();
-        java.util.List<BlockPos> cands = new java.util.ArrayList<>();
-        java.util.List<Double> scores = new java.util.ArrayList<>();
-
-        for (int i = 0; i < FLEE_DIRECTIONS; i++) {
-            double angle = (Math.PI * 2 * i) / FLEE_DIRECTIONS;
-            // 主目标方向角（用于计算"背离程度"）
-            double awayDot = 0;
-            if (mainTarget != null) {
-                double toTargetX = mx - mob.getX();
-                double toTargetZ = mz - mob.getZ();
-                double len = Math.sqrt(toTargetX * toTargetX + toTargetZ * toTargetZ);
-                if (len > 0.001) {
-                    double dirX = Math.cos(angle), dirZ = Math.sin(angle);
-                    // toTarget 指向主目标，故点积 >0 表示该方向朝向主目标，<0 才是背离
-                    awayDot = (dirX * toTargetX + dirZ * toTargetZ) / len;
-                }
-            } else {
-                awayDot = 1; // 无主目标时方向等权
-            }
-
-            int tx = (int) Math.round(mob.getX() + Math.cos(angle) * dist);
-            int tz = (int) Math.round(mob.getZ() + Math.sin(angle) * dist);
-            BlockPos dest = findGroundPos(mob.level(), tx, tz, (int) mob.getY());
-            if (dest == null) continue;
-
-            // --- 评分 ---
-            double score = 0;
-            // 1. 天空光照：越暗越好（0-15，取反加权）
-            int skyLight = mob.level().getBrightness(LightLayer.SKY, dest);
-            score += (15 - skyLight) * 2.0;
-            // 2. 背离主目标：awayDot 越小越背离，故取负加权
-            score -= awayDot * 4.0;
-            // 3. 威胁实体规避：目的地附近有威胁则重罚
-            for (LivingEntity threat : threats) {
-                double d2 = (threat.getX() - dest.getX()) * (threat.getX() - dest.getX())
-                        + (threat.getZ() - dest.getZ()) * (threat.getZ() - dest.getZ());
-                if (d2 <= THREAT_AVOID_RADIUS * THREAT_AVOID_RADIUS) {
-                    score -= 8.0;
-                }
-            }
-
-            cands.add(dest);
-            scores.add(score);
-        }
-
-        // 按分数降序排列索引（评分本身只做方块/光照查询，不含寻路）
-        Integer[] order = new Integer[cands.size()];
-        for (int i = 0; i < order.length; i++) order[i] = i;
-        java.util.Arrays.sort(order, (a, b) -> Double.compare(scores.get(b), scores.get(a)));
-
-        // 只对评分最高的前 FLEE_TOP_N 个候选做可达性预检（A* 有开销，不做 8 次全试）。
-        // accuracy=1 容忍落点偏差，比 0 更容易成功。
-        for (int k = 0; k < Math.min(FLEE_TOP_N, order.length); k++) {
-            BlockPos pos = cands.get(order[k]);
-            Path path = mob.getNavigation().createPath(pos, 1);
-            if (path != null) {
-                mob.getNavigation().moveTo(path, 1.1);
-                return;
-            }
-        }
-
-        // 兜底：沿背离方向 10 格（几乎必然可达）。**绝不**再用 3 倍外推的
-        // moveTo(x,y,z,speed) —— 该重载在 createPath 失败时会把 path 置 null，僵尸会直接停住。
-        double awayX;
-        double awayZ;
-        if (mainTarget != null) {
-            double dx = mob.getX() - mx;
-            double dz = mob.getZ() - mz;
-            double len = Math.sqrt(dx * dx + dz * dz);
-            if (len < 0.001) {
-                dx = 0;
-                dz = 1;
-                len = 1;
-            }
-            awayX = mob.getX() + dx / len * 10.0;
-            awayZ = mob.getZ() + dz / len * 10.0;
-        } else {
-            awayX = mob.getX() + (RANDOM.nextDouble() - 0.5) * 20.0;
-            awayZ = mob.getZ() + (RANDOM.nextDouble() - 0.5) * 20.0;
-        }
-        BlockPos near = findGroundPos(mob.level(), (int) awayX, (int) awayZ, (int) mob.getY());
-        Path fallback = near == null ? null : mob.getNavigation().createPath(near, 1);
-        if (fallback != null) {
-            mob.getNavigation().moveTo(fallback, 1.1);
-        } else {
-            // 连 10 格都不可达（被完全围住）：进入冷却，保持当前导航不动
-            fleeCooldown = 20;
-            com.enik.zombietide.EnikZombietide.LOGGER.debug(
-                    "尸潮僵尸 {} 四散选点全失败，冷却 20 tick", mob.getUUID());
-        }
-    }
+    /** 路径行进中的补发间隔（tick）：走完当 tick 会立刻重发，这里只做兜底 */
+    private static final int REPATH_INTERVAL_TICKS = 20;
+    /** 距上次重发的计时器 */
+    private int repathTimer = 0;
 
     /** 找目的地附近的地表可站方块（向上最多 5 格，向下最多 3 格） */
     private BlockPos findGroundPos(net.minecraft.world.level.Level level, int x, int z, int refY) {
