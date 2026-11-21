@@ -144,8 +144,9 @@ public class HordeTimer {
         // ========== ② 跳变补偿（仅 |Δ|>1000 判定为指令跳变） ==========
         long timeDelta = hi - lo;
         if (Math.abs(timeDelta) > 1000) {
-            // 跳变后僵尸将暴露在阳光下（dayPhase < 12000 白天 或 >= 23460 起燃烧）→ 强制四散
-            // 夜晚（12000-23459）跳变不应强制四散，那是僵尸正常活动时间
+            // 【v0.1.62 修复 #160】跳变后僵尸将暴露在阳光下（白天 或 >= 23460）→
+            // **直接清除**（forceClearAllHordes），不是"强制四散"。
+            // 夜晚（12000-23459）跳变不清除，那是僵尸正常活动时间
             long curPhaseAfterJump = hi % 24000;
             boolean willBurnInSun = curPhaseAfterJump < 12000 || curPhaseAfterJump >= 23460;
             if (willBurnInSun) {
@@ -169,7 +170,7 @@ public class HordeTimer {
             checkVillagerHordes(overworld, config);
         }
 
-        // ========== ④ 黎明结算 + 清晨警告（每游戏日一次） ==========
+        // ========== ④ 黎明收尾 + 清晨警告（每游戏日一次；v0.1.56 起 onDawn 只重置 waveActive，不结算血债） ==========
         if (curPhase < 1000 && lastDawnDay != currentGameDay) {
             lastDawnDay = currentGameDay;
             HordeSpawner.onDawn(overworld, config);
@@ -199,14 +200,14 @@ public class HordeTimer {
             HordeFleeMarker.sweepOrphans(overworld);
         }
 
-        // ⑨ 四散锚点移动：每 5 tick 推进一次（marker 沿背离目标方向走 0.30 格/tick）
+        // ⑧ 四散锚点移动：每 5 tick 推进一次（marker 沿背离目标方向走 0.30 格/tick）
         markerTick++;
         if (markerTick >= 5) {
             markerTick = 0;
             HordeFleeMarker.tickAll(overworld);
         }
 
-        // ⑧ HUD 玩家状态定期同步：waveActive 与血债会随触发/结算实时变化，
+        // ⑨ HUD 玩家状态定期同步：waveActive 与血债会随触发/结算实时变化，
         //    只在跨天和登录时同步会让右上角面板一直显示旧值。1 秒一次，包极小。
         hudSyncTick++;
         if (hudSyncTick >= 20) {

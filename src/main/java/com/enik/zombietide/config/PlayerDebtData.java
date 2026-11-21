@@ -59,7 +59,8 @@ public class PlayerDebtData extends SavedData {
                 // lastSettledDay 必须保留为必填字段：删掉会让老存档 Entry 解析失败，
                 // resultOrPartial 会静默丢弃整张表 → 血债全部归 0。
                 Codec.LONG.fieldOf("lastSettledDay").forGetter(Entry::lastSettledDay),
-                // 默认 -1：waveSeq 从 0 起，若默认 0 会让首次结算被误判「已结算」
+                // 【v0.1.62 补注】默认 -1：waveSeq 从 0 起，若默认 0 会让首次结算被误判「已结算」。
+                // 该字段当前仅写入、不读取（v0.1.56 结算点唯一化后无消费方），保留兼容老存档。
                 Codec.INT.optionalFieldOf("settledWave", -1).forGetter(Entry::settledWave)
         ).apply(instance, Entry::new));
 

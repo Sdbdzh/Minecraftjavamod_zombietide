@@ -49,7 +49,8 @@ public class HordeZombieGoal extends Goal {
     }
 
     /** 每 tick 调用，判断 Goal 是否可以开始/继续执行：
-     *  state==0：主目标存活且未进入 despawn 状态
+     *  <p>state==0（active）：<b>不要求主目标存活</b>（v0.1.59 修复 #95）——触发者死亡/未加载时
+     *  Goal 仍要运行，由 tick() 的多级选目标决定打谁；只排除「目标存在但创造/旁观」与 state==2。
      *  state==1（scattering）：一直返回 true，持续运行 tick() 执行逃跑逻辑，直到 state==2
      */
     @Override
@@ -239,8 +240,9 @@ public class HordeZombieGoal extends Goal {
     /**
      * 查找主目标实体（玩家或村民），存活才返回；找不到返回 null。
      * <p>服务端统一走 {@link HordeSpawner#findTarget}——它自带「getEntity 未命中就遍历实体表」的兜底，
-     * 因为 {@code ServerLevel.getEntity} 的 UUID 索引对<b>已加载村民</b>不可靠。这里若裸查 getEntity，
-     * 村民尸潮的僵尸会随机认为目标已消失而 stop()，而 apply() 已移除原版索敌 Goal → 彻底无目标。
+     * 因为 {@code ServerLevel.getEntity} 的 UUID 索引对<b>已加载村民</b>不可靠。若裸查 getEntity，
+     * 村民尸潮的僵尸会误判目标已消失。v0.1.57 起原版索敌 Goal 已恢复保留，
+     * 目标缺失时会由 tick() 改打其它波次触发者 / 交给原版索敌，而不是彻底无目标。
      */
     private LivingEntity findTarget() {
         if (targetUUID == null) return null;

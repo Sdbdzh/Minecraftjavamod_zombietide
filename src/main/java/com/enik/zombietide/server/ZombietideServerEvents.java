@@ -39,7 +39,10 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 @EventBusSubscriber(modid = EnikZombietide.MODID, bus = EventBusSubscriber.Bus.GAME)
 public class ZombietideServerEvents {
 
-    /** 服务端启动时：记录日志 */
+    /** 【v0.1.62 修复 #177】服务端启动时：重置三处静态状态
+     *  ({@link HordeBgmScheduler#reset()} / {@link HordeTimer#resetState()} /
+     *  {@link HordeSpawner#resetState()})，并记录日志。单机换存档不重启 JVM，必须在这里清干净。
+     */
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
         MinecraftServer server = event.getServer();

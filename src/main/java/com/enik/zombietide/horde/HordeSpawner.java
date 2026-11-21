@@ -69,7 +69,9 @@ public class HordeSpawner {
     // 村民尸潮半径存储
     private static final Map<UUID, Double> villagerHordeRadii = new HashMap<>();
 
-    // 四散状态僵尸：UUID -> despawn timer (tick)
+    // 【v0.1.62 修复 #168】四散僵尸集合：UUID -> 到 23460 的名义倒计时。
+    // 注意：该倒计时值当前**不被读取**（v0.1.55 起僵尸由 Marker 诱饵导航、23460 由
+    // settleDebtAtBurnTime 统一清除）；这里主要作为"已处于四散态"的标记集合使用。
     private static final Map<UUID, Integer> scatteringZombies = new ConcurrentHashMap<>();
 
     // 所有活跃的尸潮僵尸 UUID 集合（用于四散时快速遍历，避免全实体扫描）
@@ -103,10 +105,8 @@ public class HordeSpawner {
         warnedNightBefore.clear();
     }
 
-    // 已结算血债的游戏日（target UUID -> gameDay），防止同一天重复结算（四散完成/起火结算/黎明 onDawn 共用）
-
-    // 待血债结算的目标（四散开始时加入，23460 起火时刻按实时存活数结算，然后移除）
-
+    // 【v0.1.62 修复 #167】上面两行孤儿注释描述的是 v0.1.35 之前留在本类的血债字段；
+    // 血债已迁至 PlayerDebtData（SavedData），此处不再有对应 Map，故删除孤儿注释。
     /**
      * 随机尸潮数量：对 min/max 做容错（配置可能被改成 min > max）。
      * 直接 {@code nextInt(max-min+1)} 在 max&lt;min 时会抛 IllegalArgumentException 导致服务端崩溃。
@@ -404,30 +404,25 @@ public class HordeSpawner {
     }
 
     /**
-     * 黎明结算：遍历所有尸潮僵尸，统计存活数并累加到目标的血债（仅玩家），重置 waveActive。
-     * 全灭清零：若某波一只不剩，该目标血债清零，waveActive 重置为 false。
-     * <p>
-     * 【BUG9 修复】不再仅依赖世界中的 Zombie 实体来收集尸潮目标。
-     * 如果某场尸潮的所有僵尸都被杀死，世界中就找不到对应 Zombie，
-     * allHordeTargets 就会为空，导致 waveActive 永远不会被重置为 false，
-     * debug info 始终显示“尸潮进行中”。
-     * 修复后：先遍历所有在线玩家和村民，收集所有 waveActive=true 的目标，
-     * 保证黎明时无论僵尸是否存活，waveActive 都会被重置。
-     * 【R43-009 high】同游戏日内多次夜→晨跳变：移除 lastDawnDay 限制。
-     * <p>【v0.1.56】本方法**不再结算血债**（唯一结算点是 23460 的 settleDebtAtBurnTime），只重置 waveActive。
-     * 调用方需自行判断是否需要防重复（如常规黎明窗口使用 lastDawnDay）。
-     * 注意：不在这里做四散动作。四散动作由 scatterZombies() 在日出前 despawnSeconds 秒触发，
-     * 避免僵尸被太阳烧死后才四散。
+     * 黎明收尾：把所有目标的 {@code waveActive} 重置为 false。
+     * <p><b>【v0.1.56 起不结算血债</b>——唯一结算点是 23460 起火时刻的
+     * {@link #settleDebtAtBurnTime}。旧实现在黎明又算一遍并带「全灭清零」，
+     * 而 23460 已把僵尸清完 → 黎明扫到 count=0 会把刚算好的血债清零。
+     * <p>【BUG9 修复】不只依赖世界中的 Zombie 实体收集目标：
+     * 若某场尸潮的僵尸全被杀死，世界中就找不到对应 Zombie，
+     * allHordeTargets 为空 → waveActive 永远卡在 true。因此也遍历在线玩家与村民的附件。
+     * <p>【R43-009 high】同游戏日内多次夜→晨跳变：调用方（HordeTimer）用 lastDawnDay 去重，
+     * 本方法自身不判重。四散动作由 {@link #scatterZombies} 在 23260 触发，不在这里做。
      * @param level 服务端世界
      * @param config 配置
      */
     public static void onDawn(ServerLevel level, ZombietideConfig config) {
-        // 收集每个目标的存活尸潮僵尸数（仅统计未进入四散的活尸潮僵尸）
+        // 收集每个目标的存活尸潮僵尸数（仅统计未进入四散的活尸潮僵尸；v0.1.56 起不用于血债结算）
         Map<UUID, Integer> survivorCount = new HashMap<>();
         // 收集所有尸潮目标 UUID：既包括世界中的尸潮僵尸，也包括附件中 waveActive=true 的玩家/村民
         Set<UUID> allHordeTargets = new HashSet<>();
 
-        // 1. 从世界中的尸潮僵尸收集目标（用于血债结算和幸存者统计）
+        // 1. 从世界中的尸潮僵尸收集目标（用于 waveActive 重置与幸存者统计）
         // 尸潮实体包括：Zombie、ZombieVillager、Husk、Drowned、Stray（均带有 horde 标记）
         for (var entity : level.getEntities().getAll()) {
             if (!(entity instanceof net.minecraft.world.entity.monster.Zombie ||
@@ -443,8 +438,8 @@ public class HordeSpawner {
 
             if (!entity.isAlive()) continue;
 
-            // 已进入四散状态（state==1）的僵尸由起火结算 settleDebtAtBurnTime 统一处理，
-            // 不计入黎明存活统计（此处不发送任何消息，四散通知在 scatterZombies 里）
+            // 已进入四散状态（state==1）的僵尸由 23460 的 settleDebtAtBurnTime 统一清除；
+            // 黎明这里只做 waveActive 重置，不做存活统计与血债结算（此处不发送任何消息）
             if (tag.getInt(HORDE_STATE_KEY) == 1) continue;
 
             survivorCount.merge(targetId, 1, Integer::sum);
@@ -473,7 +468,7 @@ public class HordeSpawner {
             }
         }
 
-        // 累加血债到世界级存储（不再依赖实体是否在线），并处理全灭清零
+        // 【v0.1.56】黎明不再累加血债，只重置 waveActive（唯一结算点是 23460）
         long today = level.getDayTime() / 24000L;
         com.enik.zombietide.config.PlayerDebtData debtData =
                 com.enik.zombietide.config.PlayerDebtData.get(level);
@@ -529,11 +524,7 @@ public class HordeSpawner {
                 EnikZombietide.LOGGER.debug("村民 {} 黎明重置调度表 waveActive=false", entry.getKey());
             }
         }
-        
-        // 【R43-013】BypassWindow 路径去重：清理已处理过的目标，避免重复触发
-        // 在黎明结算后，清除已处理目标的 bypass 标记（如果有的话）
-        // 实际上 onDawn 本身会重置 waveActive，所以 bypass 逻辑在 checkPlayerHordesBypassWindow 中
-        // 通过 modDay == lastTriggerDay 检查已足够防重复
+
     }
 
     /**
@@ -730,7 +721,7 @@ public class HordeSpawner {
      * 按存活数结算单个目标的血债（起火结算与时间跳变强制清除共用同一套规则）。
      *
      * @param survivors 当前存活的尸潮僵尸数
-     * @param waveSeq   【当前未使用，保留备查】原本用于「按波次去重」（v0.1.55），
+     * @param waveSeq   【当前未使用，保留备查；v0.1.62 补注】原本用于「按波次去重」（v0.1.55），
      *                  v0.1.56 起结算点唯一（只有 23460），去重不再需要；参数保留以便将来若加回
      *                  第二个结算点时直接复用。调用方仍传 {@code currentWaveSeq(...)} 的返回值。
      * @return 结算后的血债值；{@code null} 表示跳过（目标未在血债表注册）
@@ -1502,7 +1493,9 @@ public class HordeSpawner {
      * 说明这波尸潮本应在当天日出前后结束，但服务器当时未运行（或在白天加载存档），
      * 错过了 {@link #scatterZombies} / {@link #onDawn} 窗口，导致状态一直卡到下一个黎明。
      * <p>
-     * 同时清理：无主的内部刷怪状态、目标已失效的孤儿尸潮僵尸、已不存在/已死的僵尸 UUID。
+     * 同时清理：无主的内部刷怪状态、目标已失效的孤儿尸潮僵尸。
+     * <p><b>不清理 {@code hordeZombieUuids}</b>：{@code level.getEntity} 对未加载区块的僵尸也返回 null，
+     * 误删会把仍在活跃波次里的僵尸踢出四散/清理跟踪（详见方法末尾注释）。
      * 由 {@code HordeTimer} 每 2 秒调用一次，玩家登录时也调用一次。
      */
     public static void reconcileStaleWaves(ServerLevel level, ZombietideConfig config) {
@@ -1615,9 +1608,10 @@ public class HordeSpawner {
     }
 
     /**
-     * 当前所有活跃尸潮的目标 UUID（快照）。
-     * <p>供 {@code HordeZombieGoal} 在「自己的触发者已死亡/未加载」时找附近其它尸潮的触发者。
-     * 只返回 {@code activeHordes} 的 key，规模是个位数，比扫全实体表便宜。
+     * 【当前无调用点，保留备查】当前所有「还有待生成僵尸」的目标 UUID（快照）。
+     * <p>v0.1.60 起 {@code HordeZombieGoal} 改用 {@link #getActiveWaveTargetIds(ServerLevel)}
+     * （按 {@code waveActive} 判定，覆盖「刷完但僵尸还活着」的阶段）。
+     * 本方法只返回 {@code activeHordes} 的 key，保留供调试使用。
      */
     public static java.util.Set<UUID> getActiveTargetIds() {
         return new java.util.HashSet<>(activeHordes.keySet());

@@ -78,8 +78,6 @@ public class ZombietideSettingsScreen extends Screen {
     private Tab currentTab = Tab.PLAYER;
     /** 固定顶部标签页（不加入 renderable 列表，手动渲染/命中） */
     private final List<Button> tabButtons = new ArrayList<>();
-    private final List<Checkbox> checkboxes = new ArrayList<>();
-    private final List<EditBox> editBoxes = new ArrayList<>();
     /** 普通文本行（设置名 + 说明） */
     private final List<LabelData> tabLabels = new ArrayList<>();
     /** 分区标题（带分隔线） */
@@ -221,8 +219,6 @@ public class ZombietideSettingsScreen extends Screen {
     @Override
     protected void rebuildWidgets() {
         if (this.hudConfig == null) this.hudConfig = ClientHudConfig.get();
-        this.checkboxes.clear();
-        this.editBoxes.clear();
         this.tabLabels.clear();
         this.sectionHeaders.clear();
         this.tabButtons.clear();
@@ -1005,7 +1001,6 @@ public class ZombietideSettingsScreen extends Screen {
         cb.setHeight(FIELD_HEIGHT);
         cb.setTooltip(Tooltip.create(Component.literal(tr(tooltip))));
         this.addRenderableWidget(cb);
-        this.checkboxes.add(cb);
         return cb;
     }
 
@@ -1055,7 +1050,6 @@ public class ZombietideSettingsScreen extends Screen {
             }
         });
         this.addRenderableWidget(field);
-        this.editBoxes.add(field);
         return field;
     }
 

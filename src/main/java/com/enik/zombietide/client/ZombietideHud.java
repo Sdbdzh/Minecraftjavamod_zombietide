@@ -30,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class ZombietideHud {
 
-    /** 客户端缓存的服务端配置（由 ConfigManager.applyClientConfig 注入） */
+    /** 客户端缓存的服务端配置（由 ConfigToClientPayload handler 调 {@link #onConfigReceived} 注入） */
     private static ZombietideConfig clientConfig = null;
 
     /** 服务端同步的玩家模组天数（UUID -> modDay） */
@@ -61,7 +61,7 @@ public class ZombietideHud {
     /** 客户端缓存的 mod info 常驻显示开关（由服务端通过 InfoOverlayPayload 同步） */
     private static boolean infoOverlayEnabled = false;
 
-    /** 接收服务端广播的配置（由 ConfigManager.applyClientConfig 调用） */
+    /** 接收服务端广播的配置（由 {@code ModMessages} 的 {@code ConfigToClientPayload} handler 调用） */
     public static void onConfigReceived(ZombietideConfig config) {
         clientConfig = config;
     }
@@ -125,6 +125,10 @@ public class ZombietideHud {
         villagerWaveActive.clear();
         villagerHordeDayMap.clear();
         thisBatchVillagers.clear();
+        // 【v0.1.62 修复 #145】断线时也要清掉这两个静态字段，否则进入
+        // 未安装本模组的服务器时，配置缓存与右上角面板开关仍残留上一局的值。
+        clientConfig = null;
+        infoOverlayEnabled = false;
     }
 
     /** 本批次收到过数据的村民（广播结束时据此清理死掉/超出范围的条目） */

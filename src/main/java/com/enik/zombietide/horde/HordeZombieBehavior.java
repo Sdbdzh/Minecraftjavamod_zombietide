@@ -72,8 +72,6 @@ public final class HordeZombieBehavior {
         // 4. 注入主目标锁定 Goal（优先级 9，仅在攻击选择器之后运行）。
         // 在 state==1（四散）时持续清除攻击目标，防止 HurtByTargetGoal 等选择器
         // 把目标重新设回玩家导致“边逃边打”。
-        // 先清空 targetSelector 中的 NearestAttackableTargetGoal 与 HurtByTargetGoal，
-        // 防止僵尸在四散时被这两个选择器每 tick 重新锁定目标（“边逃边打”根因）。
         // v0.1.57：**不再移除**原版 NearestAttackableTargetGoal / HurtByTargetGoal。
         // 之前移除是为了防「四散时边逃边打」，但副作用是触发者死亡/未加载后僵尸彻底没有索敌能力，
         // 只能站着。现在：

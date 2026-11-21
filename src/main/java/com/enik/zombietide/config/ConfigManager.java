@@ -22,7 +22,9 @@ public class ConfigManager {
 
     /**
      * 应用远程配置（客户端按键打开的设置界面修改后收到的 payload）。
-     * 修改后将配置写入 Level Data 并标记脏，随存档持久化；同时广播给所有在线客户端。
+     * 【v0.1.62 修复 #157】修改后将配置写入 Level Data 并标记脏，随存档持久化。
+     * <p><b>本方法不广播</b>——广播由 {@code ModMessages} 的 {@code ConfigToServerPayload} handler
+     * 在调用本方法之后另行 {@code sendToAllPlayers(ConfigToClientPayload)} 完成。
      */
     public static void applyRemoteConfig(ZombietideConfig newConfig, ServerLevel level) {
         if (level != null) {

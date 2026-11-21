@@ -28,8 +28,9 @@ public class EnikZombietide {
 
         // 2. ModMessages 通过 @EventBusSubscriber 自动注册网络 payload（mod bus）
 
-        // 3. 注册服务端事件（游戏总线）：ZombietideServerEvents 已通过 @EventBusSubscriber 自动注册，
-        // 此处不再手动 register，避免重复触发
+        // 3. 把**主类自身**注册到游戏总线（v0.1.62 修复 #156）：
+        //    onServerStarting 是写在本类里的 @SubscribeEvent 方法，必须手动 register(this)。
+        //    而 ZombietideServerEvents 已通过 @EventBusSubscriber 自动注册，不需要也不应该重复注册。
         NeoForge.EVENT_BUS.register(this);
         // 客户端事件（按键映射 / 按键输入 / HUD 渲染）一律由 @EventBusSubscriber(value = Dist.CLIENT)
         // 自动注册。此处绝不能引用客户端类，否则专用服务器加载主类时会把 Minecraft/Screen

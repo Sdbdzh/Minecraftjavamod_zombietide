@@ -88,8 +88,10 @@ public final class HordeFleeMarker {
     }
 
     /**
-     * 每 tick 把所有 marker 沿「背离主目标」方向推进一小步。
-     * <p>主目标取不到（离线/未加载）时保持不动——僵尸会走到路径尽头后等待下一 tick 重发。
+     * 【v0.1.62 修复 #166】把所有 marker 沿「背离主目标」方向推进一小步。
+     * <p><b>调用频率</b>：由 {@code HordeTimer} 每 <b>5 tick</b> 调用一次（不是每 tick），
+     * 因此 {@link #STEP_PER_UPDATE} 按「每次更新 1.5 格」取值，实际 0.30 格/tick。
+     * <p>主目标取不到（离线/未加载）时保持不动——僵尸会走到路径尽头后等待下一次重发。
      */
     public static void tickAll(ServerLevel level) {
         for (Entity e : level.getEntities().getAll()) {

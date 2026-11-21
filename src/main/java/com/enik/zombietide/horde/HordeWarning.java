@@ -46,7 +46,7 @@ public class HordeWarning {
      * @param level  服务端世界
      * @param player 接收提醒的玩家
      * @param config 当前配置（warningEnabled 控制是否发送）
-     * @param modDay 当前模组天数（用于文案判断）
+     * @param modDay 目标模组天数（用于去重键与提醒文案，不参与本次随机文案索引计算）
      */
     public static void warnMorningHorde(ServerLevel level, ServerPlayer player, ZombietideConfig config, int modDay) {
         if (config == null || !config.warningEnabled()) return;

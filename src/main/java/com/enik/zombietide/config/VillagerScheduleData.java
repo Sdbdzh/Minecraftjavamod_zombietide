@@ -43,7 +43,9 @@ public class VillagerScheduleData extends SavedData {
             boolean waveActive,
             /** 最后一次确认该村民仍存在的游戏日；<b>-1 表示未知</b>（老存档没有这个字段） */
             int lastSeenDay,
-            /** 波次序号：每次 startHorde 自增，供血债「按波去重」使用（0 = 未分配） */
+            /** 【当前仅写入、不读取】波次序号：每次 startHorde 自增（0 = 未分配）。
+             *  v0.1.55 曾供血债「按波去重」使用，v0.1.56 结算点唯一化后无消费方；保留以兼容老存档。 */
+
             int waveSeq
     ) {
         public static final Codec<ScheduleEntry> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -62,7 +64,7 @@ public class VillagerScheduleData extends SavedData {
             this(modDay, lastTriggerDay, waveCount, waveActive, -1, 0);
         }
 
-        /** 保留 waveSeq（v0.1.55 新增）；lastSeenDay 更新时不能把它抹掉 */
+        /** 保留 waveSeq（v0.1.55 新增、当前无消费方）；lastSeenDay 更新时不能把它抹掉 */
         public ScheduleEntry withLastSeenDay(int day) {
             return new ScheduleEntry(modDay, lastTriggerDay, waveCount, waveActive, day, waveSeq);
         }

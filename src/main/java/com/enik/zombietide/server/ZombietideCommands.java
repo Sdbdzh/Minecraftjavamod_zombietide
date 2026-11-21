@@ -38,6 +38,7 @@ import java.util.Collection;
  * - /zombietide debug info：显示完整调试信息
  * - /zombietide debug clear：**清除**所有活跃尸潮与尸潮僵尸（唯一的清除命令）
  * - /zombietide debug glow <targets>：给目标实体发光 15 秒（自动过滤非生物实体）
+ * - /zombietide overlay：右上角实时信息面板开关（纯客户端渲染，仅玩家；执行一次开、再一次关）
  * <p>
  * 目标选择器支持：玩家选择器(@a/@p/@r/@s)、实体选择器(@e[type=villager])、UUID字符串
  * 由 ZombietideServerEvents.onRegisterCommands（RegisterCommandsEvent）调用 register()。
@@ -465,7 +466,9 @@ public class ZombietideCommands {
         return 1;
     }
 
-    /** 给实体添加 15 秒发光效果（用于调试定位，支持任意实体） */
+    /** 【v0.1.62 修复 #175】给 **LivingEntity** 添加 15 秒发光效果（用于调试定位）；
+     *  死亡实体与非生物实体（矿车/画/箭等）会被跳过。
+     */
     private static int debugGlow(CommandSourceStack source, Collection<? extends Entity> targets) throws CommandSyntaxException {
         int successCount = 0;
         for (Entity entity : targets) {
