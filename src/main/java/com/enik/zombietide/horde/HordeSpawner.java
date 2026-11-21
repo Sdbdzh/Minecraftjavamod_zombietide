@@ -639,20 +639,9 @@ public class HordeSpawner {
             if (exactDespawnTicks < 1) exactDespawnTicks = 1;
             scatteringZombies.put(entity.getUUID(), exactDespawnTicks);
 
-            // 直接设置四散逃跑导航（背向主目标远距离移动）。
-            // 注意：state==1 时 HordeZombieGoal.canUse() 仍返回 true，其 tick() 会用 8 方向
-            // 评分选点（躲阳光/背离目标/规避威胁）覆盖本处导航；FleeGoal（优先级 0）同时生效，
-            // 最终以 HordeZombieGoal 的评分选点为准。
-            LivingEntity mainTarget = null;
-            var targetEntity = findTarget(level, targetId);
-            if (targetEntity instanceof LivingEntity le) mainTarget = le;
-            if (mainTarget != null && entity instanceof Mob mob) {
-                double fleeX = mob.getX() + (mob.getX() - mainTarget.getX()) * 4.0;
-                double fleeZ = mob.getZ() + (mob.getZ() - mainTarget.getZ()) * 4.0;
-                mob.getNavigation().moveTo(fleeX, mob.getY(), fleeZ, 1.2);
-                // 加一个高优先级逃跑 Goal，持续运行直到 state!=1
-                mob.goalSelector.addGoal(0, new com.enik.zombietide.horde.FleeGoal(mob, mainTarget));
-            }
+            // 四散导航由 HordeZombieGoal 的 state==1 分支统一驱动（v0.1.54 起）。
+            // 这里不再设置导航：盲传 moveTo(x, y, z, speed) 在 createPath 失败时会把 path 置 null，
+            // 而 4 倍外推的目标点往往超出寻路范围 → 僵尸「走一段停一下」。
 
             EnikZombietide.LOGGER.debug("尸潮实体 {} 进入四散状态，目标={} {} 秒后移除", entity.getUUID(), targetId, config.despawnSeconds());
         }
