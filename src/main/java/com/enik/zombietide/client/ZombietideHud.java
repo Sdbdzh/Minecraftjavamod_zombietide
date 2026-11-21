@@ -373,10 +373,15 @@ public class ZombietideHud {
         double playerX = player.getX(), playerY = player.getY(), playerZ = player.getZ();
         double maxDistSqr = 128.0 * 128.0;
         int villagerShown = 0;
+        // 面板总高度上限。注意：村民列表之后还有固定的「全局统计」3 行（标题 + 2 行数据），
+        // 以及村民为 0 时额外的 1 行提示。之前的写法只用 maxLines 卡村民循环，
+        // 全屏时可见村民更多、行数顶到上限后，全局统计那 3 行会被画到屏幕下方之外。
+        // 这里提前预留 4 行，保证任何情况下最后一行都落在屏内（非全屏同样受益）。
         int maxLines = (minecraft.getWindow().getGuiScaledHeight() - startY) / lineHeight;
+        int villagerLineLimit = Math.max(0, maxLines - 4);
 
         for (var entry : villagerModDays.entrySet()) {
-            if (lineCount + 2 > maxLines) break; // 每个村民占两行，超出屏幕高度就停
+            if (lineCount + 2 > villagerLineLimit) break; // 每个村民占两行，给末尾全局统计留够行数
             double[] pos = villagerPos.get(entry.getKey());
             if (pos == null) continue;
             double dx = pos[0] - playerX, dy = pos[1] - playerY, dz = pos[2] - playerZ;
