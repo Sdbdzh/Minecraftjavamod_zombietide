@@ -185,7 +185,7 @@ public record ZombietideConfig(
         ).apply(instance, WorldConfig::new));
 
         public static WorldConfig defaults() {
-            return new WorldConfig(512, true, true, "cumulative", 32, 10, 16, 32);
+            return new WorldConfig(512, true, true, "cumulative", 64, 10, 16, 128);
         }
 
         public WorldConfig withGlobalCap(int v) { return new WorldConfig(v, daylightBurn, blockSleep, debtMode, debtCap, despawnSeconds, villagerWarningRange, villagerSleepBlockRange); }
