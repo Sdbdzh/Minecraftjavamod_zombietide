@@ -25,7 +25,7 @@ import java.util.UUID;
  *   <li>每隔随机 30 秒 ~ 2 分钟（600~2400 tick）播一段；间隔从**本次开始播放**时刻起算，
  *       不是播完再等（实现为 {@code NEXT_PLAY_TICK = now + randomInterval()}），不做无缝循环</li>
  *   <li>具体曲目由 {@code sounds.json} 中 horde_bgm 的 5 个变体随机选取</li>
- *   <li>波次结束（四散/黎明/强制四散/清场）或关闭开关时，立即下发停止包掐掉残留音乐</li>
+ *   <li>波次结束（四散/黎明/强制清除/清场）或关闭开关时，立即下发停止包掐掉残留音乐</li>
  * </ul>
  * 调度状态仅存在于内存，不写入存档。
  */
@@ -86,8 +86,25 @@ public final class HordeBgmScheduler {
         return MIN_INTERVAL_TICKS + RANDOM.nextInt(MAX_INTERVAL_TICKS - MIN_INTERVAL_TICKS + 1);
     }
 
-    /** 清空 BGM 调度状态。调用点：服务器启动时（换世界/重启）与 `/zombietide debug clear`。 */
-    public static void reset() {
+    /** 清空 BGM 调度状态；带 server 时先给「有排程」的在线玩家下发停止包，掐掉残留音乐。
+     *  调用点：服务器启动时（换世界/重启）与 `/zombietide debug clear`。
+     *  <p>只给 NEXT_PLAY_TICK 里的玩家发：播放时必然写入下一播放 tick，故「表里有 id」
+     *  等价于「正在听 / 已排程」；清空后下一 tick 的 onServerTick 不会重复发停止包。
+     */
+    public static void reset(MinecraftServer server) {
+        if (server != null && server.getPlayerList() != null && !NEXT_PLAY_TICK.isEmpty()) {
+            for (UUID id : new java.util.ArrayList<>(NEXT_PLAY_TICK.keySet())) {
+                ServerPlayer player = server.getPlayerList().getPlayer(id);
+                if (player != null && player.connection != null) {
+                    ModSounds.stopForPlayer(player);
+                }
+            }
+        }
         NEXT_PLAY_TICK.clear();
+    }
+
+    /** 【兼容重载，保留备查】拿不到 MinecraftServer 时退化为只清调度状态，不下发停止包。 */
+    public static void reset() {
+        reset(null);
     }
 }

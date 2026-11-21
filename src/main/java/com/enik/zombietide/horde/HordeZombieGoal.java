@@ -36,7 +36,7 @@ import java.util.UUID;
 public class HordeZombieGoal extends Goal {
 
     private static final int REFRESH_INTERVAL_TICKS = 20; // 每 20 tick（1 秒）检查并刷新一次仇恨
-    private static final String HORDE_STATE_KEY = "zombietide_state"; // 0=active, 1=scattering, 2=despawned
+    private static final String HORDE_STATE_KEY = "zombietide_state"; // 0=active, 1=scattering, 2=despawned（预留，当前无任何写入点，分支不可达）
     private static final java.util.Random RANDOM = new java.util.Random();
 
     private final Mob mob;
@@ -51,13 +51,14 @@ public class HordeZombieGoal extends Goal {
     /** 每 tick 调用，判断 Goal 是否可以开始/继续执行：
      *  <p>state==0（active）：<b>不要求主目标存活</b>（v0.1.59 修复 #95）——触发者死亡/未加载时
      *  Goal 仍要运行，由 tick() 的多级选目标决定打谁；只排除「目标存在但创造/旁观」与 state==2。
-     *  state==1（scattering）：一直返回 true，持续运行 tick() 执行逃跑逻辑，直到 state==2
+     *  state==1（scattering）：一直返回 true，持续运行 tick() 执行逃跑逻辑，直到僵尸在 23460 被 discard。
+     *  <p>state==2（despawned）是预留值：当前无任何写入点，下面的分支不可达，保留备查。
      */
     @Override
     public boolean canUse() {
         CompoundTag tag = mob.getPersistentData();
         int state = tag.getInt(HORDE_STATE_KEY);
-        // state==2（despawned）：停止本 Goal
+        // state==2（despawned，预留值，当前无任何写入点，分支不可达）：停止本 Goal（保留备查）
         if (state == 2) return false;
         // state==1（scattering）：持续运行，不依赖主目标是否存在
         if (state == 1) return true;

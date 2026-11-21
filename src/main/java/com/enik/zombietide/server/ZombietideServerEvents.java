@@ -33,6 +33,8 @@ import net.neoforged.neoforge.event.entity.living.MobSpawnEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 
+import java.util.UUID;
+
 /**
  * 服务端事件：世界加载/保存、附件初始化、配置同步、尸潮时机驱动。
  */
@@ -40,13 +42,13 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 public class ZombietideServerEvents {
 
     /** 【v0.1.62 修复 #177】服务端启动时：重置三处静态状态
-     *  ({@link HordeBgmScheduler#reset()} / {@link HordeTimer#resetState()} /
+     *  ({@link HordeBgmScheduler#reset(net.minecraft.server.MinecraftServer)} / {@link HordeTimer#resetState()} /
      *  {@link HordeSpawner#resetState()})，并记录日志。单机换存档不重启 JVM，必须在这里清干净。
      */
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
         MinecraftServer server = event.getServer();
-        HordeBgmScheduler.reset(); // 单机换世界/服务器重启时清掉上一次的调度状态
+        HordeBgmScheduler.reset(server); // 单机换世界/服务器重启时清掉上一次的调度状态并掐断残留音乐
         // 【v0.1.60 修复 #122】静态计时器必须随服务器启动重置。
         // 单机「退出存档 → 进另一个存档」不会重启 JVM，而新世界 getGameTime() 从 0 起，
         // 残留的 lastScatterTick 会比 nowTick 还大 → nowTick - lastScatterTick 为负 → 永不四散。
@@ -163,10 +165,27 @@ public class ZombietideServerEvents {
             // 这里按 NBT 标记重新纳入追踪集合并重注入 AI。
             net.minecraft.nbt.CompoundTag tag = mob.getPersistentData();
             if (tag.hasUUID("zombietide_horde_target")) {
+                UUID zombieUuid = mob.getUUID();
+                UUID targetId = tag.getUUID("zombietide_horde_target");
+                // 【v0.1.63 修复 #179】上一个 23460 结算时该僵尸所在区块未加载，
+                // 现在区块加载了就立即清掉，不再 retrack 进四散集合等下一个 23460。
+                if (HordeSpawner.consumePendingDespawn(zombieUuid)) {
+                    event.setCanceled(true);
+                    mob.discard();
+                    return;
+                }
                 int state = tag.getInt("zombietide_state");
-                HordeSpawner.retrackZombie(level, mob.getUUID(), state);
+                // pending 集合随服务器重启丢失：state==1 只应存在于当天的四散窗口内，
+                // 已过窗口却仍是 state==1，说明是上一轮 23460 漏清的残留。
+                if (state == 1 && !HordeSpawner.isInScatterWindow(level)) {
+                    event.setCanceled(true);
+                    mob.discard();
+                    return;
+                }
+                HordeSpawner.retrackZombie(level, zombieUuid, state);
                 var config = ConfigManager.getConfigData(level).getConfig();
-                com.enik.zombietide.horde.HordeZombieBehavior.apply(mob, tag.getUUID("zombietide_horde_target"), config);
+                com.enik.zombietide.horde.HordeZombieBehavior.apply(mob, targetId, config);
+                HordeSpawner.noteScatterTarget(zombieUuid, targetId);
             }
         } else if (event.getEntity() instanceof Villager villager) {
             // 村民加载时：从调度表恢复数据，并把 modDay 对齐为当前游戏日（modDay = gameDay 铁律）

@@ -33,7 +33,7 @@ public final class HordeZombieBehavior {
     // NBT 键（与 HordeSpawner 保持一致；HordeSpawner.spawnZombie 是权威写入点，apply 幂等补写保证自包含）
     private static final String NBT_KEY_TARGET = "zombietide_horde_target"; // 主目标 UUID
     private static final String NBT_KEY_WAVE_ID = "zombietide_wave_id";     // 波次 ID（本波总尸数）
-    private static final String NBT_KEY_STATE = "zombietide_state";         // 0=active, 1=scattering, 2=despawned
+    private static final String NBT_KEY_STATE = "zombietide_state";         // 0=active, 1=scattering, 2=despawned（预留，当前无任何写入点，分支不可达）
 
     private HordeZombieBehavior() {
     }

@@ -24,6 +24,8 @@ import java.util.UUID;
 /**
  * 玩家血债世界级存储（SavedData，Level Data）。
  *
+ * <p>以下三点是 v0.1.5x 之前「血债存在 attachment 里」时代的历史问题，仅作背景保留：
+ * 现行已改为世界级 SavedData，且只有 23460 一个结算点。
  * <p>血债原本存在 {@code PlayerHordeData} attachment 里，而 attachment 必须拿到在线
  * {@code ServerPlayer} 实例才能读写。这导致三个问题：
  * <ul>

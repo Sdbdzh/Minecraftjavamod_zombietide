@@ -347,7 +347,9 @@ public class ZombietideCommands {
         OVERLAY_STATE.put(player.getUUID(), enable);
         // 注意：不能读服务端 HudConfig.hudEnabled 判断——面板渲染门控在客户端，
         // 用的是本机全局配置 ClientHudConfig（config/enik_zombietide-hud.properties），
-        // 服务端读不到，也从未有界面入口修改服务端那份。这里只给中性提示。
+        // 服务端读不到那份。但存档级配置（含 HUD 字段）会由设置页 pushConfig() →
+        // ModMessages.sendConfigToServer() → ConfigManager.applyRemoteConfig() 写入主世界，
+        // 只是不用于渲染门控；这里只给中性提示，不读取也不改那份配置。
         ModMessages.sendInfoOverlay(player, enable);
         if (enable) {
             source.sendSuccess(() -> Component.literal("§7若面板未显示，请检查本机 设置 → HUD 页签的「HUD 总开关」。")

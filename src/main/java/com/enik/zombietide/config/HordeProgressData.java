@@ -24,7 +24,7 @@ import java.util.UUID;
  * <p>本表只持久化一个数：<b>每个进行中的尸潮还有多少只没刷</b>。重启后
  * {@code HordeSpawner.update} 的恢复逻辑按表重建内存状态继续刷怪。
  *
- * <p><b>自愈约定</b>：波次的各条结束路径（黎明结算、强制四散、跨天对账等）不逐一
+ * <p><b>自愈约定</b>：波次的各条结束路径（黎明 waveActive 重置、强制清除、跨天对账等）不逐一
  * 从本表 remove——恢复逻辑在下次 update 时校验目标是否仍处于当天波次中
  * （玩家 {@code waveActive && lastTriggerDay == today} / 村民调度表同条件），
  * 校验不过就 remove。因此残留条目最多存活到下一次 update tick。
@@ -89,7 +89,8 @@ public class HordeProgressData extends SavedData {
         }
     }
 
-    /** 恢复逻辑只读视图 */
+    /** 返回内部可变 entries 映射（非只读视图）：调用方可在遍历中 remove 做自愈，改动后须自行 setDirty()。
+     *  当前 {@code HordeSpawner.update()} 的重启恢复逻辑即如此使用。 */
     public Map<UUID, Entry> getAll() {
         return entries;
     }

@@ -29,7 +29,7 @@ import java.util.UUID;
  * - 村民 modDay：永远推进（已加载+未加载全量，按调度表）；跨维度不暂停
  * - 尸潮触发/警告/禁睡：仅主世界 + 非和平模式
  * - <b>{@code /time} 指令会改变 modDay</b>：正向跨天逐日补算、反向跳变单次重同步；
- *   同时检测异常跳变（|Δ|>1000）触发强制四散与 missedDusk 补偿
+ *   同时检测异常跳变（|Δ|>1000）触发强制清除（forceClearAllHordes）与 missedDusk 补偿
  */
 public class HordeTimer {
 

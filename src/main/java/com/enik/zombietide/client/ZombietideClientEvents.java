@@ -14,7 +14,8 @@ import net.neoforged.neoforge.client.event.RenderGuiEvent;
 /**
  * 客户端事件：按键映射、打开设置界面、HUD 渲染。
  * <p>
- * {@link #OPEN_SETTINGS_KEY} 为 {@code private static} 字段（非 final、非 public），
+ * {@link #OPEN_SETTINGS_KEY} 为包级可见（package-private）{@code static} 字段（非 final、非 public），
+ * 由同包的 {@link ZombietideClientModEvents} 在 mod bus 阶段赋值，
  * 避免 NeoForge 在早期初始化阶段自动发现并重复注册。按键映射仅在
  * {@link ZombietideClientModEvents#onRegisterKeyMappings} 中通过 {@code event.register()} 注册一次。
  * <p><b>注意</b>：本类只能通过 {@code @EventBusSubscriber(value = Dist.CLIENT)} 注册，

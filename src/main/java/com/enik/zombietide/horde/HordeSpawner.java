@@ -55,7 +55,7 @@ public class HordeSpawner {
     // 尸潮僵尸标签键（用于识别属于哪场尸潮的僵尸）
     private static final String HORDE_TARGET_UUID_KEY = "zombietide_horde_target";
     private static final String HORDE_WAVE_ID_KEY = "zombietide_wave_id";
-    private static final String HORDE_STATE_KEY = "zombietide_state"; // 0=active, 1=scattering, 2=despawned
+    private static final String HORDE_STATE_KEY = "zombietide_state"; // 0=active, 1=scattering, 2=despawned（预留，当前无任何写入点，分支不可达）
 
     // 正在进行的尸潮：target UUID -> 剩余需刷怪数量
     private static final Map<UUID, Integer> activeHordes = new HashMap<>();
@@ -76,6 +76,16 @@ public class HordeSpawner {
 
     // 所有活跃的尸潮僵尸 UUID 集合（用于四散时快速遍历，避免全实体扫描）
     private static final Set<UUID> hordeZombieUuids = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+    // 【v0.1.63 修复 #179】23460 结算时所在区块未加载、拿不到实体对象的四散僵尸 UUID。
+    // 服务端此时既不能 discard 也不能写 NBT，只能记在这里，待区块加载（onEntityJoinLevel）时立即清除。
+    // 该集合是纯运行时状态，服务器重启即丢；重启兜底靠僵尸自带的 state==1 + 四散窗口判定。
+    private static final Set<UUID> pendingDespawnZombies = ConcurrentHashMap.newKeySet();
+
+    // 【v0.1.63 修复 #179】zombieUuid -> targetId 旁路索引：转入四散 / 重启重注册时写入。
+    // 用途：23460 清除时即使实体未加载，也能补全 clearedTargets，保证 clearPending /
+    // resetTargetWaveActive / HordeFleeMarker.discardFor 三个收尾动作一个不漏。
+    private static final Map<UUID, UUID> scatterZombieTarget = new ConcurrentHashMap<>();
 
     // 本次 JVM 进程内已触发/恢复过的尸潮目标。进程重启即清空，因此可用于判断
     // 恢复日志的原因：首次见到 = 进度来自存档（服务器重启），已见过 = 目标重新上线/加载。
@@ -101,6 +111,8 @@ public class HordeSpawner {
         villagerHordeRadii.clear();
         scatteringZombies.clear();
         hordeZombieUuids.clear();
+        pendingDespawnZombies.clear();
+        scatterZombieTarget.clear();
         seenHordesThisSession.clear();
         warnedNightBefore.clear();
     }
@@ -266,7 +278,8 @@ public class HordeSpawner {
 
                 // 【兜底】已进入四散窗口：本波不再生成。
                 // scatterZombies 每 20 tick 可重扫一次，若它已执行过，本函数不应再产出新僵尸
-                // （新僵尸不会被四散清除，会活到白天并被次日黎明二次计入血债）。
+                // （新僵尸不会被 23460 的 scatteringZombies 清除，却仍会被 settleDebtAtBurnTime
+                // 计入血债并活到白天；血债唯一结算点是 23460，onDawn 只重置 waveActive，不会二次结算）。
                 long phaseNow = level.getDayTime() % 24000L;
                 if (phaseNow >= 23460L - config.despawnSeconds() * 20L) {
                     activeHordes.remove(targetId);
@@ -469,6 +482,7 @@ public class HordeSpawner {
         }
 
         // 【v0.1.56】黎明不再累加血债，只重置 waveActive（唯一结算点是 23460）
+        // 【当前未使用，保留备查】v0.1.63 议题 #180：此局部变量声明后无读取，保留原行。
         long today = level.getDayTime() / 24000L;
         com.enik.zombietide.config.PlayerDebtData debtData =
                 com.enik.zombietide.config.PlayerDebtData.get(level);
@@ -539,15 +553,16 @@ public class HordeSpawner {
         long dayPhase = dayTime % 24000;
         // 触发时机：日出前 despawnSeconds 秒（23460 刻开始燃烧），窗口延伸到日结束（24000）
         long scatterStartTick = 23460L - config.despawnSeconds() * 20L;
+        // 【v0.1.63】「开始四散」日志只在确有新僵尸转入时打一次：
+        // scatterZombies 每 20 tick 被 HordeTimer 重扫一次，原先把 INFO 放在方法开头会每秒刷一条。
+        // 具体输出移到下方 newlyScattered > 0 分支，通知/音效/waveActive 逻辑一律不动。
         if (dayPhase < scatterStartTick) return;
-
-        EnikZombietide.LOGGER.info("尸潮僵尸开始四散：日出前 {} 秒，太阳即将直射", config.despawnSeconds());
 
         // 【停止刷怪】四散开始后不得再生成新批次。scatterZombies 每 20 tick 可重扫一次（v0.1.55 起）
         // （HordeTimer 的 lastScatterTick 20 tick 节流，每轮都会重扫），错过本次快照的僵尸会在四散之后才出现：
         //   1) state=0，不在 scatteringZombies 里 —— 23460 起火时刻不会被清除；
         //   2) 却被 settleDebtAtBurnTime 的存活统计计入血债；
-        //   3) 若活到次日黎明，onDawn 会按新的一天再结算一次（cumulative 模式重复计债）；
+        //   3) 血债只在 23460 结算一次；onDawn 只重置 waveActive，不存在「次日黎明二次结算」；
         //   4) 白天继续锁定追击玩家。
         // 因此这里直接作废所有进行中波次的剩余量。
         if (!activeHordes.isEmpty()) {
@@ -615,6 +630,9 @@ public class HordeSpawner {
             int exactDespawnTicks = (int)(23460 - dayPhase);
             if (exactDespawnTicks < 1) exactDespawnTicks = 1;
             scatteringZombies.put(entity.getUUID(), exactDespawnTicks);
+            // 【v0.1.63 修复 #179】登记 targetId 旁路索引，并撤销上一轮可能误留的清除标记。
+            scatterZombieTarget.put(entity.getUUID(), targetId);
+            pendingDespawnZombies.remove(entity.getUUID());
 
             // 四散导航由 HordeZombieGoal 的 state==1 分支统一驱动（v0.1.54 起）。
             // 这里不再设置导航：盲传 moveTo(x, y, z, speed) 在 createPath 失败时会把 path 置 null，
@@ -632,6 +650,8 @@ public class HordeSpawner {
 
         // 向目标玩家（或村民周围玩家）发送一条汇总四散提醒，避免每只僵尸一条消息刷屏
         if (newlyScattered > 0) {
+            EnikZombietide.LOGGER.info("尸潮僵尸开始四散：日出前 {} 秒，本轮新转入 {} 只",
+                    config.despawnSeconds(), newlyScattered);
             notifyScatterTargetsWithCount(level, config, scatterTargets, scatterCountByTarget);
         }
 
@@ -701,9 +721,10 @@ public class HordeSpawner {
     }
 
     /**
-     * 【当前无调用点消费，保留备查】取目标当前的波次序号（v0.1.55 血债按波去重用的键）。
-     * <p>v0.1.56 起结算点唯一（只有 23460 起火结算），不再需要按波去重；
-     * 本方法仍被 {@code settleDebtForTarget} 的调用方传入，但该参数未被使用。
+     * 取目标当前的波次序号（v0.1.55 血债按波去重用的键）。
+     * <p>v0.1.56 起结算点唯一（只有 23460 起火结算），不再需要按波去重。
+     * 当前有 2 处调用（settleDebtAtBurnTime、forceClearAllHordes），返回值作为未使用参数
+     * 传给 {@code settleDebtForTarget}；保留该键以备将来若加回第二个结算点。
      * <p>玩家读 attachment，村民读调度表（权威源）；离线/未加载返回 0。
      */
     private static int currentWaveSeq(ServerLevel level, UUID targetId) {
@@ -749,6 +770,7 @@ public class HordeSpawner {
 
     /** 起火时刻血债结算（dayPhase >= 23460，僵尸开始着火，按实时存活数结算血债） */
     public static void settleDebtAtBurnTime(ServerLevel level, ZombietideConfig config) {
+        // 【当前未使用，保留备查】v0.1.63 议题 #180：此局部变量声明后无读取，保留原行。
         long today = level.getDayTime() / 24000L;
         com.enik.zombietide.config.PlayerDebtData debtData =
                 com.enik.zombietide.config.PlayerDebtData.get(level);
@@ -799,9 +821,14 @@ public class HordeSpawner {
         // 这样所有四散僵尸刚好跑 despawnSeconds 秒，到 23460 同步消失
         if (!scatteringZombies.isEmpty()) {
             java.util.Set<UUID> clearedTargets = new java.util.HashSet<>();
-            for (var entry : scatteringZombies.entrySet()) {
-                UUID zombieUuid = entry.getKey();
-                hordeZombieUuids.remove(zombieUuid);
+            // 【v0.1.63 修复 #179】用 keySet 快照遍历：与 :566 的 toProcess 快照写法一致，
+            // 避免遍历中修改 scatteringZombies / hordeZombieUuids 带来的并发迭代问题。
+            java.util.List<UUID> toClear = new java.util.ArrayList<>(scatteringZombies.keySet());
+            for (UUID zombieUuid : toClear) {
+                // 先用旁路索引补 targetId：即使整波都在未加载区块，三个收尾动作也不会全漏。
+                UUID indexedTarget = scatterZombieTarget.get(zombieUuid);
+                if (indexedTarget != null) clearedTargets.add(indexedTarget);
+
                 var entity = level.getEntity(zombieUuid);
                 if (entity != null && (entity instanceof Zombie ||
                         entity instanceof ZombieVillager ||
@@ -814,11 +841,18 @@ public class HordeSpawner {
                     }
                     entity.discard();
                     EnikZombietide.LOGGER.debug("四散僵尸 {} 23460 起火时刻同步清除", zombieUuid);
+                } else {
+                    // 【#179】区块未加载：服务端拿不到实体对象，既不能 discard 也不能写 NBT。
+                    // 交给 pending 集合托管，待区块加载时立即清除；这里仍按原行为移出 hordeZombieUuids，
+                    // 不给其它统计方法留下游离条目。
+                    pendingDespawnZombies.add(zombieUuid);
                 }
+                hordeZombieUuids.remove(zombieUuid);
+                scatterZombieTarget.remove(zombieUuid);
             }
             scatteringZombies.clear();
 
-            // 清除完成后重置对应目标的 waveActive，并移除对应的四散锚点
+            // 清除完成后重置对应目标的 waveActive，并移除对应的四散锚点（时机/参数/顺序不变）
             for (UUID targetId : clearedTargets) {
                 if (level != null) com.enik.zombietide.config.PlayerDebtData.get(level).clearPending(targetId);
                 resetTargetWaveActive(level, targetId);
@@ -862,6 +896,7 @@ public class HordeSpawner {
      * {@code markPending -> drainPending} 二次结算。改为直接清除后语义自洽。
      */
     public static void forceClearAllHordes(ServerLevel level, ZombietideConfig config) {
+        // 【当前未使用，保留备查】v0.1.63 议题 #180：此局部变量声明后无读取，保留原行。
         long today = level.getDayTime() / 24000L;
         com.enik.zombietide.config.PlayerDebtData debtData =
                 com.enik.zombietide.config.PlayerDebtData.get(level);
@@ -901,6 +936,10 @@ public class HordeSpawner {
         }
         hordeZombieUuids.clear();
         scatteringZombies.clear();
+        // 【v0.1.63 #179】时间跳变强清后同样要清掉 pending 与旁路索引，
+        // 否则残留的索引会让下一次 23460 补出不该有的 clearedTargets。
+        pendingDespawnZombies.clear();
+        scatterZombieTarget.clear();
 
         java.util.Set<UUID> targets = new java.util.HashSet<>(survivorsByTarget.keySet());
         // 还要处理「已触发但尚未生成完」的目标（剩余批次直接作废）
@@ -1566,6 +1605,9 @@ public class HordeSpawner {
             if (!stillActive.contains(targetId)) {
                 hordeZombieUuids.remove(entity.getUUID());
                 scatteringZombies.remove(entity.getUUID());
+                // 【v0.1.63 #179】孤儿被丢弃时同步清掉新增的 pending / 旁路索引。
+                pendingDespawnZombies.remove(entity.getUUID());
+                scatterZombieTarget.remove(entity.getUUID());
                 entity.discard();
             }
         }
@@ -1655,6 +1697,27 @@ public class HordeSpawner {
      * 已生成的僵尸会既不继续追人也不被四散清理，成为孤儿）。由 onEntityJoinLevel 调用。
      * @param state 0=追踪中（hordeZombieUuids），1=四散中（scatteringZombies 倒计时）
      */
+    /** 【v0.1.63 修复 #179】消费「23460 未加载、待区块加载后清除」标记；原子且只消费一次。 */
+    public static boolean consumePendingDespawn(UUID zombieUuid) {
+        return pendingDespawnZombies.remove(zombieUuid);
+    }
+
+    /** 【v0.1.63 修复 #179】登记四散僵尸的 targetId 旁路索引（重启重注册时也要补登记）。 */
+    public static void noteScatterTarget(UUID zombieUuid, UUID targetId) {
+        if (targetId != null) scatterZombieTarget.put(zombieUuid, targetId);
+    }
+
+    /** 【v0.1.63 修复 #179】当前是否仍处于合法四散窗口（公式与 HordeTimer 的 scatterStart 一致）。
+     *  用于重启兜底：pending 集合随进程重启丢失后，state==1 却已过窗口的僵尸即上一轮漏清残留。
+     */
+    public static boolean isInScatterWindow(ServerLevel level) {
+        long phase = level.getDayTime() % 24000L;
+        int despawnSeconds = com.enik.zombietide.config.ConfigManager
+                .getConfigData(level).getConfig().despawnSeconds();
+        long start = 23460L - despawnSeconds * 20L;
+        return phase >= start && phase < 23460L;
+    }
+
     public static void retrackZombie(ServerLevel level, UUID zombieUuid, int state) {
         // 【v0.1.60 修复 #124】无论 state 都要登记进 hordeZombieUuids。
         // 之前 state==1 只加 scatteringZombies → 23460 的 countHordeZombiesByTarget
@@ -1707,13 +1770,15 @@ public class HordeSpawner {
         batchTimer.clear();
         hordeZombieUuids.clear();
         scatteringZombies.clear();
+        pendingDespawnZombies.clear();
+        scatterZombieTarget.clear();
         villagerHordeRadii.clear();
         warnedNightBefore.clear();
         if (level != null) {
             com.enik.zombietide.config.PlayerDebtData.get(level).clearAll();
             com.enik.zombietide.config.HordeProgressData.get(level).clearAll();
             // debug clear 是「全清」语义：连 BGM 调度也一起重置，避免清完后残留播放计划
-            HordeBgmScheduler.reset();
+            HordeBgmScheduler.reset(level != null ? level.getServer() : null);
         }
 
         EnikZombietide.LOGGER.info("已清空所有活跃尸潮并重置所有目标 waveActive/lastTriggerDay（可重新触发）");
@@ -1722,6 +1787,6 @@ public class HordeSpawner {
     /** 【当前无调用点，保留备查】兼容旧调用（无 level 参数）。带参版本在 level==null 时跳过清理块，故这里单独重置 BGM 调度 */
     public static void clearActiveHordes() {
         clearActiveHordes(null);
-        HordeBgmScheduler.reset();
+        HordeBgmScheduler.reset(null); // 拿不到 server，退化为只清调度状态
     }
 }
