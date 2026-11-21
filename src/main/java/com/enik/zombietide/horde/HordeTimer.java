@@ -42,7 +42,7 @@ public class HordeTimer {
      * 现在每 20 tick（1 秒）允许重扫一次：{@code scatterZombies} 对 state==1 已跳过（幂等），
      * 新刷出的僵尸最迟 1 秒内纳入四散，同时把 UUID 遍历成本从 800 次/秒降到 40 次/秒。
      */
-    private static long lastScatterTick = Long.MIN_VALUE;
+    private static long lastScatterTick = -100;   // 初始负值，避免 nowTick - Long.MIN_VALUE 溢出
     private static long lastBurnSettleDay = -1L; // 记录最后一次起火时刻血债结算的游戏日，防止重复
     private static boolean loggedPlayerDuskCheckThisWindow = false;
     private static boolean loggedVillagerDuskCheckThisWindow = false;
@@ -373,8 +373,8 @@ public class HordeTimer {
             int modDay = hordeData.modDay();
             if (!isHordeDay(player.getUUID(), modDay, hordeData.lastTriggerDay(), config, false)) continue;
             if (hordeData.lastTriggerDay() == modDay && hordeData.waveCount() > 0) {
-                EnikZombietide.LOGGER.debug("checkPlayerHordes: 玩家 {} 今日(DAY {})已触发过，跳过（lastTriggerDay={}, waveCount={}）",
-                        player.getScoreboardName(), modDay, hordeData.lastTriggerDay(), hordeData.waveCount());
+                // 今日已触发过：静默跳过（不再打印「已触发过」日志——它与 isHordeDay 的
+                // 「今天是尸潮日」判定放在一起读起来自相矛盾）
                 continue;
             }
 

@@ -123,8 +123,19 @@ public class HordeZombieGoal extends Goal {
             if (marker == null || !marker.isAlive()) {
                 // marker 未就绪（重启后丢失/尚未创建）：本 tick 不动，
                 // HordeTimer 的四散重扫会在 ≤20 tick 内 ensure 重建。
+                // 临时日志：确认 marker 取不到的原因（NBT 无 key vs level.getEntity 返回 null）
+                if (markerMissingLogTimer++ >= 40) {   // 每 2 秒打一次，避免刷屏
+                    markerMissingLogTimer = 0;
+                    CompoundTag nbt = mob.getPersistentData();
+                    boolean hasKey = nbt.hasUUID(HordeFleeMarker.NBT_MARKER);
+                    com.enik.zombietide.EnikZombietide.LOGGER.warn(
+                            "僵尸 {} 四散但取不到 marker：NBT 有 key={}, marker UUID={}",
+                            mob.getUUID(), hasKey,
+                            hasKey ? nbt.getUUID(HordeFleeMarker.NBT_MARKER) : "无");
+                }
                 return;
             }
+            markerMissingLogTimer = 0;
 
             var navigation = mob.getNavigation();
             // 路径走完的当 tick 立刻重发（无空档）；行进中每 20 tick 补发一次（自限流）
@@ -160,11 +171,11 @@ public class HordeZombieGoal extends Goal {
             }
         }
 
-        // 只有主目标可达时才强制刷新仇恨；不可达时不干预（原版索敌已移除，不会换目标）
-        if (isReachable(target)) {
-            mob.setTarget(target);
-        }
-        // 否则：不调用 setTarget，僵尸保持无目标状态（原版 NearestAttackableTargetGoal 已被 apply() 移除）
+        // 无条件刷新仇恨：ZombieAttackGoal 需要 mob.getTarget() != null 才追击。
+        // 之前的 isReachable 判断（没有视线就不 setTarget）会导致僵尸在墙后/远处时
+        // 完全无目标 → ZombieAttackGoal 不启动 → 站着不动 → 20 tick 后碰巧有视线才追一段
+        // → 表现为「走一下停一下」。寻路失败由 ZombieAttackGoal 内部处理，不需要这里拦。
+        mob.setTarget(target);
     }
 
     /**
@@ -184,14 +195,6 @@ public class HordeZombieGoal extends Goal {
     /**
      * 主目标可达性判定：视线可达，或当前已有有效行进路径（导航正在寻路/赶路）。
      */
-    private boolean isReachable(LivingEntity target) {
-        if (mob.getSensing().hasLineOfSight(target)) {
-            return true;
-        }
-        Path path = mob.getNavigation().getPath();
-        return path != null && !path.isDone();
-    }
-
     /**
      * 查找主目标实体（玩家或村民），存活才返回；找不到返回 null。
      * <p>服务端统一走 {@link HordeSpawner#findTarget}——它自带「getEntity 未命中就遍历实体表」的兜底，
@@ -220,6 +223,8 @@ public class HordeZombieGoal extends Goal {
     private static final int REPATH_INTERVAL_TICKS = 20;
     /** 距上次重发的计时器 */
     private int repathTimer = 0;
+    /** marker 取不到时的日志节流计时器 */
+    private int markerMissingLogTimer = 0;
 
     /** 找目的地附近的地表可站方块（向上最多 5 格，向下最多 3 格） */
     private BlockPos findGroundPos(net.minecraft.world.level.Level level, int x, int z, int refY) {

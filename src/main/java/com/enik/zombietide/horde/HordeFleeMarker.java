@@ -65,6 +65,8 @@ public final class HordeFleeMarker {
         marker.moveTo(x, y, z, 0.0F, 0.0F);
         marker.getPersistentData().putUUID(TAG_TARGET, targetId);
         level.addFreshEntity(marker);
+        EnikZombietide.LOGGER.info("四散锚点已创建：目标 {} 位置({}, {}, {}) marker={}",
+                targetId, x, y, z, marker.getUUID());
         return marker;
     }
 

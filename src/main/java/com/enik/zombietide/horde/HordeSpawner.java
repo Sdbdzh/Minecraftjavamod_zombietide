@@ -477,76 +477,19 @@ public class HordeSpawner {
             }
         }
 
-        // 玩家血债结算
+        // 【v0.1.56】黎明**不再结算血债**。
+        // 血债只在 23460 起火时刻由 settleDebtAtBurnTime 结算一次，这里只负责重置 waveActive，
+        // 否则尸潮会永远显示「进行中」。旧实现在黎明又算一遍并带「全灭清零」，
+        // 会把 23460 刚结算好的血债直接清零。
         for (UUID targetId : allHordeTargets) {
-            // 血债只记玩家：离线玩家实体为 null，无法再用 instanceof 判断，改以「是否注册过」为准
             if (!debtData.isKnown(targetId)) continue;
-            int count = survivorCount.getOrDefault(targetId, 0);
             ServerPlayer player = level.getServer().getPlayerList().getPlayer(targetId);
-
-            // 【去重】同一波若已通过四散/起火结算过，黎明结算跳过，防止双重计债
-            if (debtData.isWaveSettled(targetId, currentWaveSeq(level, targetId))) {
-                // 已结算过：只重置 waveActive，不再加债
-                if (player != null) {
-                    var data0 = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
-                    player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
-                            new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data0.modDay(), data0.lastTriggerDay(), data0.waveCount(), false));
-                }
-                continue;
-            }
-            debtData.markWaveSettled(targetId, currentWaveSeq(level, targetId));
-            // 血债模式：累积制（默认）
-            String debtMode = config.debtMode();
-            int newDebt;
-            if ("last_only".equals(debtMode)) {
-                // 只记上波
-                newDebt = Math.min(config.debtCap(), count);
-            } else if ("none".equals(debtMode)) {
-                // 不结转
-                newDebt = 0;
-            } else {
-                // 累积制（默认）
-                newDebt = Math.min(config.debtCap(), debtData.getDebt(targetId) + count);
-            }
-            // 全灭清零：某波一只不剩 → 血债清零
-            if (count == 0) {
-                newDebt = 0;
-            }
-            debtData.setDebt(targetId, newDebt);
-
-            if (player == null) {
-                EnikZombietide.LOGGER.info("玩家 {} 离线，黎明血债已写入世界数据：+{}，当前血债 {}（模式：{}）",
-                        targetId, count, newDebt, debtMode);
-                continue;
-            }
+            if (player == null) continue;   // 离线玩家：附件读不到，留待下次登录时由对账处理
             var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
+            if (!data.waveActive()) continue;
             player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                     new com.enik.zombietide.attachments.PlayerHordeData(
-                            data.modDay(), data.lastTriggerDay(), data.waveCount(), false
-                    ));
-            EnikZombietide.LOGGER.info("玩家 {} 血债结算：+{}，当前血债 {}（模式：{}）", player.getScoreboardName(), count, newDebt, debtMode);
-                // 【关键修复】发送血债结算聊天提示给全服非生存/非冒险模式玩家
-                net.minecraft.network.chat.Component targetUuidComp = net.minecraft.network.chat.Component.literal(targetId.toString())
-                        .withStyle(net.minecraft.network.chat.Style.EMPTY
-                                .withColor(net.minecraft.ChatFormatting.AQUA)
-                                .withClickEvent(new net.minecraft.network.chat.ClickEvent(
-                                        net.minecraft.network.chat.ClickEvent.Action.SUGGEST_COMMAND, targetId.toString()))
-                                .withHoverEvent(new net.minecraft.network.chat.HoverEvent(
-                                        net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT,
-                                        net.minecraft.network.chat.Component.literal("点击填入 UUID"))));
-                net.minecraft.network.chat.Component debtMsg = net.minecraft.network.chat.Component.literal("[尸潮] 血债结算：")
-                        .withStyle(net.minecraft.network.chat.Style.EMPTY.withColor(net.minecraft.ChatFormatting.GOLD))
-                        .append(net.minecraft.network.chat.Component.literal(" 目标=")
-                                .withStyle(net.minecraft.network.chat.Style.EMPTY.withColor(net.minecraft.ChatFormatting.RED)))
-                        .append(targetUuidComp)
-                        .append(net.minecraft.network.chat.Component.literal(" 本波幸存 " + count + " 只")
-                                .withStyle(net.minecraft.network.chat.Style.EMPTY.withColor(net.minecraft.ChatFormatting.RED)))
-                        .append(net.minecraft.network.chat.Component.literal(" 当前血债 " + newDebt)
-                                .withStyle(net.minecraft.network.chat.Style.EMPTY.withColor(net.minecraft.ChatFormatting.GOLD)));
-                for (ServerPlayer p : level.getPlayers(p2 -> p2.gameMode.getGameModeForPlayer() != GameType.SURVIVAL && p2.gameMode.getGameModeForPlayer() != GameType.ADVENTURE)) {
-                    p.sendSystemMessage(debtMsg);
-                }
+                            data.modDay(), data.lastTriggerDay(), data.waveCount(), false));
         }
 
         // 【修复】黎明兜底：调度表是权威数据源，必须无条件把 waveActive 写回 false。
@@ -765,8 +708,8 @@ public class HordeSpawner {
                                                com.enik.zombietide.config.PlayerDebtData debtData,
                                                UUID targetId, int survivors, int waveSeq) {
         if (!debtData.isKnown(targetId)) return null;
-        if (debtData.isWaveSettled(targetId, waveSeq)) return null;
-        debtData.markWaveSettled(targetId, waveSeq);
+        // v0.1.56：不再做「同一波已结算」跳过——结算点只剩 23460（与跳天强制清除）两处，
+        // 且跳天路径会 clearPending，23460 的 drainPending 拿不到它，本身不会重复。
 
         String debtMode = config.debtMode();
         int newDebt;
@@ -981,7 +924,7 @@ public class HordeSpawner {
                 int survivors = survivorsByTarget.getOrDefault(targetId, 0);
                 String msg = settled != null
                         ? "[尸潮] 时间跳变，本波提前结算：幸存 " + survivors + " 只计入血债，当前血债 " + settled
-                        : "[尸潮] 时间跳变，本波尸潮已强制结束（今天已结算过，血债不变）";
+                        : "[尸潮] 时间跳变，本波尸潮已结束";
                 p.sendSystemMessage(net.minecraft.network.chat.Component.literal(msg)
                         .withStyle(net.minecraft.ChatFormatting.GRAY));
             }
