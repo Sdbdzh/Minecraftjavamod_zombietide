@@ -44,6 +44,10 @@ public class ZombietideServerEvents {
     public static void onServerStarted(ServerStartedEvent event) {
         MinecraftServer server = event.getServer();
         HordeBgmScheduler.reset(); // 单机换世界/服务器重启时清掉上一次的调度状态
+        // 【v0.1.60 修复 #122】静态计时器必须随服务器启动重置。
+        // 单机「退出存档 → 进另一个存档」不会重启 JVM，而新世界 getGameTime() 从 0 起，
+        // 残留的 lastScatterTick 会比 nowTick 还大 → nowTick - lastScatterTick 为负 → 永不四散。
+        HordeTimer.resetState();
         EnikZombietide.LOGGER.info("Zombietide server started");
     }
 
@@ -51,7 +55,11 @@ public class ZombietideServerEvents {
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        ServerLevel level = player.serverLevel();
+        // 【v0.1.60 修复 #125】配置是「世界级」的，必须从主世界读。
+        // 之前用 player.serverLevel()：从下界/末地登录会读到该维度的独立 SavedData
+        // （未写过就是默认值），然后 broadcastConfig 把默认值广播给全服，覆盖主世界配置。
+        ServerLevel overworld = player.server.getLevel(net.minecraft.world.level.Level.OVERWORLD);
+        ServerLevel level = overworld != null ? overworld : player.serverLevel();
         ZombietideConfigData data = ConfigManager.getConfigData(level);
         ZombietideConfig config = data.getConfig();
         ModMessages.broadcastConfig(config);

@@ -57,6 +57,25 @@ public class HordeTimer {
     private static int markerTick = 0;
 
     /**
+     * 重置所有静态计时器（服务器启动时调用）。
+     * <p>单机「退出存档 → 进另一个存档」不会重启 JVM，而新世界的 {@code getGameTime()}
+     * 从 0 开始；若沿用旧存档的 {@code lastScatterTick}，{@code nowTick - lastScatterTick}
+     * 会是负数，导致该会话<b>永不四散</b>。同理反向跳变检测也会被残留的 {@code lastDayTime} 误触发。
+     */
+    public static void resetState() {
+        lastGameDayCheck = -1L;
+        lastDawnDay = -1L;
+        lastScatterTick = -100;
+        lastBurnSettleDay = -1L;
+        lastDayTime = -1L;
+        reconcileTick = 0;
+        hudSyncTick = 0;
+        markerTick = 0;
+        loggedPlayerDuskCheckThisWindow = false;
+        loggedVillagerDuskCheckThisWindow = false;
+    }
+
+    /**
      * 时间跳变超过这么多天时，只推进 modDay、<b>不做</b>尸潮触发补偿。
      * <p>逐日补偿循环里 {@code lo < winStart && hi > winEnd} 对每个中间日都成立，
      * 一次跳 38 天会补偿约 5 个尸潮日、每日触发所有村民 + 玩家 → 聊天刷屏 + 服务器卡顿。

@@ -186,7 +186,7 @@
   "zombietide.settings.tab.warning": "警告提示",
   "zombietide.settings.tab.world": "世界规则",
   "zombietide.settings.title": "尸潮配置",
-  "zombietide.settings.toast.config_saved": "§a[尸潮] 配置已立即生效",
+  "zombietide.settings.toast.config_saved": "§e[尸潮] 配置已发送到服务端（无 OP 权限时不会生效）",
   "zombietide.settings.toast.hud_saved": "§a[尸潮] HUD 设置已保存",
   "zombietide.settings.villager.item1.desc": "关闭后村民不再触发尸潮",
   "zombietide.settings.villager.item1.name": "启用村民尸潮",

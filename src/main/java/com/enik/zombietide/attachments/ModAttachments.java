@@ -25,6 +25,10 @@ public class ModAttachments {
             ATTACHMENT_TYPES.register("player_horde",
                     () -> AttachmentType.builder(() -> PlayerHordeData.defaults())
                             .serialize(PlayerHordeData.CODEC)
+                            // 【v0.1.60 修复 #111】死亡重生保留数据。
+                            // 否则 waveActive 丢失 → 玩家可在尸潮中睡觉（禁睡检查依赖它），
+                            // 且 lastTriggerDay 归零 → 同一黄昏窗口可二次触发。
+                            .copyOnDeath()
                             .build());
 
     public static final DeferredHolder<AttachmentType<?>, AttachmentType<VillagerHordeData>> VILLAGER_HORDE =

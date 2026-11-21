@@ -32,6 +32,15 @@ public class ZombietideClientEvents {
         return OPEN_SETTINGS_KEY;
     }
 
+    /**
+     * 断线时清空 HUD 的服务端同步缓存（v0.1.60 修复 #123）。
+     * <p>否则退出存档后进入「没装本模组」的服务器，左上角仍显示上一局的 DAY X。
+     */
+    @SubscribeEvent
+    public static void onLoggingOut(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
+        ZombietideHud.clearAllSynced();
+    }
+
     /** 按键输入：按下设置键时，仅在游戏内打开模组设置界面（game bus）；防止重复打开多个设置界面
      * 不在聊天输入、游戏设置、或其它界面打开时触发
      */

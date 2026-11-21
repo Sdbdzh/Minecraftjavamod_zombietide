@@ -106,6 +106,27 @@ public class ZombietideHud {
         com.enik.zombietide.EnikZombietide.LOGGER.info("[Zombietide] InfoOverlay received: enabled={}", enabled);
     }
 
+    /**
+     * 断线时清空所有服务端同步缓存（v0.1.60 修复 #123）。
+     * <p>这些 Map 是 static，退出存档后数据仍在；若接着进入一个**没装本模组**的服务器，
+     * 左上角会继续显示上一局的 `DAY X`（`hudEnabled` 默认 true，没有别的东西拦住它）。
+     */
+    public static void clearAllSynced() {
+        syncedModDays.clear();
+        syncedHordeDay.clear();
+        syncedWaveActive.clear();
+        syncedDebt.clear();
+        syncedActivePlayerHordes.clear();
+        syncedActiveVillagerHordes.clear();
+        syncedAliveHordeZombies.clear();
+        villagerModDays.clear();
+        villagerProfessions.clear();
+        villagerPos.clear();
+        villagerWaveActive.clear();
+        villagerHordeDayMap.clear();
+        thisBatchVillagers.clear();
+    }
+
     /** 本批次收到过数据的村民（广播结束时据此清理死掉/超出范围的条目） */
     private static final Set<UUID> thisBatchVillagers = ConcurrentHashMap.newKeySet();
 

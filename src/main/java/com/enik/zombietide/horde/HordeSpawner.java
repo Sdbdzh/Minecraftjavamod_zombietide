@@ -245,7 +245,7 @@ public class HordeSpawner {
                 }
 
                 // 【兜底】已进入四散窗口：本波不再生成。
-                // scatterZombies 每日只跑一次，若它已执行过，本函数不应再产出新僵尸
+                // scatterZombies 每 20 tick 可重扫一次，若它已执行过，本函数不应再产出新僵尸
                 // （新僵尸不会被四散清除，会活到白天并被次日黎明二次计入血债）。
                 long phaseNow = level.getDayTime() % 24000L;
                 if (phaseNow >= 23460L - config.despawnSeconds() * 20L) {
@@ -345,9 +345,11 @@ public class HordeSpawner {
         // findSpawnPos 已保证绝不返回 null：优先背后，兜底任意安全点，最终兜底目标脚下地表
         BlockPos spawnPos = findSpawnPos(level, target, radius, config);
 
-        // 僵尸高 2 格，需要生成位置及上方均为空气/可替换
-        BlockPos feetPos = spawnPos.above();      // 僵尸脚部位置（地表方块上方 1 格）
-        BlockPos headPos = feetPos.above();       // 僵尸头部位置（地表方块上方 2 格）
+        // 【v0.1.60 修复 #121】findSpawnPos 返回的 spawnPos **已经是第一格空气**
+        // （高度图 = 最高阻挡方块 y + 1）。v0.1.59 只改了 findSpawnPos 里的净空检查，
+        // 这里仍 .above() → 僵尸仍生成在离地 1 格处下坠，且净空检查也查错了位置。
+        BlockPos feetPos = spawnPos;              // 僵尸脚部位置 = 地表方块上方 1 格
+        BlockPos headPos = feetPos.above();       // 僵尸头部位置（脚部再上 1 格）
 
         if (!level.getBlockState(feetPos).isAir() || !level.getBlockState(headPos).canBeReplaced()) {
             EnikZombietide.LOGGER.warn("尸潮刷怪失败：target={} 位置={} 生成空间不足（脚部={} 头部={}），放弃本次生成", 
@@ -391,7 +393,8 @@ public class HordeSpawner {
      * debug info 始终显示“尸潮进行中”。
      * 修复后：先遍历所有在线玩家和村民，收集所有 waveActive=true 的目标，
      * 保证黎明时无论僵尸是否存活，waveActive 都会被重置。
-     * 【R43-009 high】同游戏日内多次夜→晨跳变：移除 lastDawnDay 限制，每次调用都结算血债。
+     * 【R43-009 high】同游戏日内多次夜→晨跳变：移除 lastDawnDay 限制。
+     * <p>【v0.1.56】本方法**不再结算血债**（唯一结算点是 23460 的 settleDebtAtBurnTime），只重置 waveActive。
      * 调用方需自行判断是否需要防重复（如常规黎明窗口使用 lastDawnDay）。
      * 注意：不在这里做四散动作。四散动作由 scatterZombies() 在日出前 despawnSeconds 秒触发，
      * 避免僵尸被太阳烧死后才四散。
@@ -530,7 +533,7 @@ public class HordeSpawner {
         EnikZombietide.LOGGER.info("尸潮僵尸开始四散：日出前 {} 秒，太阳即将直射", config.despawnSeconds());
 
         // 【停止刷怪】四散开始后不得再生成新批次。scatterZombies 每 20 tick 可重扫一次（v0.1.55 起）
-        // （HordeTimer 的 lastScatterDay 去重），错过本次快照的僵尸会在四散之后才出现：
+        // （HordeTimer 的 lastScatterTick 20 tick 节流，每轮都会重扫），错过本次快照的僵尸会在四散之后才出现：
         //   1) state=0，不在 scatteringZombies 里 —— 23460 起火时刻不会被清除；
         //   2) 却被 settleDebtAtBurnTime 的存活统计计入血债；
         //   3) 若活到次日黎明，onDawn 会按新的一天再结算一次（cumulative 模式重复计债）；
@@ -705,7 +708,7 @@ public class HordeSpawner {
      * @param waveSeq   【当前未使用，保留备查】原本用于「按波次去重」（v0.1.55），
      *                  v0.1.56 起结算点唯一（只有 23460），去重不再需要；参数保留以便将来若加回
      *                  第二个结算点时直接复用。调用方仍传 {@code currentWaveSeq(...)} 的返回值。
-     * @return 结算后的血债值；{@code null} 表示跳过（目标未注册 / 本波已结算过）
+     * @return 结算后的血债值；{@code null} 表示跳过（目标未在血债表注册）
      */
     private static Integer settleDebtForTarget(ServerLevel level, ZombietideConfig config,
                                                com.enik.zombietide.config.PlayerDebtData debtData,
@@ -742,7 +745,7 @@ public class HordeSpawner {
             int survivorCount = countHordeZombiesByTarget(level, targetId);
             int waveSeq = currentWaveSeq(level, targetId);
             String debtMode = config.debtMode();
-            // 统一走按波次去重（v0.1.55）；返回 null 表示本波已结算过
+            // 统一走 settleDebtForTarget（v0.1.56 起不做按波去重，结算点唯一）
             Integer settled = settleDebtForTarget(level, config, debtData, targetId, survivorCount, waveSeq);
             if (settled == null) continue;
             int newDebt = settled;
@@ -1285,7 +1288,10 @@ public class HordeSpawner {
         if (outer < configured) {
             EnikZombietide.LOGGER.debug("刷怪半径被模拟距离收缩：配置={} 格，实际上限={} 格", configured, outer);
         }
-        if (outer < inner) outer = inner; // 容错：最小距离大于半径时退化为同一圈
+        // 【v0.1.60 修复 #110】旧写法 `outer = inner` 把外圈**撑到**最小距离（可能 > 半径、
+        // 甚至 > 模拟距离），采样的点全在界外，被 hasChunkAt 丢弃后只能走「刷在目标脚下」兜底。
+        // 正确方向是把内圈压到外圈，保证所有采样点都在 [0, radius] 内。
+        if (inner > outer) inner = outer;
         double minSq = inner * inner;
         double spanSq = Math.max(0.0, outer * outer - minSq);
 
@@ -1382,6 +1388,7 @@ public class HordeSpawner {
     }
 
     // ===== 供调试命令使用的公开访问器（替代反射） =====
+    /** 【当前无调用点，保留备查】 */
     public static int getActiveHordeCount() {
         return activeHordes.size();
     }
@@ -1413,6 +1420,7 @@ public class HordeSpawner {
         return new java.util.HashMap<>(activeHordes);
     }
 
+    /** 【当前无调用点，保留备查】 */
     public static int countHordeZombiesInWorld(ServerLevel level) {
         return countHordeZombies(level);
     }
@@ -1591,6 +1599,30 @@ public class HordeSpawner {
     }
 
     /**
+     * 当前所有「波次仍在进行」的目标（**刷完但僵尸还活着也算**）。
+     * <p>【v0.1.60 修复 #126】{@link #getActiveTargetIds()} 读的是 {@code activeHordes}，
+     * 而它在「剩余待生成数 == 0」时就把条目移除了 → 一波刷完后永远返回空，
+     * 导致僵尸在追逐阶段找不到「其它波次的触发者」。
+     * <p>这里改用 {@code waveActive}：玩家读 attachment，村民读调度表（权威源），
+     * 再并上仍在刷怪的 activeHordes，覆盖「刚触发还没刷」与「刷完仍在追」两种状态。
+     */
+    public static java.util.Set<UUID> getActiveWaveTargetIds(ServerLevel level) {
+        java.util.Set<UUID> out = new java.util.HashSet<>(activeHordes.keySet());
+        if (level == null) return out;
+        for (ServerPlayer p : level.getPlayers(p2 -> true)) {
+            if (com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(p).waveActive()) {
+                out.add(p.getUUID());
+            }
+        }
+        VillagerScheduleData schedule = level.getDataStorage().computeIfAbsent(
+                VillagerScheduleData.FACTORY, VillagerScheduleData.ID);
+        for (var e : schedule.getAllSchedules().entrySet()) {
+            if (e.getValue().waveActive()) out.add(e.getKey());
+        }
+        return out;
+    }
+
+    /**
      * 查询某目标当前还有多少只未生成（0 表示没有进行中的刷怪批次）。
      * 供 /zombietide trigger 判断是否允许重复触发。
      */
@@ -1605,14 +1637,16 @@ public class HordeSpawner {
      * @param state 0=追踪中（hordeZombieUuids），1=四散中（scatteringZombies 倒计时）
      */
     public static void retrackZombie(ServerLevel level, UUID zombieUuid, int state) {
+        // 【v0.1.60 修复 #124】无论 state 都要登记进 hordeZombieUuids。
+        // 之前 state==1 只加 scatteringZombies → 23460 的 countHordeZombiesByTarget
+        // 遍历 hordeZombieUuids 得 0 → 按「幸存 0」把当夜和累积血债一起清零。
+        hordeZombieUuids.add(zombieUuid);
         if (state == 1) {
             // 与 scatterZombies 相同的公式：倒计时到起火时刻 23460 移除
             long dayPhase = level.getDayTime() % 24000L;
             int ticks = (int)(23460 - dayPhase);
             if (ticks < 1) ticks = 1;
             scatteringZombies.put(zombieUuid, ticks);
-        } else {
-            hordeZombieUuids.add(zombieUuid);
         }
     }
 
@@ -1666,7 +1700,7 @@ public class HordeSpawner {
         EnikZombietide.LOGGER.info("已清空所有活跃尸潮并重置所有目标 waveActive/lastTriggerDay（可重新触发）");
     }
 
-    /** 兼容旧调用（无 level 参数）。带参版本在 level==null 时跳过清理块，故这里单独重置 BGM 调度 */
+    /** 【当前无调用点，保留备查】兼容旧调用（无 level 参数）。带参版本在 level==null 时跳过清理块，故这里单独重置 BGM 调度 */
     public static void clearActiveHordes() {
         clearActiveHordes(null);
         HordeBgmScheduler.reset();

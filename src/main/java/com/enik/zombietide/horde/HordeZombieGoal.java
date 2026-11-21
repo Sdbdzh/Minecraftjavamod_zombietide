@@ -96,7 +96,7 @@ public class HordeZombieGoal extends Goal {
      * Goal 执行期间每 tick 调用（requiresUpdateEveryTick()=true 保证逐 tick 调用）。
      * <ul>
      *   <li>state==1（scattering）：持续逃离主目标，偏向暗处，避开玩家/村民/铁傀儡</li>
-     *   <li>state==0（active）：主目标可达时强制刷新仇恨；不可达时不干预，也不会换目标</li>
+     *   <li>state==0（active）：主目标存在时每 20 tick 强制锁定；死亡/未加载时改打附近其它尸潮触发者，都没有则交给原版索敌</li>
      * </ul>
      */
     @Override
@@ -201,7 +201,7 @@ public class HordeZombieGoal extends Goal {
         LivingEntity best = null;
         double bestD2 = Double.MAX_VALUE;
         double maxD2 = OTHER_TARGET_MAX_DISTANCE * OTHER_TARGET_MAX_DISTANCE;
-        for (UUID otherId : HordeSpawner.getActiveTargetIds()) {
+        for (UUID otherId : HordeSpawner.getActiveWaveTargetIds(sl)) {
             if (otherId.equals(targetUUID)) continue;
             var e = HordeSpawner.findTarget(sl, otherId);
             if (!(e instanceof LivingEntity le) || !le.isAlive()) continue;

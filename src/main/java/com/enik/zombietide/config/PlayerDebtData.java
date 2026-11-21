@@ -136,11 +136,13 @@ public class PlayerDebtData extends SavedData {
         setDirty();
     }
 
+    /** 【当前无调用点，保留备查】按天判断是否已结算（v0.1.55 前的机制）。 */
     public boolean isSettled(UUID uuid, long day) {
         Entry e = entries.get(uuid);
         return e != null && e.lastSettledDay() == day;
     }
 
+    /** 【当前无调用点，保留备查】按天标记已结算（v0.1.55 前的机制）。 */
     public void markSettled(UUID uuid, long day) {
         Entry e = entries.get(uuid);
         int debt = e == null ? 0 : e.debt();
