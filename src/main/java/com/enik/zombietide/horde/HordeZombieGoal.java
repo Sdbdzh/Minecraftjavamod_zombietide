@@ -202,7 +202,7 @@ public class HordeZombieGoal extends Goal {
      * <p>目标源是 {@link HordeSpawner#getActiveWaveTargetIds(ServerLevel)}：
      * 并上仍在刷怪的 {@code activeHordes}，再加玩家 attachment / 村民调度表里
      * {@code waveActive=true} 的目标——所以**刷完但僵尸还活着**的波次也算（v0.1.60）。
-     * <p>距离上限 {@link #OTHER_TARGET_MAX_DISTANCE}（64 格）：超出则继续追自己的触发者
+     * <p>距离上限 {@link #OTHER_TARGET_MAX_DISTANCE}（128 格）：超出则继续追自己的触发者
      * 或交由原版索敌，不横穿世界去追另一波。
      */
     private LivingEntity findNearestOtherHordeTarget() {
@@ -275,8 +275,8 @@ public class HordeZombieGoal extends Goal {
     private int markerMissingLogTimer = 0;
     /** 「换打其它尸潮触发者」的最大距离（格）：v0.1.66 由 64 增大到 128（约 8 区块） */
     private static final double OTHER_TARGET_MAX_DISTANCE = 128.0;
-    /** v0.1.66：所有尸潮目标都没有时，就近强索敌的半径（格） */
-    private static final double FALLBACK_TARGET_MAX_DISTANCE = 32.0;
+    /** v0.1.67：所有尸潮目标都没有时，就近强索敌的半径（格），与其它触发者范围保持一致 */
+    private static final double FALLBACK_TARGET_MAX_DISTANCE = 128.0;
 
     /** v0.1.66：找附近可攻击的原版目标（玩家/村民/铁傀儡），避免触发者死亡后站着发呆。
      *  与 20 tick 的 refreshTimer 合流，反击中的目标不会被覆盖（调用方已先 return）。 */
