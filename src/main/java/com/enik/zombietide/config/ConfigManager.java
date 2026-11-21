@@ -34,7 +34,12 @@ public class ConfigManager {
         }
     }
 
-    /** 客户端接收到服务端广播的配置（仅刷新本地 HUD 显示，不持久化） */
+    /**
+     * 【v0.1.61 修复 #138】客户端收到服务端广播配置时的钩子。
+     * <p><b>当前实现只写一条日志，不刷新任何 HUD 数据、不持久化。</b>
+     * HUD 的实际数值来自服务端 {@code PlayerModDayPayload} 每秒同步（见 {@code ZombietideHud.onModDayReceived}）；
+     * 玩法参数由服务端在 {@code HordeTimer} / {@code HordeSpawner} 里读取世界级配置。
+     */
     public static void applyClientConfig(ZombietideConfig newConfig) {
         EnikZombietide.LOGGER.info("Zombietide client config refreshed from server");
     }

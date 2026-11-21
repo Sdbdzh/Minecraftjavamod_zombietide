@@ -193,8 +193,11 @@ public class HordeZombieGoal extends Goal {
 
     /**
      * 找附近其它尸潮的触发者（自己的触发者不存在/无效时的次级目标）。
-     * <p>只看 {@code activeHordes} 的 key（个位数），不扫全实体表；
-     * 距离不设上限——尸潮僵尸本来就该主动长途追击。
+     * <p>目标源是 {@link HordeSpawner#getActiveWaveTargetIds(ServerLevel)}：
+     * 并上仍在刷怪的 {@code activeHordes}，再加玩家 attachment / 村民调度表里
+     * {@code waveActive=true} 的目标——所以**刷完但僵尸还活着**的波次也算（v0.1.60）。
+     * <p>距离上限 {@link #OTHER_TARGET_MAX_DISTANCE}（64 格）：超出则继续追自己的触发者
+     * 或交由原版索敌，不横穿世界去追另一波。
      */
     private LivingEntity findNearestOtherHordeTarget() {
         if (!(mob.level() instanceof ServerLevel sl)) return null;
@@ -233,9 +236,6 @@ public class HordeZombieGoal extends Goal {
         return true;
     }
 
-    /**
-     * 主目标可达性判定：视线可达，或当前已有有效行进路径（导航正在寻路/赶路）。
-     */
     /**
      * 查找主目标实体（玩家或村民），存活才返回；找不到返回 null。
      * <p>服务端统一走 {@link HordeSpawner#findTarget}——它自带「getEntity 未命中就遍历实体表」的兜底，

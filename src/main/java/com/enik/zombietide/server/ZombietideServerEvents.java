@@ -48,6 +48,7 @@ public class ZombietideServerEvents {
         // 单机「退出存档 → 进另一个存档」不会重启 JVM，而新世界 getGameTime() 从 0 起，
         // 残留的 lastScatterTick 会比 nowTick 还大 → nowTick - lastScatterTick 为负 → 永不四散。
         HordeTimer.resetState();
+        HordeSpawner.resetState();
         EnikZombietide.LOGGER.info("Zombietide server started");
     }
 
@@ -263,7 +264,11 @@ public class ZombietideServerEvents {
         if (level.isClientSide()) return;
         if (!(level instanceof ServerLevel serverLevel)) return;
 
-        ZombietideConfigData data = ConfigManager.getConfigData(serverLevel);
+        // 【v0.1.61 修复 #139】配置是「世界级」的，必须从主世界读。
+        // 之前用 serverLevel（事件所在维度），在下界/末地会读到该维度的独立 SavedData。
+        ServerLevel overworld = serverLevel.getServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+        ZombietideConfigData data = ConfigManager.getConfigData(
+                overworld != null ? overworld : serverLevel);
         ZombietideConfig config = data.getConfig();
 
         if (!config.blockNaturalSpawn()) return;

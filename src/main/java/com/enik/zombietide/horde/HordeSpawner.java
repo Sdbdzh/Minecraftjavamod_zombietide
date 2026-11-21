@@ -83,6 +83,26 @@ public class HordeSpawner {
     // 现用于清晨提醒防重复
     private static final Map<UUID, Integer> warnedNightBefore = new ConcurrentHashMap<>();
 
+    /**
+     * 重置所有静态状态（服务器启动时调用，v0.1.61 修复 #140）。
+     * <p>单机「退出存档 → 进另一个存档」不重启 JVM，这些静态 Map/Set 会残留
+     * 上个世界的僵尸 UUID / 活跃波次 / 四散倒计时，导致新存档出现幽灵数据。
+     * <p>只在**进程级**（{@code onServerStarted}）清；玩家登录/换维度不清。
+     * 存档里的真实进度由 {@code HordeProgressData}（SavedData）持有，重启后
+     * 由 {@code update()} 自行恢复，清的只是内存索引。
+     */
+    public static void resetState() {
+        activeHordes.clear();
+        spawnedCount.clear();
+        totalCount.clear();
+        batchTimer.clear();
+        villagerHordeRadii.clear();
+        scatteringZombies.clear();
+        hordeZombieUuids.clear();
+        seenHordesThisSession.clear();
+        warnedNightBefore.clear();
+    }
+
     // 已结算血债的游戏日（target UUID -> gameDay），防止同一天重复结算（四散完成/起火结算/黎明 onDawn 共用）
 
     // 待血债结算的目标（四散开始时加入，23460 起火时刻按实时存活数结算，然后移除）
@@ -573,10 +593,24 @@ public class HordeSpawner {
 
             CompoundTag tag = entity.getPersistentData();
             if (!tag.hasUUID(HORDE_TARGET_UUID_KEY)) continue;
-            // 已经进入四散状态的僵尸，跳过
-            if (tag.getInt(HORDE_STATE_KEY) == 1) continue;
 
             UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
+
+            // 【v0.1.61 修复 #131】marker 的 ensure/bind 必须在「state==1 跳过」之前。
+            // marker 是纯运行时实体、不持久化；服务器重启后僵尸恢复为 state==1
+            // 但 marker 已丢失。旧的 continue 在前 → 每 20 tick 的重扫把它们全跳过
+            // → marker 永不重建 → 僵尸原地站着直到 23460 被清。
+            // v0.1.55：为该尸潮创建/复用一个不可见 Marker 诱饵，并把它的 UUID 绑到僵尸身上。
+            net.minecraft.world.entity.Entity fleeMarker = markerCache.computeIfAbsent(targetId,
+                    id -> HordeFleeMarker.ensure(level, id, entity.getX(), entity.getY(), entity.getZ()));
+            if (fleeMarker != null && entity instanceof net.minecraft.world.entity.Mob mob) {
+                HordeFleeMarker.bind(mob, fleeMarker);
+            }
+
+            // 已经进入四散状态的僵尸：只跳过「转入四散」的动作（通知/状态/scatteringZombies），
+            // 但上面的 marker 补建已经完成。newlyScattered 仍只统计新转入的，防止通知刷屏。
+            if (tag.getInt(HORDE_STATE_KEY) == 1) continue;
+
             scatterTargets.add(targetId);
             scatterCountByTarget.merge(targetId, 1, Integer::sum);
             newlyScattered++;
@@ -584,15 +618,6 @@ public class HordeSpawner {
                 mob.setTarget(null); // 清空攻击目标，停止攻击
             }
             tag.putInt(HORDE_STATE_KEY, 1); // 标记为四散状态
-
-            // v0.1.55：为该尸潮创建/复用一个不可见 Marker 诱饵，并把它的 UUID 绑到僵尸身上。
-            // 僵尸侧只追这个 marker（见 HordeZombieGoal 的 state==1 分支），
-            // 不再对每只僵尸单独做 8 方向选点 —— 既不会"走走停停"，也不会排队（candidates 提供多个落点）。
-            net.minecraft.world.entity.Entity fleeMarker = markerCache.computeIfAbsent(targetId,
-                    id -> HordeFleeMarker.ensure(level, id, entity.getX(), entity.getY(), entity.getZ()));
-            if (fleeMarker != null && entity instanceof net.minecraft.world.entity.Mob mob) {
-                HordeFleeMarker.bind(mob, fleeMarker);
-            }
 
             // 关键修改：四散倒计时精确到 23460（起火时刻），而不是配置的固定秒数
             // 这样所有四散僵尸在同一 tick (23460) 被一次性清除
