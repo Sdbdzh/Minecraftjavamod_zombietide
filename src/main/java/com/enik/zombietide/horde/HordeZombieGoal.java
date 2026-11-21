@@ -23,13 +23,14 @@ import java.util.UUID;
  * <p>
  * 核心行为（设计文档 §5.5）：
  * <ul>
- *   <li>主目标在视线内/可达时：强制锁定主目标为仇恨（优先打你）</li>
- *   <li>主目标不可达（太远、被墙挡、无路可走）：不干预；原版索敌已在 apply() 中移除，因此**不会自动换目标**</li>
- *   <li>主目标死亡/消失：stop()，仇恨交还原版 AI</li>
+ *   <li>主目标存在：每 20 tick 强制锁定为仇恨（优先打你）；寻路失败交给 ZombieAttackGoal 处理</li>
+ *   <li>主目标死亡 / 在未加载区块 / 跨维度：改打<b>附近（64 格内）其它尸潮的触发者</b>；
+ *       一个都没有时交给原版索敌（玩家 / 村民 / 铁傀儡）</li>
+ *   <li>被攻击：优先反击至少 20 tick（不覆盖 HurtByTargetGoal 设的目标）</li>
  *   <li>进入四散状态（state==1）：清空攻击目标并禁用 MOVE 控制位（阻止原版漫游 Goal 抢导航）；
- *       <b>当前逃跑路径走完后</b>才用 8 方向评分选点（天空光照越暗越好 / 背离主目标 / 规避 12 格内威胁），
- *       对评分前 3 的候选做 createPath 可达性预检，并非每 tick 重选；最终在 23460 起火时刻统一清除。
- *       <b>本类是四散导航的唯一实现</b>（v0.1.54 起删除了 FleeGoal）</li>
+ *       追一个不可见的 {@link HordeFleeMarker} 诱饵——路径走完的当 tick 立刻重发，
+ *       行进中每 20 tick 补发；7 个候选点让同波僵尸扇开。最终在 23460 起火时刻统一清除。
+ *       <b>本类是四散导航的唯一实现</b>（v0.1.54 删除了 FleeGoal）</li>
  * </ul>
  */
 public class HordeZombieGoal extends Goal {
@@ -60,14 +61,15 @@ public class HordeZombieGoal extends Goal {
         // state==1（scattering）：持续运行，不依赖主目标是否存在
         if (state == 1) return true;
 
+        // 【v0.1.59 修复 #95】state==0 时**不再要求**「自己的触发者必须存在」。
+        // 之前这里 `if (target == null) return false;` 导致触发者死亡/未加载时整个 Goal 不运行，
+        // tick() 里那段「改打其它波次触发者」的分支永远执行不到（死代码）。
+        // 现在只排除「触发者存在但不可攻击（创造/旁观）」，其余情况一律运行，
+        // 由 tick() 的多级选目标决定打谁；一级都不命中时僵尸正常游荡。
         LivingEntity target = findTarget();
-        if (target == null) return false;
-
-        // 创造/旁观模式玩家不作为尸潮目标
-        if (target instanceof ServerPlayer player) {
-            if (player.isCreative() || player.isSpectator() || !player.isAlive()) {
-                return false;
-            }
+        if (target instanceof ServerPlayer player
+                && (player.isCreative() || player.isSpectator())) {
+            return false;
         }
 
         return true;
@@ -267,23 +269,4 @@ public class HordeZombieGoal extends Goal {
     /** 「换打其它尸潮触发者」的最大距离（格）：超出就继续追自己的目标，不横穿世界 */
     private static final double OTHER_TARGET_MAX_DISTANCE = 64.0;
 
-    /** 找目的地附近的地表可站方块（向上最多 5 格，向下最多 3 格） */
-    private BlockPos findGroundPos(net.minecraft.world.level.Level level, int x, int z, int refY) {
-        // 从参考高度向上找
-        for (int dy = 0; dy <= 5; dy++) {
-            BlockPos p = new BlockPos(x, refY + dy, z);
-            if (isStandable(level, p)) return p;
-        }
-        for (int dy = 1; dy <= 3; dy++) {
-            BlockPos p = new BlockPos(x, refY - dy, z);
-            if (isStandable(level, p)) return p;
-        }
-        return null;
-    }
-
-    private boolean isStandable(net.minecraft.world.level.Level level, BlockPos p) {
-        return level.getBlockState(p).isAir()
-                && level.getBlockState(p.above()).isAir()
-                && !level.getBlockState(p.below()).isAir();
-    }
 }

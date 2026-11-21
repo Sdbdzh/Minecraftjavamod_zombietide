@@ -49,6 +49,10 @@ public class PlayerDebtData extends SavedData {
             }
     );
 
+    /**
+     * @param settledWave 【当前仅写入、不读取】原「按波次去重」标记（v0.1.55），
+     *                    v0.1.56 起无消费方；保留是为了 Codec 向后兼容老存档
+     */
     public record Entry(int debt, long lastSettledDay, int settledWave) {
         public static final Codec<Entry> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.INT.fieldOf("debt").forGetter(Entry::debt),
@@ -111,7 +115,9 @@ public class PlayerDebtData extends SavedData {
     }
 
     /**
-     * 该目标的这一波是否已经结算过血债（按波次去重，v0.1.55 起取代按天去重）。
+     * 【当前无调用点，保留备查】该目标的这一波是否已经结算过血债。
+     * <p>v0.1.55 引入「按波次去重」，v0.1.56 改为结算点唯一（只有 23460 起火结算）后不再需要判断。
+     * 保留以便将来若加回第二个结算点时直接复用。
      * <p>{@code waveSeq <= 0} 表示波次未分配（初始态 / 重置后），<b>永不判为已结算</b>——
      * 否则重置路径用 4 参构造写入的 waveSeq=0 会被 settledWave=0 误挡。
      */

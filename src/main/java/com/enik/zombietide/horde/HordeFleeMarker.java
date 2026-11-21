@@ -36,8 +36,13 @@ public final class HordeFleeMarker {
     /** marker PersistentData 上记录所属尸潮目标 UUID 的键 */
     private static final String TAG_TARGET = "zombietide_flee_target";
 
-    /** 每 tick 移动距离：略快于僵尸行走（约 0.2 格/tick），让它永远差一小段 */
-    private static final double SPEED_PER_TICK = 0.30;
+    /**
+     * 每次更新移动的距离（格）。
+     * <p><b>注意调用频率</b>：{@code HordeTimer} 每 5 tick 才调一次 {@link #tickAll}，
+     * 所以这里必须按「每次更新 1.5 格」来算，实际才是 0.30 格/tick —— 略快于僵尸的 ~0.2。
+     * v0.1.59 前是 0.30/次 → 实际 0.06 格/tick，比僵尸慢 3 倍，诱饵反被超越。
+     */
+    private static final double STEP_PER_UPDATE = 1.5;
     /** 候选点环半径（格）：让同波僵尸从不同点出发，避免排队 */
     private static final int CANDIDATE_RING_RADIUS = 3;
     /** 候选点数量（含中心） */
@@ -104,8 +109,8 @@ public final class HordeFleeMarker {
                 dz = 0.0;
                 len = 1.0;
             }
-            double nx = e.getX() + dx / len * SPEED_PER_TICK;
-            double nz = e.getZ() + dz / len * SPEED_PER_TICK;
+            double nx = e.getX() + dx / len * STEP_PER_UPDATE;
+            double nz = e.getZ() + dz / len * STEP_PER_UPDATE;
             int ny = (int) Math.floor(e.getY());
 
             // 必须先确认区块已加载：Entity#setPosRaw 里有 NeoForge 注入的 level.getChunk(...)，
@@ -163,7 +168,11 @@ public final class HordeFleeMarker {
         }
     }
 
-    /** 清理孤儿 marker：所属目标不存在、或该目标已无任何尸潮僵尸 */
+    /**
+     * 清理孤儿 marker：**只判断「所属目标是否还存在」**（离线/未加载的目标也会被判为不存在）。
+     * <p>不判断「目标是否还有存活僵尸」——四散结束后由 {@code settleDebtAtBurnTime} /
+     * {@code forceClearAllHordes} 用 {@link #discardFor} 精确清理，不依赖这里兜底。
+     */
     public static void sweepOrphans(ServerLevel level) {
         int removed = 0;
         for (Entity e : level.getEntities().getAll()) {

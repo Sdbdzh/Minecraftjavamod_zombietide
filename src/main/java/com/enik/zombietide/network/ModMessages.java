@@ -408,7 +408,13 @@ public class ModMessages {
                                                         .withStyle(net.minecraft.ChatFormatting.RED));
                                         return;
                                     }
-                                    ServerLevel level = serverPlayer.serverLevel();
+                                    // 【v0.1.59 修复 #96】配置是「世界级」的，但所有读取方
+                                    // （HordeTimer / ZombietideServerEvents / 命令）都固定用主世界。
+                                    // 之前这里用 serverLevel()，在下界/末地改设置会写到该维度的
+                                    // SavedData，主世界玩法参数不变；客户端却回显新值（点了没效果）。
+                                    ServerLevel overworld = serverPlayer.server.getLevel(
+                                            net.minecraft.world.level.Level.OVERWORLD);
+                                    ServerLevel level = overworld != null ? overworld : serverPlayer.serverLevel();
                                     ConfigManager.applyRemoteConfig(payload.config(), level);
                                     // 广播给所有在线客户端
                                     PacketDistributor.sendToAllPlayers(

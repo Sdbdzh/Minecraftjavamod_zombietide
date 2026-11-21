@@ -529,7 +529,7 @@ public class HordeSpawner {
 
         EnikZombietide.LOGGER.info("尸潮僵尸开始四散：日出前 {} 秒，太阳即将直射", config.despawnSeconds());
 
-        // 【停止刷怪】四散开始后不得再生成新批次。scatterZombies 每游戏日只执行一次
+        // 【停止刷怪】四散开始后不得再生成新批次。scatterZombies 每 20 tick 可重扫一次（v0.1.55 起）
         // （HordeTimer 的 lastScatterDay 去重），错过本次快照的僵尸会在四散之后才出现：
         //   1) state=0，不在 scatteringZombies 里 —— 23460 起火时刻不会被清除；
         //   2) 却被 settleDebtAtBurnTime 的存活统计计入血债；
@@ -682,9 +682,10 @@ public class HordeSpawner {
     }
 
     /**
-     * 取目标当前的波次序号（v0.1.55 血债按波去重用的键）。
-     * <p>玩家读 attachment，村民读调度表（权威源）；**离线/未加载返回 0**，
-     * 而 {@code isWaveSettled} 对 {@code waveSeq <= 0} 恒返回 false —— 即离线目标不参与去重，正常结算。
+     * 【当前无调用点消费，保留备查】取目标当前的波次序号（v0.1.55 血债按波去重用的键）。
+     * <p>v0.1.56 起结算点唯一（只有 23460 起火结算），不再需要按波去重；
+     * 本方法仍被 {@code settleDebtForTarget} 的调用方传入，但该参数未被使用。
+     * <p>玩家读 attachment，村民读调度表（权威源）；离线/未加载返回 0。
      */
     private static int currentWaveSeq(ServerLevel level, UUID targetId) {
         ServerPlayer p = level.getServer().getPlayerList().getPlayer(targetId);
@@ -701,7 +702,9 @@ public class HordeSpawner {
      * 按存活数结算单个目标的血债（起火结算与时间跳变强制清除共用同一套规则）。
      *
      * @param survivors 当前存活的尸潮僵尸数
-     * @param waveSeq   目标当前波次序号；{@code <= 0} 表示无法判定（离线/重置后），不参与去重
+     * @param waveSeq   【当前未使用，保留备查】原本用于「按波次去重」（v0.1.55），
+     *                  v0.1.56 起结算点唯一（只有 23460），去重不再需要；参数保留以便将来若加回
+     *                  第二个结算点时直接复用。调用方仍传 {@code currentWaveSeq(...)} 的返回值。
      * @return 结算后的血债值；{@code null} 表示跳过（目标未注册 / 本波已结算过）
      */
     private static Integer settleDebtForTarget(ServerLevel level, ZombietideConfig config,
@@ -1332,8 +1335,11 @@ public class HordeSpawner {
                 continue;
             }
 
-            // 检查生成空间：需要 surfacePos.above() 和 surfacePos.above().above() 都是空气/可替换
-            BlockPos feetPos = surfacePos.above();
+            // 【v0.1.59 修复 #98】getHeightmapPos 返回的已经是「第一格空气」
+            // （高度图 = 最高阻挡方块 y + 1），脚就站在这个位置。
+            // 旧代码又 .above() 一次 → 实际生成在高 1 格处，僵尸悬空下坠，
+            // 且净空检查凭空多要 1 格，部分合法落点被丢弃。
+            BlockPos feetPos = surfacePos;
             BlockPos headPos = feetPos.above();
             if (!level.getBlockState(feetPos).isAir() || !level.getBlockState(headPos).canBeReplaced()) {
                 continue;
