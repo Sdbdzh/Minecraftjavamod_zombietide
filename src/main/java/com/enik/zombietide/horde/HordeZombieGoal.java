@@ -198,12 +198,17 @@ public class HordeZombieGoal extends Goal {
         if (!(mob.level() instanceof ServerLevel sl)) return null;
         LivingEntity best = null;
         double bestD2 = Double.MAX_VALUE;
+        double maxD2 = OTHER_TARGET_MAX_DISTANCE * OTHER_TARGET_MAX_DISTANCE;
         for (UUID otherId : HordeSpawner.getActiveTargetIds()) {
             if (otherId.equals(targetUUID)) continue;
             var e = HordeSpawner.findTarget(sl, otherId);
             if (!(e instanceof LivingEntity le) || !le.isAlive()) continue;
             if (le instanceof ServerPlayer p && (p.isCreative() || p.isSpectator())) continue;
             double d2 = le.distanceToSqr(mob);
+            // 只在「附近」范围内换目标：超过这个距离说明它是另一波的事，
+            // 当前波次的僵尸应该继续追击自己的触发者（或就近打原版目标），
+            // 而不是横穿世界去追另一波。
+            if (d2 > maxD2) continue;
             if (d2 < bestD2) {
                 bestD2 = d2;
                 best = le;
@@ -259,6 +264,8 @@ public class HordeZombieGoal extends Goal {
     private int repathTimer = 0;
     /** marker 取不到时的日志节流计时器 */
     private int markerMissingLogTimer = 0;
+    /** 「换打其它尸潮触发者」的最大距离（格）：超出就继续追自己的目标，不横穿世界 */
+    private static final double OTHER_TARGET_MAX_DISTANCE = 64.0;
 
     /** 找目的地附近的地表可站方块（向上最多 5 格，向下最多 3 格） */
     private BlockPos findGroundPos(net.minecraft.world.level.Level level, int x, int z, int refY) {

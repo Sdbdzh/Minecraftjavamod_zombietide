@@ -1417,6 +1417,16 @@ public class HordeSpawner {
      * 因此未命中时兜底遍历实体表，避免村民目标被误判为「已消失」。
      */
     public static net.minecraft.world.entity.Entity findTarget(ServerLevel level, UUID id) {
+        // 玩家优先走 PlayerList：这是唯一 100% 可靠的来源，
+        // 不受实体 UUID 索引、区块加载状态、玩家走多远影响。
+        // 只排除「跨维度」——不同维度的目标僵尸追不到，锁了也没意义。
+        if (level.getServer() != null) {
+            ServerPlayer player = level.getServer().getPlayerList().getPlayer(id);
+            if (player != null) {
+                return player.level() == level ? player : null;
+            }
+        }
+        // 非玩家（村民等）仍走实体索引 + 兜底遍历
         var entity = level.getEntity(id);
         if (entity != null) return entity;
         for (var e : level.getEntities().getAll()) {
