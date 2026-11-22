@@ -1,0 +1,147 @@
+package com.enik.zombietide.client;
+
+import com.enik.zombietide.EnikZombietide;
+import com.enik.zombietide.config.ClientAtmosphereConfig;
+import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.FogRenderer;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RenderGuiEvent;
+import net.neoforged.neoforge.client.event.ViewportEvent;
+
+import java.util.UUID;
+
+/**
+ * 客户端氛围渲染（v0.2.70）：雾色、视距压缩、屏幕暗角、触发瞬间镜头下沉。
+ * <p>
+ * 状态来源全部是服务端已同步的权威值（{@link ZombietideHud#isHordeDayFor} /
+ * {@link ZombietideHud#isWaveActiveFor}），客户端不自行推算。
+ * <p>
+ * 设计取向（压抑恐怖）：
+ * <ul>
+ *   <li><b>尸潮日白天</b>：雾色轻微偏冷，天空"不对劲"但说不出哪里不对</li>
+ *   <li><b>波次中</b>：雾色更冷更暗 + 视距压到 96 格——看不见远处，大脑自己补最坏的东西</li>
+ *   <li><b>暗角</b>：波次中常驻，血债越高越重</li>
+ *   <li><b>镜头下沉</b>：触发瞬间 1 秒内轻微下沉再回位，默认关</li>
+ * </ul>
+ * 所有效果都可通过 {@link ClientAtmosphereConfig} 关闭；总开关关闭后一律不生效。
+ * <p><b>注意</b>：本类只能通过 {@code @EventBusSubscriber(value = Dist.CLIENT)} 注册，
+ * 绝不能在主类里引用（专用服务器会因加载客户端类而崩溃）。
+ */
+@EventBusSubscriber(modid = EnikZombietide.MODID, value = Dist.CLIENT)
+public final class ZombietideAtmosphere {
+
+    /** 触发瞬间镜头下沉持续时长（tick） */
+    private static final int TRIGGER_SHAKE_TICKS = 20;
+    /** 镜头下沉幅度（度），刻意做得极轻，避免晕动 */
+    private static final float TRIGGER_SHAKE_DEGREES = 1.5F;
+
+    private static int clientTicks = 0;
+    private static int waveStartTick = -10000;
+    private static boolean lastWaveActive = false;
+
+    private ZombietideAtmosphere() {
+    }
+
+    /** 每客户端 tick 记录「波次刚开始」的时刻，供镜头下沉使用。 */
+    @SubscribeEvent
+    public static void onClientTick(ClientTickEvent.Post event) {
+        clientTicks++;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) {
+            lastWaveActive = false;
+            return;
+        }
+        boolean active = ZombietideHud.isWaveActiveFor(mc.player.getUUID());
+        if (active && !lastWaveActive) {
+            waveStartTick = clientTicks;
+        }
+        lastWaveActive = active;
+    }
+
+    /** 雾色：尸潮日轻微偏冷，波次中更冷更暗。 */
+    @SubscribeEvent
+    public static void onComputeFogColor(ViewportEvent.ComputeFogColor event) {
+        if (!ClientAtmosphereConfig.fogEnabled()) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null) return;
+        UUID id = mc.player.getUUID();
+        boolean wave = ZombietideHud.isWaveActiveFor(id);
+        boolean hordeDay = ZombietideHud.isHordeDayFor(id);
+        if (!wave && !hordeDay) return;
+
+        // 压蓝绿、留一点红，偏"脏"的冷灰；波次中压得更狠
+        float r = event.getRed();
+        float g = event.getGreen();
+        float b = event.getBlue();
+        if (wave) {
+            event.setRed(r * 0.70F);
+            event.setGreen(g * 0.72F);
+            event.setBlue(b * 0.80F);
+        } else {
+            event.setRed(r * 0.90F);
+            event.setGreen(g * 0.90F);
+            event.setBlue(b * 0.93F);
+        }
+    }
+
+    /** 视距压缩：波次中把地形雾拉到 96 格，制造"看不见远处"的压迫。 */
+    @SubscribeEvent
+    public static void onRenderFog(ViewportEvent.RenderFog event) {
+        if (!ClientAtmosphereConfig.fogEnabled()) return;
+        if (event.getMode() != FogRenderer.FogMode.FOG_TERRAIN) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+        if (!ZombietideHud.isWaveActiveFor(mc.player.getUUID())) return;
+
+        event.setNearPlaneDistance(8.0F);
+        event.setFarPlaneDistance(96.0F);
+        // 必须 cancel 才会采用上面设置的距离
+        event.setCanceled(true);
+    }
+
+    /** 触发瞬间的镜头轻微下沉，1 秒内正弦回位。 */
+    @SubscribeEvent
+    public static void onComputeCameraAngles(ViewportEvent.ComputeCameraAngles event) {
+        if (!ClientAtmosphereConfig.cameraShakeEnabled()) return;
+        int since = clientTicks - waveStartTick;
+        if (since < 0 || since > TRIGGER_SHAKE_TICKS) return;
+        float t = since / (float) TRIGGER_SHAKE_TICKS;
+        float offset = (float) Math.sin(t * Math.PI) * TRIGGER_SHAKE_DEGREES;
+        event.setPitch(event.getPitch() + offset);
+    }
+
+    /**
+     * 屏幕暗角：波次中常驻，血债越高越重。
+     * <p>用 {@code RenderGuiEvent.Pre} 而不是 Post——这样暗角压在世界之上、HUD 之下，
+     * 不会把 DAY X 和面板文字一起压暗。
+     */
+    @SubscribeEvent
+    public static void onRenderGuiPre(RenderGuiEvent.Pre event) {
+        if (!ClientAtmosphereConfig.vignetteEnabled()) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.options.hideGui) return;
+        UUID id = mc.player.getUUID();
+        if (!ZombietideHud.isWaveActiveFor(id)) return;
+
+        int debt = ZombietideHud.bloodDebtFor(id);
+        // 基础 0.28，血债每只 +0.004，上限 +0.22（血债 55 只封顶）
+        float strength = 0.28F + Math.min(0.22F, debt * 0.004F);
+        int alpha = ((int) (strength * 255.0F) & 0xFF) << 24;
+
+        var g = event.getGuiGraphics();
+        int w = g.guiWidth();
+        int h = g.guiHeight();
+        int edge = Math.max(12, (int) (Math.min(w, h) * 0.22F));
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        g.fillGradient(0, 0, w, edge, alpha, 0x00000000);                 // 上
+        g.fillGradient(0, h - edge, w, h, 0x00000000, alpha);             // 下
+        g.fillGradient(0, 0, edge, h, alpha, 0x00000000);                 // 左
+        g.fillGradient(w - edge, 0, w, h, 0x00000000, alpha);             // 右
+    }
+}

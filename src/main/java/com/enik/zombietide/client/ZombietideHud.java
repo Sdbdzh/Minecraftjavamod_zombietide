@@ -83,6 +83,21 @@ public class ZombietideHud {
         syncedAliveHordeZombies.put(playerUuid, aliveHordeZombies);
     }
 
+    /** 客户端视角：该玩家今天是不是尸潮日（服务端同步的权威值，不自行推算）。 */
+    public static boolean isHordeDayFor(UUID playerUuid) {
+        return Boolean.TRUE.equals(syncedHordeDay.get(playerUuid));
+    }
+
+    /** 客户端视角：该玩家的尸潮波次是否进行中。 */
+    public static boolean isWaveActiveFor(UUID playerUuid) {
+        return Boolean.TRUE.equals(syncedWaveActive.get(playerUuid));
+    }
+
+    /** 客户端视角：该玩家当前血债值（氛围强度用）。 */
+    public static int bloodDebtFor(UUID playerUuid) {
+        return syncedDebt.getOrDefault(playerUuid, 0);
+    }
+
     /** 接收服务端同步的村民模组天数（VillagerModDayPayload） */
     public static void onVillagerModDayReceived(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay) {
         villagerModDays.put(villagerUuid, modDay);

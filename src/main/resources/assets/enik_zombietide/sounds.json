@@ -22,5 +22,10 @@
       { "name": "enik_zombietide:bgm_p4_3", "stream": true },
       { "name": "enik_zombietide:bgm_p4_4", "stream": true }
     ]
+  },
+  "horde_drone": {
+    "sounds": [
+      { "name": "enik_zombietide:horde_drone", "stream": true }
+    ]
   }
 }

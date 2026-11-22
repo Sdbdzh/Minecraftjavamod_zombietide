@@ -242,6 +242,22 @@ public class ZombietideServerEvents {
     }
 
     /** 睡眠拦截：波次期间阻止玩家入睡（玩家尸潮禁触发者，村民尸潮禁配置范围内玩家） */
+    /**
+     * 禁睡提示文案轮换（v0.2.70）。
+     * <p>每次点床都弹是**有意的**——反复被拒等于反复确认「你被困住了」，是压迫感的一部分；
+     * 但同一句话看三遍就出戏，所以从 {@code zombietide.sleep.blocked.1..12} 里随机取。
+     * 文案全部场景无关（不提门/窗/墙/火把/方位），树上、矿洞、野外、村民家都成立。
+     */
+    private static net.minecraft.network.chat.Component randomSleepBlockedMessage() {
+        int i = 1 + java.util.concurrent.ThreadLocalRandom.current().nextInt(SLEEP_BLOCKED_VARIANTS);
+        return net.minecraft.network.chat.Component
+                .translatable("zombietide.sleep.blocked." + i)
+                .withStyle(net.minecraft.ChatFormatting.RED);
+    }
+
+    /** 禁睡文案变体数量，与语言文件中的 {@code zombietide.sleep.blocked.1..N} 一一对应 */
+    private static final int SLEEP_BLOCKED_VARIANTS = 12;
+
     @SubscribeEvent
     public static void onCanPlayerSleep(CanPlayerSleepEvent event) {
         // 只在主世界处理
@@ -259,7 +275,7 @@ public class ZombietideServerEvents {
         var playerHordeData = ModAttachments.getPlayerHordeData(player);
         if (config.playerHordeEnabled() && playerHordeData.waveActive()) {
             event.setProblem(net.minecraft.world.entity.player.Player.BedSleepingProblem.NOT_POSSIBLE_NOW);
-            player.sendSystemMessage(net.minecraft.network.chat.Component.translatable("zombietide.sleep.blocked").withStyle(net.minecraft.ChatFormatting.RED));
+            player.sendSystemMessage(randomSleepBlockedMessage());
             return;
         }
 
@@ -272,7 +288,7 @@ public class ZombietideServerEvents {
                 var villagerHordeData = ModAttachments.getVillagerHordeData(villager);
                 if (villagerHordeData.waveActive() && player.distanceToSqr(villager) <= range * range) {
                     event.setProblem(net.minecraft.world.entity.player.Player.BedSleepingProblem.NOT_POSSIBLE_NOW);
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.translatable("zombietide.sleep.blocked").withStyle(net.minecraft.ChatFormatting.RED));
+                    player.sendSystemMessage(randomSleepBlockedMessage());
                     return;
                 }
             }

@@ -622,6 +622,45 @@ public class ZombietideSettingsScreen extends Screen {
                         hudConfig.villagerHordeMaxEntries(), centerX, y, 1,
                         v -> hudConfig = hudConfig.withVillagerHordeMaxEntries(v), true);
                 y += ROW_HEIGHT;
+
+                // ===== 氛围效果（v0.2.70）：纯客户端视觉，独立于 HUD 配置与网络协议 =====
+                y = addSection("zombietide.settings.common.text22", centerX, y);
+                addCheckbox("zombietide.settings.atmo.item1.name", null,
+                        "zombietide.settings.atmo.item1.desc",
+                        "zombietide.settings.atmo.item1.tip",
+                        com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(), centerX, y,
+                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(v,
+                                com.enik.zombietide.config.ClientAtmosphereConfig.fogEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.vignetteEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.cameraShakeEnabled()), true);
+                y += ROW_HEIGHT;
+                addCheckbox("zombietide.settings.atmo.item2.name", null,
+                        "zombietide.settings.atmo.item2.desc",
+                        "zombietide.settings.atmo.item2.tip",
+                        com.enik.zombietide.config.ClientAtmosphereConfig.fogEnabled(), centerX, y,
+                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
+                                com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(), v,
+                                com.enik.zombietide.config.ClientAtmosphereConfig.vignetteEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.cameraShakeEnabled()), true);
+                y += ROW_HEIGHT;
+                addCheckbox("zombietide.settings.atmo.item3.name", null,
+                        "zombietide.settings.atmo.item3.desc",
+                        "zombietide.settings.atmo.item3.tip",
+                        com.enik.zombietide.config.ClientAtmosphereConfig.vignetteEnabled(), centerX, y,
+                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
+                                com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.fogEnabled(), v,
+                                com.enik.zombietide.config.ClientAtmosphereConfig.cameraShakeEnabled()), true);
+                y += ROW_HEIGHT;
+                addCheckbox("zombietide.settings.atmo.item4.name", null,
+                        "zombietide.settings.atmo.item4.desc",
+                        "zombietide.settings.atmo.item4.tip",
+                        com.enik.zombietide.config.ClientAtmosphereConfig.cameraShakeEnabled(), centerX, y,
+                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
+                                com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.fogEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.vignetteEnabled(), v), true);
+                y += ROW_HEIGHT;
             }
         }
 

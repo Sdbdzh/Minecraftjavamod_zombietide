@@ -17,16 +17,19 @@ import java.util.Random;
 import java.util.UUID;
 
 /**
- * 尸潮背景音乐调度：尸潮波次期间按随机间隔播放，只发给玩家尸潮触发者。
+ * 尸潮音频调度：**持续低频 drone + 间断僵尸叫声**两层，只发给玩家尸潮触发者。
  * <p>
- * 规则（按需求）：
+ * v0.2.70 起拆成两条独立音轨：
  * <ul>
- *   <li>只有 {@code waveActive=true} 的**玩家**能听到；村民尸潮不播放，附近玩家也听不到</li>
- *   <li>每隔随机 30 秒 ~ 2 分钟（600~2400 tick）播一段；间隔从**本次开始播放**时刻起算，
- *       不是播完再等（实现为 {@code NEXT_PLAY_TICK = now + randomInterval()}），不做无缝循环</li>
- *   <li>具体曲目由 {@code sounds.json} 中 horde_bgm 的 5 个变体随机选取</li>
- *   <li>波次结束（四散/黎明/强制清除/清场）或关闭开关时，立即下发停止包掐掉残留音乐</li>
+ *   <li><b>drone（底层）</b>：{@link ModSounds#HORDE_DRONE}，进入波次立即播放，
+ *       素材约 3 分 42 秒，到点重播一次实现近似无缝循环（MC 的 SoundEvent 无原生 loop）。
+ *       音量 0.35，作为持续压迫底噪，不抢叫声。</li>
+ *   <li><b>叫声（顶层）</b>：{@link ModSounds#HORDE_BGM} 的 5 段变体，每隔随机 30 秒 ~ 2 分钟播一段，
+ *       作为「远处有东西」的间断预警。间隔从**本次开始播放**时刻起算。</li>
  * </ul>
+ * 两条音轨用不同的 ResourceLocation，停止包互不误伤；波次结束时一起停。
+ * <p>
+ * 只对 {@code waveActive=true} 的**玩家**生效；村民尸潮不播放，附近玩家也听不到。
  * 调度状态仅存在于内存，不写入存档。
  */
 public final class HordeBgmScheduler {
@@ -34,9 +37,16 @@ public final class HordeBgmScheduler {
     private static final int MIN_INTERVAL_TICKS = 30 * 20;   // 30 秒
     private static final int MAX_INTERVAL_TICKS = 120 * 20;  // 2 分钟
     private static final float BGM_VOLUME = 0.7F;
+    /** drone 是底噪，音量压低，避免盖住叫声与游戏音效 */
+    private static final float DRONE_VOLUME = 0.35F;
+    /** drone 素材时长约 221.8 秒；提前 2 秒重播，避免可听的空隙 */
+    private static final int DRONE_DURATION_TICKS = 221 * 20;
+    private static final int DRONE_REPLAY_LEAD_TICKS = 2 * 20;
 
-    /** 玩家 UUID -> 下一次播放的服务端 tick 数（纯运行时状态） */
+    /** 玩家 UUID -> 下一次播放叫声的服务端 tick（纯运行时状态） */
     private static final Map<UUID, Long> NEXT_PLAY_TICK = new HashMap<>();
+    /** 玩家 UUID -> drone 下一次重播的服务端 tick */
+    private static final Map<UUID, Long> DRONE_REPLAY_TICK = new HashMap<>();
     private static final Random RANDOM = new Random();
 
     private HordeBgmScheduler() {
@@ -54,14 +64,37 @@ public final class HordeBgmScheduler {
 
             // 仅玩家尸潮触发者：waveActive 由 checkPlayerHordes 置 true，四散/黎明置 false
             boolean inHorde = config.warningEnabled()
-                    && config.hordeBgmSound()
                     && data.waveActive()
                     && player.level().dimension() == Level.OVERWORLD
                     && player.serverLevel().getDifficulty() != Difficulty.PEACEFUL;
 
             if (!inHorde) {
+                // 波次结束或开关关闭：两条音轨一起掐掉，不留残响
+                boolean hadBgm = NEXT_PLAY_TICK.remove(id) != null;
+                boolean hadDrone = DRONE_REPLAY_TICK.remove(id) != null;
+                if (hadBgm || hadDrone) {
+                    ModSounds.stopAllHordeAudio(player);
+                }
+                continue;
+            }
+
+            // ---- 底层 drone：进入波次立即起播，到点重播 ----
+            if (config.hordeBgmSound()) {
+                Long droneNext = DRONE_REPLAY_TICK.get(id);
+                if (droneNext == null) {
+                    ModSounds.playToPlayer(player, ModSounds.HORDE_DRONE, SoundSource.AMBIENT, DRONE_VOLUME, 1.0F);
+                    DRONE_REPLAY_TICK.put(id, now + DRONE_DURATION_TICKS - DRONE_REPLAY_LEAD_TICKS);
+                } else if (now >= droneNext) {
+                    ModSounds.playToPlayer(player, ModSounds.HORDE_DRONE, SoundSource.AMBIENT, DRONE_VOLUME, 1.0F);
+                    DRONE_REPLAY_TICK.put(id, now + DRONE_DURATION_TICKS - DRONE_REPLAY_LEAD_TICKS);
+                }
+            } else if (DRONE_REPLAY_TICK.remove(id) != null) {
+                ModSounds.stopDroneForPlayer(player);
+            }
+
+            // ---- 顶层叫声：随机间隔 ----
+            if (!config.hordeBgmSound()) {
                 if (NEXT_PLAY_TICK.remove(id) != null) {
-                    // 波次结束或开关关闭：停止该玩家仍在播放的 BGM
                     ModSounds.stopForPlayer(player);
                 }
                 continue;
@@ -75,7 +108,7 @@ public final class HordeBgmScheduler {
             }
             if (now >= next) {
                 // 只发给该玩家本人（ClientboundSoundPacket，不广播）
-                // 分类用「环境」(AMBIENT)，与 ModSounds.BGM_SOURCE 的停止包保持一致
+                // 分类用「环境」(AMBIENT)，与停止包保持一致
                 ModSounds.playToPlayer(player, ModSounds.HORDE_BGM, SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
                 NEXT_PLAY_TICK.put(id, now + randomInterval());
             }
@@ -86,21 +119,23 @@ public final class HordeBgmScheduler {
         return MIN_INTERVAL_TICKS + RANDOM.nextInt(MAX_INTERVAL_TICKS - MIN_INTERVAL_TICKS + 1);
     }
 
-    /** 清空 BGM 调度状态；带 server 时先给「有排程」的在线玩家下发停止包，掐掉残留音乐。
+    /** 清空音频调度状态；带 server 时先给「有排程」的在线玩家下发停止包，掐掉残留音频。
      *  调用点：服务器启动时（换世界/重启）与 `/zombietide debug clear`。
-     *  <p>只给 NEXT_PLAY_TICK 里的玩家发：播放时必然写入下一播放 tick，故「表里有 id」
-     *  等价于「正在听 / 已排程」；清空后下一 tick 的 onServerTick 不会重复发停止包。
+     *  <p>两条音轨分别判断：只要任一 map 里有该玩家，就一起发停止包（多停一次无副作用）。
      */
     public static void reset(MinecraftServer server) {
-        if (server != null && server.getPlayerList() != null && !NEXT_PLAY_TICK.isEmpty()) {
-            for (UUID id : new java.util.ArrayList<>(NEXT_PLAY_TICK.keySet())) {
+        if (server != null && server.getPlayerList() != null) {
+            java.util.Set<UUID> scheduled = new java.util.HashSet<>(NEXT_PLAY_TICK.keySet());
+            scheduled.addAll(DRONE_REPLAY_TICK.keySet());
+            for (UUID id : scheduled) {
                 ServerPlayer player = server.getPlayerList().getPlayer(id);
                 if (player != null && player.connection != null) {
-                    ModSounds.stopForPlayer(player);
+                    ModSounds.stopAllHordeAudio(player);
                 }
             }
         }
         NEXT_PLAY_TICK.clear();
+        DRONE_REPLAY_TICK.clear();
     }
 
     /** 【兼容重载，保留备查】拿不到 MinecraftServer 时退化为只清调度状态，不下发停止包。 */
