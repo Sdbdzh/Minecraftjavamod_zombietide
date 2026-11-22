@@ -39,9 +39,11 @@ public final class HordeBgmScheduler {
     private static final float BGM_VOLUME = 0.7F;
     /** drone 是底噪，音量压低，避免盖住叫声与游戏音效 */
     private static final float DRONE_VOLUME = 0.35F;
-    /** drone 素材时长约 221.8 秒；提前 2 秒重播，避免可听的空隙 */
-    private static final int DRONE_DURATION_TICKS = 221 * 20;
-    private static final int DRONE_REPLAY_LEAD_TICKS = 2 * 20;
+    /** drone 素材实际 221.786 秒，向上取 222；提前 1 秒重播 → 221 秒时重播，不重叠也不留缝。
+     *  <p>v0.2.71 曾用 221 秒 + 提前 2 秒 = 219 秒重播，导致与尚未播完的 2.8 秒尾部重叠，
+     *  两个低频叠加会发浑。 */
+    private static final int DRONE_DURATION_TICKS = 222 * 20;
+    private static final int DRONE_REPLAY_LEAD_TICKS = 1 * 20;
 
     /** 玩家 UUID -> 下一次播放叫声的服务端 tick（纯运行时状态） */
     private static final Map<UUID, Long> NEXT_PLAY_TICK = new HashMap<>();
@@ -140,6 +142,13 @@ public final class HordeBgmScheduler {
         }
         NEXT_PLAY_TICK.clear();
         DRONE_REPLAY_TICK.clear();
+    }
+
+    /** 玩家退出时清掉该玩家的调度条目，避免 UUID 残留（内存泄漏）。
+     *  <p>音频本身会随客户端断开自然停止；这里只清服务端状态。 */
+    public static void onPlayerLogout(java.util.UUID playerId) {
+        NEXT_PLAY_TICK.remove(playerId);
+        DRONE_REPLAY_TICK.remove(playerId);
     }
 
     /** 【兼容重载，保留备查】拿不到 MinecraftServer 时退化为只清调度状态，不下发停止包。 */

@@ -57,6 +57,12 @@ public class ZombietideServerEvents {
         EnikZombietide.LOGGER.info("Zombietide server started");
     }
 
+    /** 玩家登出：清掉该玩家在音频调度器里的残留条目（v0.2.72）。 */
+    @SubscribeEvent
+    public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        HordeBgmScheduler.onPlayerLogout(event.getEntity().getUUID());
+    }
+
     /** 玩家登入：将当前配置发送给客户端，同步模组天数 */
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {

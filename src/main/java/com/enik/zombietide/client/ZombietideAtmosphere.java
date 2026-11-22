@@ -45,6 +45,13 @@ public final class ZombietideAtmosphere {
     private ZombietideAtmosphere() {
     }
 
+    /** 断线/换世界时清掉氛围状态，避免重连后误用上一局的 waveStartTick。 */
+    public static void reset() {
+        clientTicks = 0;
+        waveStartTick = -10000;
+        lastWaveActive = false;
+    }
+
     /** 每客户端 tick 记录「波次刚开始」的时刻，供镜头下沉使用。 */
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
@@ -127,17 +134,17 @@ public final class ZombietideAtmosphere {
         if (!ZombietideHud.isWaveActiveFor(id)) return;
 
         int debt = ZombietideHud.bloodDebtFor(id);
-        // 基础 0.28，血债每只 +0.004，上限 +0.22（血债 55 只封顶）
-        float strength = 0.28F + Math.min(0.22F, debt * 0.004F);
+        // v0.2.72：浓度从 0.28 降到 0.14（原来 HUD 所在 y=4 正好是渐变最浓起点，背后一片黑）。
+        // 现在基础只有一半浓；血债加成也减半，最高 0.14+0.11=0.25，仍有压迫但不再糊住画面。
+        float strength = 0.14F + Math.min(0.11F, debt * 0.002F);
         int alpha = ((int) (strength * 255.0F) & 0xFF) << 24;
 
         var g = event.getGuiGraphics();
         int w = g.guiWidth();
         int h = g.guiHeight();
-        // 只用「上/下」两条水平渐变压暗画面，不再画左右两条：
-        // 四个矩形渐变会让四角**双重叠加**（左条+上条各画一次），刚好把左上角 DAY X 压得最黑。
-        // 上下两条就足够营造压迫感，且不会在 HUD 后方留一块突兀的深色方块。
-        int edge = Math.max(10, (int) (h * 0.18F));
+        // 只用上下两条水平渐变压暗画面，且把高度从 h*0.18 收到 h*0.12：
+        // 渐变越窄，HUD 背后受影响的行数越少，中段画面保持通透。
+        int edge = Math.max(8, (int) (h * 0.12F));
 
         // fillGradient 内部自己管理 blend，这里不需要手动 enableBlend（手动开启后没恢复会污染后续渲染）。
         g.fillGradient(0, 0, w, edge, alpha, 0x00000000);                 // 上

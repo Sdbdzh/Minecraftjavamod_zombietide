@@ -40,6 +40,7 @@ public class ZombietideClientEvents {
     @SubscribeEvent
     public static void onLoggingOut(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
         ZombietideHud.clearAllSynced();
+        ZombietideAtmosphere.reset();
     }
 
     /** 按键输入：按下设置键时，仅在游戏内打开模组设置界面（game bus）；防止重复打开多个设置界面
