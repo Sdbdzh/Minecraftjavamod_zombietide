@@ -654,6 +654,20 @@ public class HordeSpawner {
             EnikZombietide.LOGGER.info("尸潮僵尸开始四散：日出前 {} 秒，本轮新转入 {} 只",
                     config.despawnSeconds(), newlyScattered);
             notifyScatterTargetsWithCount(level, config, scatterTargets, scatterCountByTarget);
+
+            // 【v0.2.73】四散灰烬：每只新转入的僵尸位置撒一簇烟/灰粒子，
+            // 用 sendParticles 由服务端广播给附近玩家（粒子不持久化、无性能残留）。
+            // 数量压到每只 4 粒，避免大波次一次几百只时粒子风暴。
+            if (config.warningEnabled()) {
+                for (net.minecraft.world.entity.Entity e : level.getEntities().getAll()) {
+                    if (e == null) continue;
+                    if (e.getType() != net.minecraft.world.entity.EntityType.ZOMBIE
+                            && e.getType() != net.minecraft.world.entity.EntityType.ZOMBIE_VILLAGER) continue;
+                    if (e.getPersistentData().getInt(HORDE_STATE_KEY) != 1) continue;
+                    level.sendParticles(net.minecraft.core.particles.ParticleTypes.ASH,
+                            e.getX(), e.getY() + 1.0, e.getZ(), 4, 0.35, 0.5, 0.35, 0.02);
+                }
+            }
         }
 
         // 定制音频：四散音效只发给玩家尸潮触发者（村民尸潮不播放）

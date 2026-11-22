@@ -3,6 +3,7 @@ package com.enik.zombietide.network;
 import com.enik.zombietide.EnikZombietide;
 import com.enik.zombietide.attachments.ModAttachments;
 import com.enik.zombietide.client.ZombietideHud;
+import com.enik.zombietide.client.ZombietideAtmosphere;
 import com.enik.zombietide.config.ConfigManager;
 import com.enik.zombietide.config.ZombietideConfig;
 import net.minecraft.core.UUIDUtil;
@@ -118,6 +119,11 @@ public class ModMessages {
     public static final ResourceLocation INFO_OVERLAY_ID = ResourceLocation.fromNamespaceAndPath(
             "enik_zombietide", "info_overlay");
 
+    /** 服务端 -> 客户端：尸潮触发瞬间的一次性视觉冲击（暗红闪烁/火光抖动，v0.2.73）。
+     *  无字段：收到即触发一次。 */
+    public static final ResourceLocation HORDE_FLASH_ID = ResourceLocation.fromNamespaceAndPath(
+            "enik_zombietide", "horde_flash");
+
     /** 村民职业 registry key 的编解码长度上限（两侧必须一致）。原版最长约 21 字符，64 留足余量 */
     public static final int MAX_PROFESSION_KEY_LEN = 64;
 
@@ -176,6 +182,29 @@ public class ModMessages {
             @Override
             public InfoOverlayPayload decode(FriendlyByteBuf buf) {
                 return new InfoOverlayPayload(buf.readBoolean());
+            }
+        };
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** 服务端 -> 客户端：尸潮触发瞬间的一次性视觉冲击（无字段，收到即闪一次） */
+    public record HordeFlashPayload() implements CustomPacketPayload {
+        public static final Type<HordeFlashPayload> TYPE = new Type<>(HORDE_FLASH_ID);
+        public static final HordeFlashPayload INSTANCE = new HordeFlashPayload();
+
+        public static final StreamCodec<FriendlyByteBuf, HordeFlashPayload> STREAM_CODEC = new StreamCodec<>() {
+            @Override
+            public void encode(FriendlyByteBuf buf, HordeFlashPayload payload) {
+                // 无字段
+            }
+
+            @Override
+            public HordeFlashPayload decode(FriendlyByteBuf buf) {
+                return INSTANCE;
             }
         };
 
@@ -454,6 +483,13 @@ public class ModMessages {
                                 ZombietideHud.onInfoOverlayReceived(payload.enabled());
                             });
                         })
+                // 服务端 -> 客户端：尸潮触发瞬间的一次性视觉冲击
+                .playToClient(HordeFlashPayload.TYPE, HordeFlashPayload.STREAM_CODEC,
+                        (payload, context) -> {
+                            context.enqueueWork(() -> {
+                                ZombietideAtmosphere.onHordeFlash();
+                            });
+                        })
                 // 服务端 -> 客户端：村民广播批次开始
                 .playToClient(VillagerBroadcastStartPayload.TYPE, VillagerBroadcastStartPayload.STREAM_CODEC,
                         (payload, context) -> {
@@ -551,6 +587,11 @@ public class ModMessages {
     /** 发送 mod info 常驻显示开关给特定玩家 */
     public static void sendInfoOverlay(ServerPlayer player, boolean enabled) {
         PacketDistributor.sendToPlayer(player, new InfoOverlayPayload(enabled));
+    }
+
+    /** 尸潮触发瞬间的一次性视觉冲击（暗红闪烁），只发给指定玩家 */
+    public static void sendHordeFlash(ServerPlayer player) {
+        PacketDistributor.sendToPlayer(player, HordeFlashPayload.INSTANCE);
     }
 
     /** 将村民职业 registry key 提取，返回标准格式 "namespace:path"，保证不泄露 Holder 包装格式到 UI */

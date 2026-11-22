@@ -41,8 +41,17 @@ public final class ZombietideAtmosphere {
     private static int clientTicks = 0;
     private static int waveStartTick = -10000;
     private static boolean lastWaveActive = false;
+    /** 触发闪光截止 tick（客户端 tick 计数），0 表示当前无闪光 */
+    private static int flashUntilTick = 0;
+    /** 闪光总时长（tick）：0.6 秒，短促不闹 */
+    private static final int FLASH_TICKS = 12;
 
     private ZombietideAtmosphere() {
+    }
+
+    /** 收到服务端的尸潮触发闪光包：记录一个短促闪烁窗口。 */
+    public static void onHordeFlash() {
+        flashUntilTick = clientTicks + FLASH_TICKS;
     }
 
     /** 断线/换世界时清掉氛围状态，避免重连后误用上一局的 waveStartTick。 */
@@ -50,6 +59,7 @@ public final class ZombietideAtmosphere {
         clientTicks = 0;
         waveStartTick = -10000;
         lastWaveActive = false;
+        flashUntilTick = 0;
     }
 
     /** 每客户端 tick 记录「波次刚开始」的时刻，供镜头下沉使用。 */
@@ -127,6 +137,20 @@ public final class ZombietideAtmosphere {
      */
     @SubscribeEvent
     public static void onRenderGuiPre(RenderGuiEvent.Pre event) {
+        var g = event.getGuiGraphics();
+        int w = g.guiWidth();
+        int h = g.guiHeight();
+
+        // 触发瞬间的暗红闪烁：画在 HUD 之下（Pre），不会遮住文字。
+        // 用 alpha 从强到弱线性衰减，0.6 秒内结束；这是"火光抖一下"的视觉替代（不改 gamma/shader）。
+        if (flashUntilTick > clientTicks && ClientAtmosphereConfig.atmosphereEnabled()) {
+            int remain = flashUntilTick - clientTicks;
+            float progress = remain / (float) FLASH_TICKS;   // 1 → 0
+            int flashAlpha = ((int) (progress * 46.0F) & 0xFF) << 24;   // 峰值 46/255 ≈ 0.18，短促不刺眼
+            // 暗红色 (60, 0, 0) 叠在 alpha 上：0x3C000000 | flashAlpha
+            g.fill(0, 0, w, h, flashAlpha | 0x3C0000);
+        }
+
         if (!ClientAtmosphereConfig.vignetteEnabled()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.options.hideGui) return;
@@ -135,13 +159,10 @@ public final class ZombietideAtmosphere {
 
         int debt = ZombietideHud.bloodDebtFor(id);
         // v0.2.72：浓度从 0.28 降到 0.14（原来 HUD 所在 y=4 正好是渐变最浓起点，背后一片黑）。
-        // 现在基础只有一半浓；血债加成也减半，最高 0.14+0.11=0.25，仍有压迫但不再糊住画面。
+        // 现在基础只有一半浓；血债加成减半，最高 0.14+0.11=0.25，仍有压迫但不再糊住画面。
         float strength = 0.14F + Math.min(0.11F, debt * 0.002F);
         int alpha = ((int) (strength * 255.0F) & 0xFF) << 24;
 
-        var g = event.getGuiGraphics();
-        int w = g.guiWidth();
-        int h = g.guiHeight();
         // 只用上下两条水平渐变压暗画面，且把高度从 h*0.18 收到 h*0.12：
         // 渐变越窄，HUD 背后受影响的行数越少，中段画面保持通透。
         int edge = Math.max(8, (int) (h * 0.12F));

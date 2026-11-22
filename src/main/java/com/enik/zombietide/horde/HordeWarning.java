@@ -95,6 +95,9 @@ public class HordeWarning {
                     ModSounds.HORDE_TRIGGER.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
         }
 
+        // 【v0.2.73】触发瞬间的一次性暗红闪烁（0.6 秒），客户端渲染，只发给目标玩家
+        com.enik.zombietide.network.ModMessages.sendHordeFlash(player);
+
         // 突袭旁白：无条件发送，从语言文件随机抽 1 段
         int index = RANDOM.nextInt(AMBUSH_LINE_COUNT) + 1;
         player.sendSystemMessage(Component.translatable("zombietide.ambush." + index));
@@ -119,6 +122,11 @@ public class HordeWarning {
             level.playSound(null, villager.getX(), villager.getY(), villager.getZ(),
                     ModSounds.HORDE_TRIGGER.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
         }
+
+        // 【v0.2.73】村民恐慌：触发瞬间在其头顶撒一团烟粒子，世界本身给出"有事发生"的信号
+        level.sendParticles(net.minecraft.core.particles.ParticleTypes.SMOKE,
+                villager.getX(), villager.getY() + 1.8, villager.getZ(),
+                8, 0.3, 0.3, 0.3, 0.02);
 
         double range = config.villagerWarningRange();
         for (ServerPlayer player : level.getPlayers(p -> p.distanceToSqr(villager) <= range * range)) {
