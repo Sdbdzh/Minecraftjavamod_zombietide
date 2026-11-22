@@ -626,6 +626,15 @@ public class HordeSpawner {
             }
             tag.putInt(HORDE_STATE_KEY, 1); // 标记为四散状态
 
+            // 【v0.2.74】灰烬粒子在这里发：entity 就是"本轮刚转入四散"的实体，
+            // 天然不会重复撒到之前轮次已转入的老僵尸。用 instanceof 覆盖
+            // Zombie/Husk/Drowned/ZombieVillager/Stray 全部变体（旧的 getType() 精确比较
+            // 会漏掉 Husk/Drowned，导致沙漠/沼泽群系灰烬完全不显示）。
+            if (config.warningEnabled()) {
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.ASH,
+                        entity.getX(), entity.getY() + 1.0, entity.getZ(), 4, 0.35, 0.5, 0.35, 0.02);
+            }
+
             // 关键修改：四散倒计时精确到 23460（起火时刻），而不是配置的固定秒数
             // 这样所有四散僵尸在同一 tick (23460) 被一次性清除
             int exactDespawnTicks = (int)(23460 - dayPhase);
@@ -655,19 +664,6 @@ public class HordeSpawner {
                     config.despawnSeconds(), newlyScattered);
             notifyScatterTargetsWithCount(level, config, scatterTargets, scatterCountByTarget);
 
-            // 【v0.2.73】四散灰烬：每只新转入的僵尸位置撒一簇烟/灰粒子，
-            // 用 sendParticles 由服务端广播给附近玩家（粒子不持久化、无性能残留）。
-            // 数量压到每只 4 粒，避免大波次一次几百只时粒子风暴。
-            if (config.warningEnabled()) {
-                for (net.minecraft.world.entity.Entity e : level.getEntities().getAll()) {
-                    if (e == null) continue;
-                    if (e.getType() != net.minecraft.world.entity.EntityType.ZOMBIE
-                            && e.getType() != net.minecraft.world.entity.EntityType.ZOMBIE_VILLAGER) continue;
-                    if (e.getPersistentData().getInt(HORDE_STATE_KEY) != 1) continue;
-                    level.sendParticles(net.minecraft.core.particles.ParticleTypes.ASH,
-                            e.getX(), e.getY() + 1.0, e.getZ(), 4, 0.35, 0.5, 0.35, 0.02);
-                }
-            }
         }
 
         // 定制音频：四散音效只发给玩家尸潮触发者（村民尸潮不播放）

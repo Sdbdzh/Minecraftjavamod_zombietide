@@ -147,7 +147,7 @@ public final class ZombietideAtmosphere {
             int remain = flashUntilTick - clientTicks;
             float progress = remain / (float) FLASH_TICKS;   // 1 → 0
             int flashAlpha = ((int) (progress * 46.0F) & 0xFF) << 24;   // 峰值 46/255 ≈ 0.18，短促不刺眼
-            // 暗红色 (60, 0, 0) 叠在 alpha 上：0x3C000000 | flashAlpha
+            // 暗红色 RGB(60,0,0)=0x3C0000 与高位 alpha 按位或 → ARGB 0xAARRGGBB
             g.fill(0, 0, w, h, flashAlpha | 0x3C0000);
         }
 

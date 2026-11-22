@@ -57,6 +57,29 @@ public final class ClientAtmosphereConfig {
         return atmosphereEnabled && cameraShakeEnabled;
     }
 
+    /**
+     * 【设置界面专用】返回原始存储值，**不带总开关 AND**。
+     * <p>v0.2.74 修复：设置页总开关回调若用 {@link #fogEnabled()} 这类派生 getter，
+     * 在总开关关闭期间取值会全是 false，重新开启总开关时会把子项全部写成 false 并落盘。
+     * 设置界面保存 4 个开关时必须用这 4 个 raw getter。
+     */
+    public static boolean rawFogEnabled() {
+        ensureLoaded();
+        return fogEnabled;
+    }
+
+    /** 见 {@link #rawFogEnabled()}：设置界面保存用的原始值 */
+    public static boolean rawVignetteEnabled() {
+        ensureLoaded();
+        return vignetteEnabled;
+    }
+
+    /** 见 {@link #rawFogEnabled()}：设置界面保存用的原始值 */
+    public static boolean rawCameraShakeEnabled() {
+        ensureLoaded();
+        return cameraShakeEnabled;
+    }
+
     public static synchronized void set(boolean atmosphere, boolean fog, boolean vignette, boolean shake) {
         ensureLoaded();
         atmosphereEnabled = atmosphere;
