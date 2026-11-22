@@ -39,11 +39,13 @@ public final class HordeBgmScheduler {
     private static final float BGM_VOLUME = 0.7F;
     /** drone 是底噪，音量压低，避免盖住叫声与游戏音效 */
     private static final float DRONE_VOLUME = 0.35F;
-    /** drone 素材实际 221.786 秒，向上取 222；提前 1 秒重播 → 221 秒时重播，不重叠也不留缝。
-     *  <p>v0.2.71 曾用 221 秒 + 提前 2 秒 = 219 秒重播，导致与尚未播完的 2.8 秒尾部重叠，
-     *  两个低频叠加会发浑。 */
-    private static final int DRONE_DURATION_TICKS = 222 * 20;
-    private static final int DRONE_REPLAY_LEAD_TICKS = 1 * 20;
+    /** drone 素材实际 221.786 秒，重播周期取 223 秒（留约 1.2 秒静音间隙）。
+     *  <p>历史：v0.2.71 用 221-2=219 秒重播 → 与尾部重叠 2.8 秒发浑；
+     *  v0.2.72 改成 222-1=221 秒 → 仍重叠 0.786 秒（注释却写"不重叠"，失实）。
+     *  v0.2.75 取消提前量、周期取 223 秒：宁可留 1.2 秒安静（符合"沉默是武器"），
+     *  也不让两段低频叠加发浑。 */
+    private static final int DRONE_DURATION_TICKS = 223 * 20;
+    private static final int DRONE_REPLAY_LEAD_TICKS = 0;
 
     /** 玩家 UUID -> 下一次播放叫声的服务端 tick（纯运行时状态） */
     private static final Map<UUID, Long> NEXT_PLAY_TICK = new HashMap<>();

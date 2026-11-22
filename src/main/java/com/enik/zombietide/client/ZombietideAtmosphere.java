@@ -78,12 +78,25 @@ public final class ZombietideAtmosphere {
         lastWaveActive = active;
     }
 
+    /**
+     * 【v0.2.75】氛围效果的维度守卫：只在主世界生效。
+     * <p>服务端同步的 waveActive 在换维度时保留（reconcileStaleWaves 会跳过非主世界玩家
+     * 且不主动清 waveActive），所以下界/末地玩家的 syncedWaveActive 仍可能是 true。
+     * 但音频侧（HordeBgmScheduler）已有 OVERWORLD 判断、进下界即停——若视觉不跟着停，
+     * 就会出现「音频停了、雾和暗角还在」的音画不一致，甚至覆盖下界原生雾。
+     * 与音频侧口径保持一致：只认主世界。
+     */
+    private static boolean inOverworld(Minecraft mc) {
+        return mc.level != null && mc.level.dimension() == net.minecraft.world.level.Level.OVERWORLD;
+    }
+
     /** 雾色：尸潮日轻微偏冷，波次中更冷更暗。 */
     @SubscribeEvent
     public static void onComputeFogColor(ViewportEvent.ComputeFogColor event) {
         if (!ClientAtmosphereConfig.fogEnabled()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
+        if (!inOverworld(mc)) return;
         UUID id = mc.player.getUUID();
         boolean wave = ZombietideHud.isWaveActiveFor(id);
         boolean hordeDay = ZombietideHud.isHordeDayFor(id);
@@ -111,6 +124,7 @@ public final class ZombietideAtmosphere {
         if (event.getMode() != FogRenderer.FogMode.FOG_TERRAIN) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
+        if (!inOverworld(mc)) return;
         if (!ZombietideHud.isWaveActiveFor(mc.player.getUUID())) return;
 
         event.setNearPlaneDistance(8.0F);
@@ -137,6 +151,11 @@ public final class ZombietideAtmosphere {
      */
     @SubscribeEvent
     public static void onRenderGuiPre(RenderGuiEvent.Pre event) {
+        // 【v0.2.75】主世界守卫：与音频侧口径一致，下界/末地不显示任何尸潮氛围
+        // （包括触发闪烁——触发后立刻进传送门也不该在下界看到红屏）。
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || !inOverworld(mc)) return;
+
         var g = event.getGuiGraphics();
         int w = g.guiWidth();
         int h = g.guiHeight();
@@ -152,8 +171,7 @@ public final class ZombietideAtmosphere {
         }
 
         if (!ClientAtmosphereConfig.vignetteEnabled()) return;
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.options.hideGui) return;
+        if (mc.options.hideGui) return;
         UUID id = mc.player.getUUID();
         if (!ZombietideHud.isWaveActiveFor(id)) return;
 

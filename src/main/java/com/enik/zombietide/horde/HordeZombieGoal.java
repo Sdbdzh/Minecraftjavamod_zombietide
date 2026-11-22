@@ -128,13 +128,15 @@ public class HordeZombieGoal extends Goal {
             if (marker == null || !marker.isAlive()) {
                 // marker 未就绪（重启后丢失/尚未创建）：本 tick 不动，
                 // HordeTimer 的四散重扫会在 ≤20 tick 内 ensure 重建。
-                // 临时日志：确认 marker 取不到的原因（NBT 无 key vs level.getEntity 返回 null）
-                if (markerMissingLogTimer++ >= 40) {   // 每 2 秒打一次，避免刷屏
+                // 【v0.2.75】marker 取不到是「重启后尚未重建」的预期瞬态，
+                // 原「临时日志」用 WARN 每 2 秒刷一次太吵，降级为 debug（诊断能力保留）。
+                // 真正异常（长时间重建失败）由 HordeFleeMarker.sweepOrphans 的兜底处理。
+                if (markerMissingLogTimer++ >= 100) {   // 每 5 秒一次
                     markerMissingLogTimer = 0;
                     CompoundTag nbt = mob.getPersistentData();
                     boolean hasKey = nbt.hasUUID(HordeFleeMarker.NBT_MARKER);
-                    com.enik.zombietide.EnikZombietide.LOGGER.warn(
-                            "僵尸 {} 四散但取不到 marker：NBT 有 key={}, marker UUID={}",
+                    com.enik.zombietide.EnikZombietide.LOGGER.debug(
+                            "僵尸 {} 四散但暂未取到 marker（将在 ≤20 tick 内重建）：NBT 有 key={}, marker UUID={}",
                             mob.getUUID(), hasKey,
                             hasKey ? nbt.getUUID(HordeFleeMarker.NBT_MARKER) : "无");
                 }
