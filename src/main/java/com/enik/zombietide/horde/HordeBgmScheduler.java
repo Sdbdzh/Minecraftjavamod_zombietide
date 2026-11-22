@@ -82,9 +82,13 @@ public final class HordeBgmScheduler {
             if (config.hordeBgmSound()) {
                 Long droneNext = DRONE_REPLAY_TICK.get(id);
                 if (droneNext == null) {
+                    // 进入波次：先掐掉原版 BGM，再起播 drone，避免两种音乐叠在一起
+                    ModSounds.stopVanillaMusic(player);
                     ModSounds.playToPlayer(player, ModSounds.HORDE_DRONE, SoundSource.AMBIENT, DRONE_VOLUME, 1.0F);
                     DRONE_REPLAY_TICK.put(id, now + DRONE_DURATION_TICKS - DRONE_REPLAY_LEAD_TICKS);
                 } else if (now >= droneNext) {
+                    // 原版音乐调度器过一阵会自己重新起播，借 drone 重播的节奏再掐一次
+                    ModSounds.stopVanillaMusic(player);
                     ModSounds.playToPlayer(player, ModSounds.HORDE_DRONE, SoundSource.AMBIENT, DRONE_VOLUME, 1.0F);
                     DRONE_REPLAY_TICK.put(id, now + DRONE_DURATION_TICKS - DRONE_REPLAY_LEAD_TICKS);
                 }

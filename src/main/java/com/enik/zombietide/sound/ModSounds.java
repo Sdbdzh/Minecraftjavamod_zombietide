@@ -98,4 +98,14 @@ public final class ModSounds {
         stopForPlayer(player);
         stopDroneForPlayer(player);
     }
+
+    /**
+     * 停掉客户端的**原版背景音乐**（SoundSource.MUSIC 分类）。
+     * <p>v0.2.71：尸潮期间若原版 BGM 还在播，会和低频 drone 混在一起，
+     * 破坏"世界安静下来、只剩尸潮的声音"的压迫感。传 {@code null} 表示停整个分类，
+     * 而不是某一首曲子。MC 原版的音乐调度器之后会自行恢复播放，无需手动重启。
+     */
+    public static void stopVanillaMusic(ServerPlayer player) {
+        player.connection.send(new ClientboundStopSoundPacket(null, SoundSource.MUSIC));
+    }
 }

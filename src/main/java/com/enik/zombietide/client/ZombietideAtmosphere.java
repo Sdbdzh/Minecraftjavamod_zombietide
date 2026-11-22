@@ -2,7 +2,6 @@ package com.enik.zombietide.client;
 
 import com.enik.zombietide.EnikZombietide;
 import com.enik.zombietide.config.ClientAtmosphereConfig;
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.FogRenderer;
 import net.neoforged.api.distmarker.Dist;
@@ -135,13 +134,13 @@ public final class ZombietideAtmosphere {
         var g = event.getGuiGraphics();
         int w = g.guiWidth();
         int h = g.guiHeight();
-        int edge = Math.max(12, (int) (Math.min(w, h) * 0.22F));
+        // 只用「上/下」两条水平渐变压暗画面，不再画左右两条：
+        // 四个矩形渐变会让四角**双重叠加**（左条+上条各画一次），刚好把左上角 DAY X 压得最黑。
+        // 上下两条就足够营造压迫感，且不会在 HUD 后方留一块突兀的深色方块。
+        int edge = Math.max(10, (int) (h * 0.18F));
 
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
+        // fillGradient 内部自己管理 blend，这里不需要手动 enableBlend（手动开启后没恢复会污染后续渲染）。
         g.fillGradient(0, 0, w, edge, alpha, 0x00000000);                 // 上
         g.fillGradient(0, h - edge, w, h, 0x00000000, alpha);             // 下
-        g.fillGradient(0, 0, edge, h, alpha, 0x00000000);                 // 左
-        g.fillGradient(w - edge, 0, w, h, 0x00000000, alpha);             // 右
     }
 }
