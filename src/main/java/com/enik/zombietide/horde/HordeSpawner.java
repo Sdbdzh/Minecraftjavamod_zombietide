@@ -117,8 +117,6 @@ public class HordeSpawner {
         warnedNightBefore.clear();
     }
 
-    // 【v0.1.62 修复 #167】上面两行孤儿注释描述的是 v0.1.35 之前留在本类的血债字段；
-    // 血债已迁至 PlayerDebtData（SavedData），此处不再有对应 Map，故删除孤儿注释。
     /**
      * 随机尸潮数量：对 min/max 做容错（配置可能被改成 min > max）。
      * 直接 {@code nextInt(max-min+1)} 在 max&lt;min 时会抛 IllegalArgumentException 导致服务端崩溃。
@@ -911,6 +909,8 @@ public class HordeSpawner {
         java.util.List<net.minecraft.world.entity.Entity> toDiscard = new java.util.ArrayList<>();
         for (net.minecraft.world.entity.Entity entity : level.getEntities().getAll()) {
             if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
+            // instanceof Zombie 已覆盖 ZombieVillager / Husk / Drowned（均为其子类）；
+            // Stray 不是 Zombie 子类，必须单独列出（防御性保留：当前 createBiomeZombie 不生成 Stray）。
             if (!(entity instanceof net.minecraft.world.entity.monster.Zombie
                     || entity instanceof net.minecraft.world.entity.monster.Stray)) continue;
             CompoundTag tag = entity.getPersistentData();

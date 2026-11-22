@@ -130,7 +130,7 @@ public class PlayerDebtData extends SavedData {
         return e != null && e.settledWave() == waveSeq;
     }
 
-    /** 标记该目标的这一波已结算 */
+    /** 【当前无调用点，保留备查】标记该目标的这一波已结算（v0.1.56 起结算点唯一，波次去重已废弃）。 */
     public void markWaveSettled(UUID uuid, int waveSeq) {
         Entry e = entries.get(uuid);
         int debt = e == null ? 0 : e.debt();
