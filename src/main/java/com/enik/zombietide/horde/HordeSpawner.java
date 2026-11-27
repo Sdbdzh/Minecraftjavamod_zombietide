@@ -1273,6 +1273,37 @@ public class HordeSpawner {
         return count;
     }
 
+    /**
+     * 【v0.2.77】找该尸潮目标**已生成且仍存活**的一只僵尸，用于把叫声绑定到实体上播放。
+     * <p>不依赖可能不完整的 {@code hordeZombieUuids} 集合，直接扫实体表按 NBT 目标 UUID 匹配
+     * （与 {@link #countAliveHordeZombies} 同源口径）。叫声每 30 秒~2 分钟才播一次，开销可忽略。
+     *
+     * @return 一只活僵尸实体；该波还没有僵尸生成则 null（调用方回退到玩家位置播放）
+     */
+    public static net.minecraft.world.entity.Entity findHordeZombieEntity(ServerLevel level, UUID targetId) {
+        if (targetId == null) return null;
+        net.minecraft.world.entity.Entity best = null;
+        double bestD2 = Double.MAX_VALUE;
+        var target = findTarget(level, targetId);   // 只查一次，避免循环内 O(n²)
+        for (net.minecraft.world.entity.Entity entity : level.getEntities().getAll()) {
+            if (entity == null) continue;  // getAll() 在实体并发 discard 时可能返回 null
+            if (!(entity instanceof net.minecraft.world.entity.monster.Zombie
+                    || entity instanceof net.minecraft.world.entity.monster.Stray)) continue;
+            if (!entity.isAlive()) continue;
+            CompoundTag tag = entity.getPersistentData();
+            if (!tag.hasUUID(HORDE_TARGET_UUID_KEY)) continue;
+            if (!targetId.equals(tag.getUUID(HORDE_TARGET_UUID_KEY))) continue;
+            if (target == null) return entity;   // 目标不在线，随便一只即可
+            // 选离目标最近的：叫声从最贴近玩家的僵尸传来，方位感最明确
+            double d2 = entity.distanceToSqr(target);
+            if (d2 < bestD2) {
+                bestD2 = d2;
+                best = entity;
+            }
+        }
+        return best;
+    }
+
     private static int countHordeZombies(ServerLevel level) {
         // 改用 hordeZombieUuids Set 统计，避免每 tick 全世界实体扫描（O(全实体数) → O(尸潮僵尸数)）
         // 同时清理已死亡/已揪尸的僵尸UUID，防止僵尸烧死后UUID滞留导致可用名额虚高、持续快速刷新

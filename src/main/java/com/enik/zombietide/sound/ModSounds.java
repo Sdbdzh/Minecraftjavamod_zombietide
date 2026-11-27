@@ -3,12 +3,14 @@ package com.enik.zombietide.sound;
 import com.enik.zombietide.EnikZombietide;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.network.protocol.game.ClientboundStopSoundPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.entity.Entity;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -34,11 +36,12 @@ public final class ModSounds {
     /** 日出前四散 */
     public static final DeferredHolder<SoundEvent, SoundEvent> HORDE_SCATTER =
             register("horde_scatter", false);
-    /** 尸潮背景音乐（5 段随机变体，仅玩家尸潮触发者能听到）
-     *  <p>v0.2.70 起语义澄清：这 5 段实际是**僵尸叫声/低吼**，不是旋律性 BGM，
-     *  作为「空间化预警」使用；真正的持续背景音是 {@link #HORDE_DRONE}。 */
+    /** 僵尸叫声/低吼（5 段随机变体）。
+     *  <p>v0.2.70 起正名：这 5 段不是旋律性 BGM，而是「尸潮预警」；真正的持续背景音是 {@link #HORDE_DRONE}。
+     *  <p>v0.2.77 起改为**绑定僵尸实体播放**（{@link #playOnEntity}），声音实时跟随僵尸移动，
+     *  玩家能听声辨位；范围从默认 16 格扩到固定 64 格，否则僵尸还没走近根本听不到。 */
     public static final DeferredHolder<SoundEvent, SoundEvent> HORDE_BGM =
-            register("horde_bgm", false);
+            register("horde_bgm", 64.0F);
 
     /** 持续低频底鸣（drone）：尸潮期间常驻播放的压迫性底噪，非旋律。
      *  <p>源素材 74 秒，已拼接为约 3 分 42 秒的 OGG，靠「长音频 + 到点重播」近似无缝循环
@@ -62,10 +65,15 @@ public final class ModSounds {
      *                  false = 默认可变范围（仅目标玩家附近）
      */
     private static DeferredHolder<SoundEvent, SoundEvent> register(String name, boolean wideRange) {
+        return register(name, wideRange ? 48.0F : -1.0F);
+    }
+
+    /** @param fixedRange 正数 = 固定半径（超出不闻、范围内恒定）；-1 = 默认可变范围 */
+    private static DeferredHolder<SoundEvent, SoundEvent> register(String name, float fixedRange) {
         return SOUNDS.register(name, () -> {
             ResourceLocation id = ResourceLocation.fromNamespaceAndPath(EnikZombietide.MODID, name);
-            return wideRange
-                    ? SoundEvent.createFixedRangeEvent(id, 48.0F)
+            return fixedRange > 0
+                    ? SoundEvent.createFixedRangeEvent(id, fixedRange)
                     : SoundEvent.createVariableRangeEvent(id);
         });
     }
@@ -81,6 +89,18 @@ public final class ModSounds {
                 sound, source,
                 player.getX(), player.getY(), player.getZ(),
                 volume, pitch, player.getRandom().nextLong()));
+    }
+
+    /**
+     * 【v0.2.77】在**实体位置**播放声音，且声音**实时跟随实体移动**——只发给指定玩家。
+     * <p>用原版 {@link ClientboundSoundEntityPacket}（而非坐标版 ClientboundSoundPacket）：
+     * 客户端会把音源绑定到实体，每帧按实体位置计算方位与衰减。这就是"听声辨位"的实现。
+     * 实体被 discard 后客户端音源随之消失，无需额外停止包。
+     */
+    public static void playOnEntity(ServerPlayer player, Holder<SoundEvent> sound,
+                                    Entity entity, SoundSource source, float volume, float pitch) {
+        player.connection.send(new ClientboundSoundEntityPacket(
+                sound, source, entity, volume, pitch, player.getRandom().nextLong()));
     }
 
     /** 停止指定玩家正在播放的某个音效（四散/波次结束时掐掉残留 BGM）。 */

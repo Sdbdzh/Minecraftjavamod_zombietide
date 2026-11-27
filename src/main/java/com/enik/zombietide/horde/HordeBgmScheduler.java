@@ -115,9 +115,18 @@ public final class HordeBgmScheduler {
                 continue;
             }
             if (now >= next) {
-                // 只发给该玩家本人（ClientboundSoundPacket，不广播）
-                // 分类用「环境」(AMBIENT)，与停止包保持一致
-                ModSounds.playToPlayer(player, ModSounds.HORDE_BGM, SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
+                // 【v0.2.77】叫声绑定僵尸实体播放：声音实时跟随僵尸移动，玩家听声辨位。
+                // 找不到僵尸（第一批还没刷出）时回退到玩家位置，保证提示不丢。
+                var zombie = HordeSpawner.findHordeZombieEntity(player.serverLevel(), id);
+                // 绑定播放要求实体已同步到客户端：64 格（= 叫声固定半径）内才安全，
+                // 更远的僵尸客户端可能还没收到生成包，声音会丢失——回退到玩家位置。
+                boolean zombieTracked = zombie != null
+                        && zombie.distanceToSqr(player) <= 64.0 * 64.0;
+                if (zombieTracked) {
+                    ModSounds.playOnEntity(player, ModSounds.HORDE_BGM, zombie, SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
+                } else {
+                    ModSounds.playToPlayer(player, ModSounds.HORDE_BGM, SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
+                }
                 NEXT_PLAY_TICK.put(id, now + randomInterval());
             }
         }
