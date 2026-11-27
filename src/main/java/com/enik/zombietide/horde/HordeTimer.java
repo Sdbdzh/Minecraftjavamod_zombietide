@@ -243,8 +243,14 @@ public class HordeTimer {
                                           int activePlayerHordes, int activeVillagerHordes, int aliveHordeZombies) {
         var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
         int debt = com.enik.zombietide.config.PlayerDebtData.get(overworld).getDebt(player.getUUID());
+        // 当天触发过就显示红色：窗口内的常规触发由 isHordeDay 给出，
+        // 手动触发（/zombietide trigger，可在任意时刻）靠 waveActive 补充——
+        // 否则窗口外手动触发时 isHordeDay 恒 false，HUD 不红（村民侧尤其明显）。
+        // 波次结束后 waveActive=false，红字自然熄灭，不影响 v0.1.66 的窗口判定。
+        boolean playerHordeDay = isHordeDay(player.getUUID(), data.modDay(), data.lastTriggerDay(), config, false, overworld.getDayTime())
+                || data.waveActive();
         ModMessages.sendModDay(player, data.modDay(),
-                isHordeDay(player.getUUID(), data.modDay(), data.lastTriggerDay(), config, false, overworld.getDayTime()),
+                playerHordeDay,
                 data.waveActive(), debt,
                 activePlayerHordes, activeVillagerHordes, aliveHordeZombies);
     }

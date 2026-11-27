@@ -567,15 +567,18 @@ public class ModMessages {
                 if (player.distanceToSqr(villager) <= 128.0 * 128.0) {
                     // 读调度表（权威），不读实体附件
                     var sched = schedule.get(villager.getUUID());
+                    // 当天触发过就显示红色：常规触发由 isHordeDay 给出，
+                    // 手动触发（可在任意时刻）靠 waveActive 补充，与玩家 HUD 口径一致。
+                    boolean villagerHordeDay = com.enik.zombietide.horde.HordeTimer.isHordeDay(
+                                villager.getUUID(), sched.modDay(), sched.lastTriggerDay(),
+                                com.enik.zombietide.config.ConfigManager.getConfigData(overworld).getConfig(), true,
+                                overworld.getDayTime()) || sched.waveActive();
                     sendVillagerModDay(player, villager.getUUID(),
                         extractVillagerRegistryKey(villager),
                         sched.modDay(),
                         villager.getX(), villager.getY(), villager.getZ(),
                         sched.waveActive(),
-                        com.enik.zombietide.horde.HordeTimer.isHordeDay(
-                                villager.getUUID(), sched.modDay(), sched.lastTriggerDay(),
-                                com.enik.zombietide.config.ConfigManager.getConfigData(overworld).getConfig(), true,
-                                overworld.getDayTime()));
+                        villagerHordeDay);
                 }
             }
         }
