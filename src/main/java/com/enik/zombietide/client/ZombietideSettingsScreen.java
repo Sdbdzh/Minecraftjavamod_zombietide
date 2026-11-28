@@ -7,6 +7,8 @@ import com.enik.zombietide.client.gui.settings.SettingRow;
 import com.enik.zombietide.client.gui.settings.SettingsCategory;
 import com.enik.zombietide.client.gui.settings.SettingsHost;
 import com.enik.zombietide.client.gui.settings.SettingsRegistry;
+import com.enik.zombietide.client.gui.settings.control.FlatButton;
+import com.enik.zombietide.client.gui.settings.control.FlatToggle;
 import com.enik.zombietide.client.gui.settings.control.IntSliderControl;
 import com.enik.zombietide.config.ClientHudConfig;
 import com.enik.zombietide.config.ZombietideConfig;
@@ -70,10 +72,10 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     /** 【P2】每行的纵向范围 + 悬停提示内容（本屏幕不调用 super.render，tooltip 必须手绘） */
     private final List<RowBounds> rowBounds = new ArrayList<>();
 
-    // 底部按钮（固定，不加入 renderable 列表）
-    private Button doneBtn;
+    // 底部按钮（固定，不加入 renderable 列表；v0.2.133 起为自绘扁平按钮）
+    private FlatButton doneBtn;
     /** 【P3】重置当前分类全部选项 */
-    private Button resetPageBtn;
+    private FlatButton resetPageBtn;
     /** 【P4】搜索框：不放进 renderables（否则每次 rebuild 会被 clearWidgets 清掉、丢失焦点与内容） */
     private EditBox searchBox;
     private String searchQuery = "";
@@ -255,8 +257,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
                 case SettingRow.OptionRow optRow -> {
                     OptionEntry e = optRow.entry();
                     switch (e.type()) {
-                        case TOGGLE -> addCheckbox(e, e.reader().applyAsInt(this) != 0, y,
-                                (cb, v) -> applyOption(e, v ? 1 : 0), e.clientOnly());
+                        case TOGGLE -> addToggle(e, e.reader().applyAsInt(this) != 0, y);
                         case INT -> addIntSlider(e, e.reader().applyAsInt(this), y);
                         case CYCLE -> addCycleButton(e, () -> e.cycleLabel().apply(this), y,
                                 () -> e.cycleAction().accept(this));
@@ -268,11 +269,12 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
         // ===== 固定底部按钮（手动渲染/命中）：重置本页 + 完成 =====
         int btnY = this.height - 28;
-        this.resetPageBtn = Button.builder(Component.literal(tr("zombietide.settings.button.reset_page")),
-                        b -> resetCurrentPage())
-                .bounds(this.width / 2 - 123, btnY, 120, 20).build();
-        this.doneBtn = Button.builder(Component.literal(tr("zombietide.settings.button.done")), b -> this.onClose())
-                .bounds(this.width / 2 + 3, btnY, 120, 20).build();
+        this.resetPageBtn = new FlatButton(this.width / 2 - 123, btnY, 120, 20,
+                Component.literal(tr("zombietide.settings.button.reset_page")),
+                false, this::resetCurrentPage);
+        this.doneBtn = new FlatButton(this.width / 2 + 3, btnY, 120, 20,
+                Component.literal(tr("zombietide.settings.button.done")),
+                true, this::onClose);
 
         // 【P4】搜索无结果时给一行提示
         if (isSearching() && this.rowBounds.isEmpty()) {
@@ -854,12 +856,6 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         return contentRight() - controlWidth() - CONTROL_PAD;
     }
 
-    /** 开关的状态文字（开启绿 / 关闭灰） */
-    private Component checkLabel(boolean on) {
-        return Component.literal(on ? "§a" + tr("zombietide.settings.value.on")
-                : "§8" + tr("zombietide.settings.value.off"));
-    }
-
     /** 【P4】搜索模式下的标签：前面加「分类 · 」，避免「间隔天数」这类同名项分不清 */
     private String labelTextFor(OptionEntry e) {
         String base = labelText(e.scope(), e.nameKey());
@@ -895,29 +891,19 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         return y + 18;
     }
 
-    private Checkbox addCheckbox(OptionEntry e, boolean checked, int y,
-                                 Checkbox.OnValueChange onChange, boolean clientOnly) {
+    /** 【v0.2.133】开关改为 Sodium 风格扁平胶囊（原版 Checkbox 带方块勾选纹理，与自绘界面冲突） */
+    private FlatToggle addToggle(OptionEntry e, boolean checked, int y) {
         this.tabLabels.add(new LabelData(labelTextFor(e),
                 contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
         this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, e));
-        // 【P2】开关带「开启/关闭」文字，填满右对齐的控件区，视觉上与输入框同宽
-        Checkbox cb = Checkbox.builder(checkLabel(checked), this.font)
-                .pos(controlX(), y + (ROW_HEIGHT - FIELD_HEIGHT) / 2)
-                .selected(checked)
-                .onValueChange((cbx, checkedVal) -> {
-                    cbx.setMessage(checkLabel(checkedVal));
-                    onChange.onValueChange(cbx, checkedVal);
-                    if (clientOnly) {
-                        commitClientHud();
-                    } else {
-                        pushConfig();
-                    }
-                })
-                .build();
-        cb.setWidth(controlWidth());
-        cb.setHeight(FIELD_HEIGHT);
-        this.addRenderableWidget(cb);
-        return cb;
+        FlatToggle toggle = new FlatToggle(
+                controlX(), y + (ROW_HEIGHT - FIELD_HEIGHT) / 2, controlWidth(), FIELD_HEIGHT,
+                checked,
+                Component.literal(tr("zombietide.settings.value.on")),
+                Component.literal(tr("zombietide.settings.value.off")),
+                v -> applyOption(e, v ? 1 : 0));
+        this.addRenderableWidget(toggle);
+        return toggle;
     }
 
     /** 【P3】数字选项改用滑块：拖动调值 / 点击轨道跳转 / Shift 精调 */
