@@ -387,16 +387,28 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         guiGraphics.fill(contentLeft() - 8, scissorTop, this.width - 8,
                 scissorBottom, 0x8C101014);
 
-        // 左侧分类栏（固定，不随内容滚动）；选中项用橙色竖条 + 淡底标记
+        // 左侧分类栏（固定，不随内容滚动）
         for (int i = 0; i < this.tabButtons.size(); i++) {
-            Button btn = this.tabButtons.get(i);
-            if (i == this.currentTab.ordinal()) {
-                guiGraphics.fill(btn.getX() - 3, btn.getY() - 1,
-                        btn.getX() + btn.getWidth() + 3, btn.getY() + btn.getHeight() + 1, 0x4DFFB347);
-                guiGraphics.fill(btn.getX() - 3, btn.getY() - 1,
-                        btn.getX() - 1, btn.getY() + btn.getHeight() + 1, 0xFFFFB347);
-            }
-            btn.render(guiGraphics, mouseX, mouseY, partialTick);
+            this.tabButtons.get(i).render(guiGraphics, mouseX, mouseY, partialTick);
+        }
+
+        // 【P2 修】选中态装饰必须画在「面板 + 按钮」之后，否则橙色条会被深色面板压暗。
+        // 之前用的是 30% 透明橙底 + 按钮纹理叠加，右侧那条看起来像被盖住。
+        int selIndex = this.currentTab.ordinal();
+        if (selIndex >= 0 && selIndex < this.tabButtons.size()) {
+            Button sel = this.tabButtons.get(selIndex);
+            int bx = sel.getX();
+            int by = sel.getY();
+            int bw = sel.getWidth();
+            int bh = sel.getHeight();
+            // 淡橙底：覆盖按钮本体，形成明确选中态
+            guiGraphics.fill(bx, by, bx + bw, by + bh, 0x33FFB347);
+            // 四边 1px 橙框（上/下/右；左侧由高亮竖条接管）
+            guiGraphics.fill(bx - 1, by - 1, bx + bw + 1, by, 0xAAFFB347);
+            guiGraphics.fill(bx - 1, by + bh, bx + bw + 1, by + bh + 1, 0xAAFFB347);
+            guiGraphics.fill(bx + bw, by - 1, bx + bw + 1, by + bh + 1, 0xAAFFB347);
+            // 左侧实色高亮竖条（3px，最亮）
+            guiGraphics.fill(bx - 3, by - 1, bx, by + bh + 1, 0xFFFFB347);
         }
 
         if (scissorBottom > scissorTop) {
