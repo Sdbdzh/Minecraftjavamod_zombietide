@@ -104,6 +104,11 @@ public class HordeWarning {
         // 预兆 drone 与波次 drone 是同一个 SoundEvent，必须先掐掉再让 BGM 调度器重新起播
         com.enik.zombietide.sound.ModSounds.stopDroneForPlayer(player);
 
+        // 【v0.2.79】触发瞬间立即同步一次 HUD：否则红字要等下一次 20 tick 定期同步（最多 1 秒），
+        // 玩家会看到"标题/旁白都出来了，DAY X 却还没红"。此时 waveActive 刚被置 true，
+        // HUD 判定用的是 isHordeDay || waveActive，立即同步即可变红。
+        HordeTimer.syncPlayerHudState(player.serverLevel(), config, player);
+
         // 突袭旁白：无条件发送，从语言文件随机抽 1 段
         int index = RANDOM.nextInt(AMBUSH_LINE_COUNT) + 1;
         player.sendSystemMessage(Component.translatable("zombietide.ambush." + index));

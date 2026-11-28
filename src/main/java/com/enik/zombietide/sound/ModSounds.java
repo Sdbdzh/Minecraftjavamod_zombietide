@@ -92,10 +92,26 @@ public final class ModSounds {
     }
 
     /**
+     * 【v0.2.79】在**指定世界坐标**给指定玩家播放声音（坐标版，带空间方位感）。
+     * <p>与 {@link #playOnEntity} 的区别：不依赖客户端已收到该实体的生成包。
+     * 原版声音包实体版会用实体 ID 查本地实体，查不到就**静默丢弃**——
+     * 尸潮僵尸常刷在视距外（60~150 格），客户端往往没同步，导致叫声整个丢失。
+     * 坐标版直接把 xyz 写进包里，客户端收到就播，且仍按坐标计算方位与距离衰减。
+     */
+    public static void playAtPosition(ServerPlayer player, Holder<SoundEvent> sound,
+                                      double x, double y, double z,
+                                      SoundSource source, float volume, float pitch) {
+        player.connection.send(new ClientboundSoundPacket(
+                sound, source, x, y, z, volume, pitch, player.getRandom().nextLong()));
+    }
+
+    /**
      * 【v0.2.77】在**实体位置**播放声音，且声音**实时跟随实体移动**——只发给指定玩家。
      * <p>用原版 {@link ClientboundSoundEntityPacket}（而非坐标版 ClientboundSoundPacket）：
      * 客户端会把音源绑定到实体，每帧按实体位置计算方位与衰减。这就是"听声辨位"的实现。
      * 实体被 discard 后客户端音源随之消失，无需额外停止包。
+     * <p><b>注意（v0.2.79）</b>：客户端用实体 ID 查本地实体，查不到会静默丢弃——
+     * 仅当实体确定已同步到客户端时才可用。尸潮叫声已改用 {@link #playAtPosition}。
      */
     public static void playOnEntity(ServerPlayer player, Holder<SoundEvent> sound,
                                     Entity entity, SoundSource source, float volume, float pitch) {

@@ -115,16 +115,17 @@ public final class HordeBgmScheduler {
                 continue;
             }
             if (now >= next) {
-                // 【v0.2.77】叫声绑定僵尸实体播放：声音实时跟随僵尸移动，玩家听声辨位。
-                // 找不到僵尸（第一批还没刷出）时回退到玩家位置，保证提示不丢。
+                // 【v0.2.79修复】叫声在**僵尸坐标**播放，不再绑定实体。
+                // 原版实体绑定包会用实体 ID 查本地实体，查不到（僵尸刷在视距外、客户端未同步）
+                // 就静默丢弃——这就是 v0.2.77 后"几乎听不到叫声"的根因。
+                // 坐标版直接写 xyz，客户端收到就播，且按坐标算方位与距离衰减（仍有听声辨位）。
                 var zombie = HordeSpawner.findHordeZombieEntity(player.serverLevel(), id);
-                // 绑定播放要求实体已同步到客户端：64 格（= 叫声固定半径）内才安全，
-                // 更远的僵尸客户端可能还没收到生成包，声音会丢失——回退到玩家位置。
-                boolean zombieTracked = zombie != null
-                        && zombie.distanceToSqr(player) <= 64.0 * 64.0;
-                if (zombieTracked) {
-                    ModSounds.playOnEntity(player, ModSounds.HORDE_BGM, zombie, SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
+                if (zombie != null) {
+                    ModSounds.playAtPosition(player, ModSounds.HORDE_BGM,
+                            zombie.getX(), zombie.getY(), zombie.getZ(),
+                            SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
                 } else {
+                    // 该波还没刷出僵尸：在玩家位置播，保证预警不丢
                     ModSounds.playToPlayer(player, ModSounds.HORDE_BGM, SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
                 }
                 NEXT_PLAY_TICK.put(id, now + randomInterval());
