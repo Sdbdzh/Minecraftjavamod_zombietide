@@ -27,7 +27,10 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.fml.ModList;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * 尸潮配置界面。
@@ -71,6 +74,13 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     private Button doneBtn;
     /** 【P3】重置当前分类全部选项 */
     private Button resetPageBtn;
+    /** 【P4】搜索框：不放进 renderables（否则每次 rebuild 会被 clearWidgets 清掉、丢失焦点与内容） */
+    private EditBox searchBox;
+    private String searchQuery = "";
+    /** 防止 setValue 触发 responder 造成 rebuild 递归 */
+    private boolean updatingSearch = false;
+    /** 搜索结果里每个选项所属分类（用于标签前缀） */
+    private final Map<OptionEntry, SettingsCategory> searchCategoryOf = new IdentityHashMap<>();
 
     // UI 状态
     private int scrollOffset = 0;
@@ -222,6 +232,8 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         this.tabLabels.clear();
         this.sectionHeaders.clear();
         this.rowBounds.clear();
+        this.searchCategoryOf.clear();
+        ensureSearchBox();
         this.tabButtons.clear();
         this.clearWidgets();
         this.doneBtn = null;
@@ -235,6 +247,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
             Button btn = Button.builder(Component.literal(tr(tab.key())), b -> {
                 this.currentTab = tab;
                 this.scrollOffset = 0;
+                clearSearch();
                 this.rebuildWidgets();
             }).bounds(SIDEBAR_X, itemY, SIDEBAR_WIDTH, SIDEBAR_ITEM_H).build();
             this.tabButtons.add(btn);
@@ -245,7 +258,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
         // 【P1 重构】选项定义全部收敛到 SettingsRegistry，这里只负责把「行」翻译成控件。
         // 顺序、分区标题、注释由 registry 保证与旧实现一致（纯重构，外观不变）。
-        for (SettingRow row : SettingsRegistry.rowsFor(this.currentTab)) {
+        for (SettingRow row : currentRows()) {
             switch (row) {
                 case SettingRow.SectionRow sec -> y = addSection(sec.titleKey(), y);
                 case SettingRow.NoteRow note -> y = addNote(note.textKey(), y);
@@ -270,6 +283,12 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
                 .bounds(this.width / 2 - 123, btnY, 120, 20).build();
         this.doneBtn = Button.builder(Component.literal(tr("zombietide.settings.button.done")), b -> this.onClose())
                 .bounds(this.width / 2 + 3, btnY, 120, 20).build();
+
+        // 【P4】搜索无结果时给一行提示
+        if (isSearching() && this.rowBounds.isEmpty()) {
+            this.tabLabels.add(new LabelData("§7" + tr("zombietide.settings.search.none"),
+                    contentLeft() + LABEL_PAD, CONTENT_TOP + 20));
+        }
 
         // 内容高度：以最后一行底边为准 + 底部留白（P2 行高变小，公式同步简化）
         this.contentHeight = Math.max(ROW_HEIGHT, (y - CONTENT_TOP) + 16);
@@ -380,6 +399,11 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         this.renderWallpaper(guiGraphics);
 
         guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 6, 0xFFFFFF);
+
+        // 【P4】搜索框（固定顶栏右侧）
+        if (this.searchBox != null) {
+            this.searchBox.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
 
         int scissorTop = CONTENT_TOP;
         int scissorBottom = this.height - CONTENT_BOTTOM;
@@ -589,6 +613,13 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // 【P4】搜索框优先命中
+        if (this.searchBox != null && isInside(this.searchBox, mouseX, mouseY)) {
+            this.setFocused(this.searchBox);
+            this.searchBox.mouseClicked(mouseX, mouseY, button);
+            return true;
+        }
+
         if (button == 0 && isOverScrollBar(mouseX, mouseY)) {
             this.draggingScrollBar = true;
             this.scrollBarStartY = (int) mouseY;
@@ -684,12 +715,105 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     }
 
     @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        // 【P4】搜索框聚焦时接收字符
+        if (this.searchBox != null && this.searchBox.isFocused()
+                && this.searchBox.charTyped(codePoint, modifiers)) {
+            return true;
+        }
+        return super.charTyped(codePoint, modifiers);
+    }
+
+    @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // 【P4】搜索框聚焦时优先接收按键：ESC 清空搜索（不关界面），回车收起焦点
+        if (this.searchBox != null && this.searchBox.isFocused()) {
+            if (keyCode == InputConstants.KEY_ESCAPE) {
+                clearSearch();
+                this.setFocused(null);
+                this.rebuildWidgets();
+                return true;
+            }
+            if (keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER) {
+                this.setFocused(null);
+                return true;
+            }
+            if (this.searchBox.keyPressed(keyCode, scanCode, modifiers)) return true;
+        }
+
         if (keyCode == InputConstants.KEY_ESCAPE) {
             this.onClose();
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    // ==================== 搜索（P4） ====================
+
+    private boolean isSearching() {
+        return !this.searchQuery.isBlank();
+    }
+
+    /**
+     * 当前要渲染的行：无搜索时是当前分类；有搜索时**跨全部分类**平铺匹配项。
+     * <p>跨分类是 Sodium 的做法——搜「半径」能同时看到玩家半径和村民半径。
+     */
+    private List<SettingRow> currentRows() {
+        if (!isSearching()) {
+            return SettingsRegistry.rowsFor(this.currentTab);
+        }
+        String q = this.searchQuery.trim().toLowerCase(Locale.ROOT);
+        List<SettingRow> out = new ArrayList<>();
+        for (SettingsCategory cat : SettingsCategory.values()) {
+            for (SettingRow row : SettingsRegistry.rowsFor(cat)) {
+                if (row instanceof SettingRow.OptionRow optRow) {
+                    OptionEntry e = optRow.entry();
+                    if (matchesSearch(e, cat, q)) {
+                        this.searchCategoryOf.put(e, cat);
+                        out.add(row);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** 匹配名称 / 描述 / 分类名（不区分大小写） */
+    private boolean matchesSearch(OptionEntry e, SettingsCategory cat, String q) {
+        return tr(e.nameKey()).toLowerCase(Locale.ROOT).contains(q)
+                || tr(e.descKey()).toLowerCase(Locale.ROOT).contains(q)
+                || tr(cat.key()).toLowerCase(Locale.ROOT).contains(q);
+    }
+
+    /** 搜索框按需创建；已存在时只更新位置（窗口尺寸变化） */
+    private void ensureSearchBox() {
+        int w = Math.max(110, Math.min(180, this.width / 3));
+        if (this.searchBox == null) {
+            this.searchBox = new EditBox(this.font, this.width - 8 - w, 4, w, 16,
+                    Component.literal(tr("zombietide.settings.search.hint")));
+            this.searchBox.setHint(Component.literal("§8" + tr("zombietide.settings.search.hint")));
+            this.searchBox.setMaxLength(64);
+            this.searchBox.setValue(this.searchQuery);
+            this.searchBox.setResponder(text -> {
+                if (this.updatingSearch) return;
+                if (text.equals(this.searchQuery)) return;
+                this.searchQuery = text;
+                this.scrollOffset = 0;
+                rebuildWidgets();
+            });
+        } else {
+            this.searchBox.setX(this.width - 8 - w);
+            this.searchBox.setWidth(w);
+        }
+    }
+
+    /** 清空搜索（点侧栏分类时调用） */
+    private void clearSearch() {
+        if (this.searchQuery.isEmpty()) return;
+        this.searchQuery = "";
+        this.updatingSearch = true;
+        if (this.searchBox != null) this.searchBox.setValue("");
+        this.updatingSearch = false;
     }
 
     // ==================== 布局几何（P2） ====================
@@ -720,6 +844,14 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
                 : "§8" + tr("zombietide.settings.value.off"));
     }
 
+    /** 【P4】搜索模式下的标签：前面加「分类 · 」，避免「间隔天数」这类同名项分不清 */
+    private String labelTextFor(OptionEntry e) {
+        String base = labelText(e.scope(), e.nameKey());
+        if (this.searchQuery.isBlank()) return base;
+        SettingsCategory cat = this.searchCategoryOf.get(e);
+        return cat == null ? base : "§8" + tr(cat.key()) + " §7· §r" + base;
+    }
+
     /** 拼装「作用域徽标 + 名称」 */
     private String labelText(OptionScope scope, String label) {
         return (scope == null ? "" : "§l" + scope.color() + "[" + tr(scope.key()) + "] §r§f") + tr(label);
@@ -744,7 +876,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
     private Checkbox addCheckbox(OptionEntry e, boolean checked, int y,
                                  Checkbox.OnValueChange onChange, boolean clientOnly) {
-        this.tabLabels.add(new LabelData(labelText(e.scope(), e.nameKey()),
+        this.tabLabels.add(new LabelData(labelTextFor(e),
                 contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
         this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, e));
         // 【P2】开关带「开启/关闭」文字，填满右对齐的控件区，视觉上与输入框同宽
@@ -769,7 +901,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
     /** 【P3】数字选项改用滑块：拖动调值 / 点击轨道跳转 / Shift 精调 */
     private IntSliderControl addIntSlider(OptionEntry e, int value, int y) {
-        this.tabLabels.add(new LabelData(labelText(e.scope(), e.nameKey()),
+        this.tabLabels.add(new LabelData(labelTextFor(e),
                 contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
         this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, e));
         IntSliderControl slider = new IntSliderControl(
@@ -785,7 +917,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
     private Button addCycleButton(OptionEntry e, java.util.function.Supplier<String> valueText,
                                   int y, Runnable onPress) {
-        this.tabLabels.add(new LabelData(labelText(e.scope(), e.nameKey()),
+        this.tabLabels.add(new LabelData(labelTextFor(e),
                 contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
         this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, e));
         Button btn = Button.builder(Component.literal(valueText.get()), b -> {
