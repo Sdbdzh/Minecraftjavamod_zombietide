@@ -1,5 +1,6 @@
 package com.enik.zombietide.horde;
 
+import com.enik.zombietide.EnikZombietide;
 import com.enik.zombietide.attachments.ModAttachments;
 import com.enik.zombietide.attachments.PlayerHordeData;
 import com.enik.zombietide.config.ZombietideConfig;
@@ -34,8 +35,13 @@ import java.util.UUID;
  */
 public final class HordeBgmScheduler {
 
-    private static final int MIN_INTERVAL_TICKS = 30 * 20;   // 30 秒
-    private static final int MAX_INTERVAL_TICKS = 120 * 20;  // 2 分钟
+    /** 首次叫声延迟：10 秒（触发音效 8.1 秒播完后立刻接上，不再等 30~120 秒）。
+     *  <p>v0.2.81：原 30~120 秒延迟导致快进时间测试时波次几秒就结束、叫声永远等不到；
+     *  正常游玩也太久，尸潮刚开始毫无声音。 */
+    private static final int FIRST_CALL_DELAY_TICKS = 10 * 20;
+    /** 后续叫声间隔：20~60 秒（原来 30~120 秒太长，一晚上听不到几声） */
+    private static final int MIN_INTERVAL_TICKS = 20 * 20;
+    private static final int MAX_INTERVAL_TICKS = 60 * 20;
     private static final float BGM_VOLUME = 0.7F;
     /** drone 是底噪，音量压低，避免盖住叫声与游戏音效 */
     private static final float DRONE_VOLUME = 0.35F;
@@ -110,24 +116,18 @@ public final class HordeBgmScheduler {
 
             Long next = NEXT_PLAY_TICK.get(id);
             if (next == null) {
-                // 进入波次后先随机等待，避免与 8 秒的触发音效叠在一起
-                NEXT_PLAY_TICK.put(id, now + randomInterval());
+                // 进入波次后先等 10 秒（触发音效播完），之后按 20~60 秒随机间隔
+                NEXT_PLAY_TICK.put(id, now + FIRST_CALL_DELAY_TICKS);
                 continue;
             }
             if (now >= next) {
-                // 【v0.2.79修复】叫声在**僵尸坐标**播放，不再绑定实体。
-                // 原版实体绑定包会用实体 ID 查本地实体，查不到（僵尸刷在视距外、客户端未同步）
-                // 就静默丢弃——这就是 v0.2.77 后"几乎听不到叫声"的根因。
-                // 坐标版直接写 xyz，客户端收到就播，且按坐标算方位与距离衰减（仍有听声辨位）。
-                var zombie = HordeSpawner.findHordeZombieEntity(player.serverLevel(), id);
-                if (zombie != null) {
-                    ModSounds.playAtPosition(player, ModSounds.HORDE_BGM,
-                            zombie.getX(), zombie.getY(), zombie.getZ(),
-                            SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
-                } else {
-                    // 该波还没刷出僵尸：在玩家位置播，保证预警不丢
-                    ModSounds.playToPlayer(player, ModSounds.HORDE_BGM, SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
-                }
+                // 【v0.2.81】叫声回到**玩家位置**播放（v0.2.70~76 的可靠做法）。
+                // 两次空间化尝试都失败：
+                //  - v0.2.77 实体绑定包：客户端查不到视距外实体 → 静默丢弃；
+                //  - v0.2.79 僵尸坐标包：固定 64 格范围，僵尸刷在 60~150 格外 → 超出范围听不到。
+                // 现在优先保证"听得到"。空间化暂放弃，僵尸方位感由 HUD/视觉承担。
+                ModSounds.playToPlayer(player, ModSounds.HORDE_BGM, SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
+                EnikZombietide.LOGGER.debug("[僵尸叫声] 已发给玩家 {}", player.getScoreboardName());
                 NEXT_PLAY_TICK.put(id, now + randomInterval());
             }
         }

@@ -38,10 +38,10 @@ public final class ModSounds {
             register("horde_scatter", false);
     /** 僵尸叫声/低吼（5 段随机变体）。
      *  <p>v0.2.70 起正名：这 5 段不是旋律性 BGM，而是「尸潮预警」；真正的持续背景音是 {@link #HORDE_DRONE}。
-     *  <p>v0.2.77 起改为**绑定僵尸实体播放**（{@link #playOnEntity}），声音实时跟随僵尸移动，
-     *  玩家能听声辨位；范围从默认 16 格扩到固定 64 格，否则僵尸还没走近根本听不到。 */
+     *  <p>v0.2.81：空间化两次尝试失败（实体绑定静默丢弃 / 坐标版超 64 格听不到），
+     *  恢复为**玩家位置 + 可变范围**播放，优先保证"听得到"。 */
     public static final DeferredHolder<SoundEvent, SoundEvent> HORDE_BGM =
-            register("horde_bgm", 64.0F);
+            register("horde_bgm", false);
 
     /** 持续低频底鸣（drone）：尸潮期间常驻播放的压迫性底噪，非旋律。
      *  <p>源素材 74 秒，已拼接为约 3 分 42 秒的 OGG，靠「长音频 + 到点重播」近似无缝循环

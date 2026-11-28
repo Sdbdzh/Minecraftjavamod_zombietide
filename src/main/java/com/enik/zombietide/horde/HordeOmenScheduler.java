@@ -33,8 +33,9 @@ import java.util.UUID;
  */
 public final class HordeOmenScheduler {
 
-    /** 尸潮日白天的基础预兆强度（DAY X 暗红提示，但不播 drone） */
-    private static final float DAYTIME_BASE_STRENGTH = 0.30F;
+    /** 尸潮日白天基础强度（v0.2.81 改回 0：正常白天 DAY X 保持白色，
+     *  只在黄昏前 1 小时的预兆期才开始渐变——用户实测白天黄色提示观感不好）。 */
+    private static final float DAYTIME_BASE_STRENGTH = 0.0F;
     /** 预兆窗口起点：黄昏前约 1 小时（12000 = 日落开始） */
     private static final long OMEN_START_PHASE = 12000L;
     /** 预兆窗口终点：黄昏触发窗口起点 */
