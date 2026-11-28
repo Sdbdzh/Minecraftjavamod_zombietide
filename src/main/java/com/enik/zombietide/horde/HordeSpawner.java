@@ -446,8 +446,9 @@ public class HordeSpawner {
                 }
 
                 // 增援：追加 8~12 只到现有波次
-                // 【v0.2.101】不再要求 getTarget() 是玩家——创造/旁观模式的玩家会被 AI 跳过，
-                // 导致永远不尖叫。用 NBT 里记录的尸潮目标 ID 即可，与 AI 锁定解耦。
+                // 【v0.2.102】恢复 AI 锁定判定：只有真正锁定玩家的尖啸者才尖叫。
+                // 创造/旁观玩家不会被僵尸锁定是正常的——测试时切生存即可。
+                if (!(mob.getTarget() instanceof ServerPlayer player)) continue;
                 UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
                 if (targetId == null) continue;
                 if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
@@ -472,16 +473,10 @@ public class HordeSpawner {
             // ===== 已在蓄力中：等 pending 到点 =====
             if (pending > 0L) continue;
 
-            // ===== 发起蓄力：附近有玩家 + 冷却结束 =====
-            // 【v0.2.101】用距离判定代替 AI 锁定：创造/旁观玩家不会被僵尸攻击，
-            // 但仍然应该能触发尖叫（否则 debug 测试时永远看不到效果）。
+            // ===== 发起蓄力：锁定玩家 + 冷却结束 =====
+            // 【v0.2.102】恢复 AI 锁定判定。创造/旁观玩家不被锁定是设计如此，不为此放宽逻辑。
             if (lastScream > 0L && now - lastScream < SCREAMER_COOLDOWN_TICKS) continue;
-            boolean playerNearby = false;
-            for (ServerPlayer p : level.getPlayers(p -> p.distanceToSqr(mob) <= 32.0 * 32.0)) {
-                playerNearby = true;
-                break;
-            }
-            if (!playerNearby) continue;
+            if (!(mob.getTarget() instanceof ServerPlayer)) continue;
             UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
             if (targetId == null) continue;
             if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
