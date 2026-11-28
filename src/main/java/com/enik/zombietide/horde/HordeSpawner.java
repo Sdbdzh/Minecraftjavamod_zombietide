@@ -76,8 +76,12 @@ public class HordeSpawner {
     /** 同一只尖啸者的尖叫冷却：120 秒 = 2400 tick。
      *  <p><b>为什么不是 30 秒</b>：84 只僵尸 × 5% ≈ 4 只尖啸者，30 秒冷却 + 每次 8~12 只
      *  → 增援约 1.0 只/秒，而刷怪引擎只有 0.4 只/秒 → 剩余数无限增长（实测 68→154），
-     *  尸潮永远刷不完。120 秒后增援约 0.35 只/秒 < 0.4，才能保证波次会结束。 */
-    private static final long SCREAMER_COOLDOWN_TICKS = 2400L;
+     *  尸潮永远刷不完。100±20 秒后增援约 0.35~0.5 只/秒，接近刷怪 0.4（如需绝对不雪球可回调基准）。 */
+    private static final long SCREAMER_COOLDOWN_TICKS = 2000L;   // 【v0.2.123】100 秒基准
+    /** 【v0.2.123】冷却随机浮动 ±20 秒（±400 tick），实际范围 1600~2400 tick */
+    private static final long SCREAMER_COOLDOWN_JITTER = 400L;
+    /** 每只尖啸者本次的冷却值（NBT，尖叫时随机生成并持久化） */
+    private static final String SCREAMER_COOLDOWN_NBT_KEY = "zombietide_screamer_cooldown";
 
     /** 供重启/区块重载时恢复尖啸者体积（SCALE 属性不持久化） */
     public static double screamerScale() {
@@ -420,6 +424,10 @@ public class HordeSpawner {
             if (pending > 0L && now >= pending) {
                 tag.putLong(SCREAMER_PENDING_KEY, 0L);
                 tag.putLong(SCREAMER_LAST_TICK_KEY, now);
+                // 【v0.2.123】本次尖叫后随机冷却 100s±20s，写入 NBT 持久化
+                tag.putLong(SCREAMER_COOLDOWN_NBT_KEY,
+                        SCREAMER_COOLDOWN_TICKS - SCREAMER_COOLDOWN_JITTER
+                                + RANDOM.nextInt((int) (SCREAMER_COOLDOWN_JITTER * 2L + 1)));
 
                 // 爆发：SHRIEK 向外炸开 + 三层 SONIC_BOOM 同心波 + 暗红尘雾
                 level.sendParticles(new net.minecraft.core.particles.ShriekParticleOption(0),
@@ -459,7 +467,9 @@ public class HordeSpawner {
             if (pending > 0L) continue;
 
             // ===== 发起蓄力：锁定玩家 + 冷却结束 =====
-            if (lastScream > 0L && now - lastScream < SCREAMER_COOLDOWN_TICKS) continue;
+            long cooldown = tag.getLong(SCREAMER_COOLDOWN_NBT_KEY);
+            if (cooldown <= 0L) cooldown = SCREAMER_COOLDOWN_TICKS;   // 老数据兜底
+            if (lastScream > 0L && now - lastScream < cooldown) continue;
             if (!(mob.getTarget() instanceof ServerPlayer)) continue;
             // 【v0.2.105】删除 activeHordes/totalCount 前置检查：
             // 诊断日志证实 5 只尖啸者全卡在这里——刷怪阶段早已结束（剩余 0），
@@ -482,7 +492,8 @@ public class HordeSpawner {
     /** 需要复制的尸潮 NBT 键列表 */
     public static String[] hordeKeysForMixin() {
         return new String[]{HORDE_TARGET_UUID_KEY, HORDE_WAVE_ID_KEY, HORDE_STATE_KEY,
-                HORDE_SPAWN_POS_KEY, SCREAMER_KEY, SCREAMER_LAST_TICK_KEY, SCREAMER_PENDING_KEY};
+                HORDE_SPAWN_POS_KEY, SCREAMER_KEY, SCREAMER_LAST_TICK_KEY, SCREAMER_PENDING_KEY,
+                SCREAMER_COOLDOWN_NBT_KEY};
     }
 
     /** 转化后的新僵尸重新纳入追踪（旧 UUID 移除） */
