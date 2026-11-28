@@ -220,9 +220,19 @@ public final class ZombietideAtmosphere {
             // 上/下：边缘暗红 → 中心透明
             g.fillGradient(0, 0, w, edgeH, borderAlpha | red, clear);
             g.fillGradient(0, h - edgeH, w, h, clear, borderAlpha | red);
-            // 左/右：边缘暗红 → 中心透明
-            g.fillGradient(0, edgeH, edgeW, h - edgeH, borderAlpha | red, clear);
-            g.fillGradient(w - edgeW, edgeH, w, h - edgeH, clear, borderAlpha | red);
+            // 【v0.2.118】左右要水平渐变，但 MC 的 fillGradient 只做垂直渐变
+            // （左列固定色1、右列固定色2）。改用逐列窄条 fill 模拟水平渐变。
+            int maxA = (borderAlpha >>> 24) & 0xFF;
+            int cols = Math.min(24, edgeW);
+            for (int i = 0; i < cols; i++) {
+                float t = i / (float) (cols - 1);          // 0=边缘 → 1=中心
+                int a = (int) (maxA * (1.0F - t));
+                int col = (a << 24) | red;
+                int x1 = (edgeW * i) / cols;
+                int x2 = (edgeW * (i + 1)) / cols;
+                g.fill(x1, edgeH, x2 + 1, h - edgeH, col);            // 左
+                g.fill(w - x2 - 1, edgeH, w - x1, h - edgeH, col);    // 右（镜像）
+            }
         }
 
         // 触发瞬间的全屏暗红闪烁（短促），叠在边框之上
