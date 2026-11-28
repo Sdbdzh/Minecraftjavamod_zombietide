@@ -11,6 +11,7 @@ import com.enik.zombietide.config.ZombietideConfigData;
 import com.enik.zombietide.horde.HordeBgmScheduler;
 import com.enik.zombietide.horde.HordeOmenScheduler;
 import com.enik.zombietide.horde.HordeSpawner;
+import com.enik.zombietide.horde.HordeThreatDetector;
 import com.enik.zombietide.horde.HordeTimer;
 import com.enik.zombietide.network.ModMessages;
 import com.enik.zombietide.server.ZombietideCommands;
@@ -50,6 +51,7 @@ public class ZombietideServerEvents {
     public static void onServerStarted(ServerStartedEvent event) {
         MinecraftServer server = event.getServer();
         HordeBgmScheduler.reset(server); // 单机换世界/服务器重启时清掉上一次的调度状态并掐断残留音乐
+        HordeThreatDetector.reset(); // v0.2.86：威胁去抖状态一起清
         // 【v0.1.60 修复 #122】静态计时器必须随服务器启动重置。
         // 单机「退出存档 → 进另一个存档」不会重启 JVM，而新世界 getGameTime() 从 0 起，
         // 残留的 lastScatterTick 会比 nowTick 还大 → nowTick - lastScatterTick 为负 → 永不四散。
@@ -62,6 +64,7 @@ public class ZombietideServerEvents {
     @SubscribeEvent
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         HordeBgmScheduler.onPlayerLogout(event.getEntity().getUUID());
+        HordeThreatDetector.onPlayerLogout(event.getEntity().getUUID());
         HordeOmenScheduler.onPlayerLogout(event.getEntity().getUUID());
     }
 
@@ -232,7 +235,10 @@ public class ZombietideServerEvents {
         // 分批刷怪
         HordeSpawner.update(overworld, data.getConfig());
 
-        // 定制背景音乐调度（仅玩家尸潮触发者，每 30s~2min 随机播放一段）
+        // 尸潮威胁检测（v0.2.86）：玩家被尸潮僵尸锁定 → 氛围/音频统一激活（3 秒去抖）
+        HordeThreatDetector.onServerTick(overworld, data.getConfig(), overworld.getGameTime());
+
+        // 定制背景音乐调度（drone 由威胁态驱动，v0.2.86）
         HordeBgmScheduler.onServerTick(overworld, data.getConfig());
 
         // 尸潮预兆调度（黄昏前天色渐变 + 极低音量 drone 铺垫，v0.2.78）

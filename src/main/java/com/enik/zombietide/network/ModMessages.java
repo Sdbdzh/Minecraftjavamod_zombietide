@@ -128,6 +128,10 @@ public class ModMessages {
     public static final ResourceLocation OMEN_ID = ResourceLocation.fromNamespaceAndPath(
             "enik_zombietide", "omen");
 
+    /** 服务端 -> 客户端：尸潮威胁强度（v0.2.86）。0=无尸潮僵尸锁定你，1=正被锁定。 */
+    public static final ResourceLocation THREAT_ID = ResourceLocation.fromNamespaceAndPath(
+            "enik_zombietide", "threat");
+
     /** 村民职业 registry key 的编解码长度上限（两侧必须一致）。原版最长约 21 字符，64 留足余量 */
     public static final int MAX_PROFESSION_KEY_LEN = 64;
 
@@ -231,6 +235,28 @@ public class ModMessages {
             @Override
             public OmenPayload decode(FriendlyByteBuf buf) {
                 return new OmenPayload(buf.readFloat());
+            }
+        };
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** 服务端 -> 客户端：尸潮威胁强度（0=未被锁定，1=正被尸潮僵尸锁定） */
+    public record ThreatPayload(float strength) implements CustomPacketPayload {
+        public static final Type<ThreatPayload> TYPE = new Type<>(THREAT_ID);
+
+        public static final StreamCodec<FriendlyByteBuf, ThreatPayload> STREAM_CODEC = new StreamCodec<>() {
+            @Override
+            public void encode(FriendlyByteBuf buf, ThreatPayload payload) {
+                buf.writeFloat(payload.strength);
+            }
+
+            @Override
+            public ThreatPayload decode(FriendlyByteBuf buf) {
+                return new ThreatPayload(buf.readFloat());
             }
         };
 
@@ -523,6 +549,13 @@ public class ModMessages {
                                 ZombietideAtmosphere.onOmenReceived(payload.strength());
                             });
                         })
+                // 服务端 -> 客户端：尸潮威胁强度
+                .playToClient(ThreatPayload.TYPE, ThreatPayload.STREAM_CODEC,
+                        (payload, context) -> {
+                            context.enqueueWork(() -> {
+                                ZombietideAtmosphere.onThreatReceived(payload.strength());
+                            });
+                        })
                 // 服务端 -> 客户端：村民广播批次开始
                 .playToClient(VillagerBroadcastStartPayload.TYPE, VillagerBroadcastStartPayload.STREAM_CODEC,
                         (payload, context) -> {
@@ -633,6 +666,11 @@ public class ModMessages {
     /** 发送尸潮预兆强度给指定玩家（0=无） */
     public static void sendOmen(ServerPlayer player, float strength) {
         PacketDistributor.sendToPlayer(player, new OmenPayload(strength));
+    }
+
+    /** 发送尸潮威胁强度给指定玩家（0=未被锁定，1=正被尸潮僵尸锁定） */
+    public static void sendThreat(ServerPlayer player, float strength) {
+        PacketDistributor.sendToPlayer(player, new ThreatPayload(strength));
     }
 
     /** 将村民职业 registry key 提取，返回标准格式 "namespace:path"，保证不泄露 Holder 包装格式到 UI */

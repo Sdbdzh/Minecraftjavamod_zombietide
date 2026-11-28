@@ -1346,6 +1346,16 @@ public class HordeSpawner {
         return best;
     }
 
+    /** 【v0.2.86】活跃尸潮僵尸 UUID 快照（供 HordeThreatDetector 判定锁定，避免暴露内部集合） */
+    public static java.util.Collection<UUID> getHordeZombieIds() {
+        return new java.util.ArrayList<>(hordeZombieUuids);
+    }
+
+    /** 【v0.2.86】僵尸状态 NBT key（0=活跃，1=四散） */
+    public static String hordeStateKey() {
+        return HORDE_STATE_KEY;
+    }
+
     private static int countHordeZombies(ServerLevel level) {
         // 改用 hordeZombieUuids Set 统计，避免每 tick 全世界实体扫描（O(全实体数) → O(尸潮僵尸数)）
         // 同时清理已死亡/已揪尸的僵尸UUID，防止僵尸烧死后UUID滞留导致可用名额虚高、持续快速刷新

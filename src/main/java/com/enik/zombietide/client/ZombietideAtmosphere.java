@@ -45,6 +45,12 @@ public final class ZombietideAtmosphere {
     private static int flashUntilTick = 0;
     /** 尸潮预兆强度 0~1（v0.2.78，服务端同步）；黄昏前逐渐增强，触发后归零 */
     private static float omenStrength = 0.0F;
+    /** 服务端下发的威胁目标值（0/1，v0.2.86） */
+    private static float threatTarget = 0.0F;
+    /** 客户端插值后的威胁强度（0~1），用于雾/视距/暗角淡入淡出 */
+    private static float threatStrength = 0.0F;
+    /** 威胁淡入淡出速度：每 tick 变化量（20 tick = 1 秒完成过渡） */
+    private static final float THREAT_LERP_STEP = 0.05F;
     /** 闪光总时长（tick）：0.6 秒，短促不闹 */
     private static final int FLASH_TICKS = 12;
 
@@ -66,6 +72,16 @@ public final class ZombietideAtmosphere {
         omenStrength = Math.max(0.0F, Math.min(1.0F, strength));
     }
 
+    /** 收到服务端的威胁目标值（0/1）；实际强度由客户端逐 tick 插值，实现淡入淡出。 */
+    public static void onThreatReceived(float strength) {
+        threatTarget = Math.max(0.0F, Math.min(1.0F, strength));
+    }
+
+    /** 当前威胁强度（0~1，已插值），供雾/视距/暗角使用 */
+    public static float threatStrength() {
+        return threatStrength;
+    }
+
     /** 断线/换世界时清掉氛围状态，避免重连后误用上一局的 waveStartTick。 */
     public static void reset() {
         clientTicks = 0;
@@ -73,18 +89,27 @@ public final class ZombietideAtmosphere {
         lastWaveActive = false;
         flashUntilTick = 0;
         omenStrength = 0.0F;
+        threatTarget = 0.0F;
+        threatStrength = 0.0F;
     }
 
-    /** 每客户端 tick 记录「波次刚开始」的时刻，供镜头下沉使用。 */
+    /** 每客户端 tick 插值威胁强度（淡入淡出），并记录「威胁刚出现」供镜头下沉。 */
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         clientTicks++;
+        // 威胁强度向目标值线性靠拢（20 tick 完成 0↔1 过渡）
+        if (threatStrength < threatTarget) {
+            threatStrength = Math.min(threatTarget, threatStrength + THREAT_LERP_STEP);
+        } else if (threatStrength > threatTarget) {
+            threatStrength = Math.max(threatTarget, threatStrength - THREAT_LERP_STEP);
+        }
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) {
             lastWaveActive = false;
             return;
         }
-        boolean active = ZombietideHud.isWaveActiveFor(mc.player.getUUID());
+        // 镜头下沉触发源改为威胁从无到有（替代原 waveActive 上升沿）
+        boolean active = threatTarget > 0.5F;
         if (active && !lastWaveActive) {
             waveStartTick = clientTicks;
         }
@@ -111,20 +136,20 @@ public final class ZombietideAtmosphere {
         if (mc.player == null || mc.level == null) return;
         if (!inOverworld(mc)) return;
         UUID id = mc.player.getUUID();
-        boolean wave = ZombietideHud.isWaveActiveFor(id);
         boolean hordeDay = ZombietideHud.isHordeDayFor(id);
-        // v0.2.78：预兆期也生效——黄昏前天色一点点"脏"下去，是"今天不对劲"的铺垫。
-        // 预兆强度与 hordeDay 用同一压色方向，取较强者，避免叠加过暗。
-        if (!wave && !hordeDay && omenStrength <= 0.0F) return;
+        // v0.2.86：波次判定改为「被尸潮僵尸锁定」的插值强度（带淡入淡出）
+        float threat = threatStrength;
+        if (threat <= 0.0F && !hordeDay && omenStrength <= 0.0F) return;
 
-        // 压蓝绿、留一点红，偏"脏"的冷灰；波次中压得更狠
+        // 压蓝绿、留一点红，偏"脏"的冷灰；锁定中压得更狠
         float r = event.getRed();
         float g = event.getGreen();
         float b = event.getBlue();
-        if (wave) {
-            event.setRed(r * 0.70F);
-            event.setGreen(g * 0.72F);
-            event.setBlue(b * 0.80F);
+        if (threat > 0.0F) {
+            // 预兆/尸潮日（0.90）→ 锁定（0.70）按 threat 插值
+            event.setRed(r * (0.90F - 0.20F * threat));
+            event.setGreen(g * (0.90F - 0.18F * threat));
+            event.setBlue(b * (0.93F - 0.13F * threat));
         } else if (hordeDay) {
             event.setRed(r * 0.90F);
             event.setGreen(g * 0.90F);
@@ -145,11 +170,12 @@ public final class ZombietideAtmosphere {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
         if (!inOverworld(mc)) return;
-        if (!ZombietideHud.isWaveActiveFor(mc.player.getUUID())) return;
+        if (threatStrength <= 0.0F) return;
 
+        // 视距随威胁强度渐变：正常视距 → 96 格（逐帧插值，淡入淡出免费）
+        float originalFar = event.getFarPlaneDistance();
         event.setNearPlaneDistance(8.0F);
-        event.setFarPlaneDistance(96.0F);
-        // 必须 cancel 才会采用上面设置的距离
+        event.setFarPlaneDistance(originalFar + (96.0F - originalFar) * threatStrength);
         event.setCanceled(true);
     }
 
@@ -192,13 +218,11 @@ public final class ZombietideAtmosphere {
 
         if (!ClientAtmosphereConfig.vignetteEnabled()) return;
         if (mc.options.hideGui) return;
-        UUID id = mc.player.getUUID();
-        if (!ZombietideHud.isWaveActiveFor(id)) return;
+        if (threatStrength <= 0.0F) return;
 
-        int debt = ZombietideHud.bloodDebtFor(id);
-        // v0.2.72：浓度从 0.28 降到 0.14（原来 HUD 所在 y=4 正好是渐变最浓起点，背后一片黑）。
-        // 现在基础只有一半浓；血债加成减半，最高 0.14+0.11=0.25，仍有压迫但不再糊住画面。
-        float strength = 0.14F + Math.min(0.11F, debt * 0.002F);
+        int debt = ZombietideHud.bloodDebtFor(mc.player.getUUID());
+        // v0.2.72：浓度 0.14 基础 + 0.11 上限（v0.2.86 起再乘威胁强度，实现淡入淡出）
+        float strength = (0.14F + Math.min(0.11F, debt * 0.002F)) * threatStrength;
         int alpha = ((int) (strength * 255.0F) & 0xFF) << 24;
 
         // 只用上下两条水平渐变压暗画面，且把高度从 h*0.18 收到 h*0.12：
