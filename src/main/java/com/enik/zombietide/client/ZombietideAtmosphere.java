@@ -51,7 +51,7 @@ public final class ZombietideAtmosphere {
     /** 威胁淡入淡出速度：每 tick 变化量（20 tick = 1 秒完成过渡） */
     private static final float THREAT_LERP_STEP = 0.05F;
     /** 闪光总时长（tick）：0.6 秒，短促不闹 */
-    private static final int FLASH_TICKS = 12;
+    private static final int FLASH_TICKS = 24;   // 【v0.2.116】12→24 tick（0.6s→1.2s）
 
     private ZombietideAtmosphere() {
     }
@@ -209,7 +209,7 @@ public final class ZombietideAtmosphere {
         if (flashUntilTick > clientTicks && ClientAtmosphereConfig.atmosphereEnabled()) {
             int remain = flashUntilTick - clientTicks;
             float progress = remain / (float) FLASH_TICKS;   // 1 → 0
-            int flashAlpha = ((int) (progress * 46.0F) & 0xFF) << 24;   // 峰值 46/255 ≈ 0.18，短促不刺眼
+            int flashAlpha = ((int) (progress * 170.0F) & 0xFF) << 24;  // 【v0.2.116】峰值 46→170（18%→67%），真正看得见
             // 暗红色 RGB(60,0,0)=0x3C0000 与高位 alpha 按位或 → ARGB 0xAARRGGBB
             g.fill(0, 0, w, h, flashAlpha | 0x3C0000);
         }
