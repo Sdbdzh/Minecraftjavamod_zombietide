@@ -234,7 +234,7 @@ public class HordeSpawner {
 
     /** 每 tick 更新尸潮刷怪状态（分批生成）+ 更新四散僵尸计时器 */
     public static void update(ServerLevel level, ZombietideConfig config) {
-        // 【v0.2.100】尖啸者检查：每 5 tick 扫一次（三段式粒子需要更细的时间粒度）
+        // 【v0.3.00】尖啸者检查：每 5 tick 扫一次（三段式粒子需要更细的时间粒度）
         if (level.getGameTime() % 5L == 0L) {
             checkScreamers(level, config);
         }
@@ -388,7 +388,7 @@ public class HordeSpawner {
      * <p>增援走方案 A：直接往 {@code activeHordes} 剩余数追加，由刷怪引擎自然产出——
      * 不另开独立刷怪路径，黎明清理/血债结算/进度持久化全部复用现有逻辑。
      */
-    /** 【v0.2.101】只给创造/旁观者玩家发尖啸者调试消息（生存玩家看不到，不干扰正常游玩）。 */
+    /** 只给创造/旁观玩家发尖啸者调试消息（生存玩家不打扰），同时写日志。 */
     private static void notifyCreativeDebug(ServerLevel level, String msg) {
         var text = net.minecraft.network.chat.Component.literal("§8[尖啸者调试] §7" + msg);
         for (ServerPlayer p : level.getPlayers(p -> p.isCreative() || p.isSpectator())) {
@@ -445,46 +445,32 @@ public class HordeSpawner {
                             px, py, pz, net.minecraft.sounds.SoundSource.HOSTILE, 1.0F, 1.0F);
                 }
 
-                // 增援：追加 8~12 只到现有波次
-                // 【v0.2.103】接受 AI 锁定的任意活物（玩家或村民）：
-                // 村民尸潮的僵尸锁定的是村民，写死 instanceof ServerPlayer 会让它们永远不叫。
-                // 仍然坚持 AI 锁定判定（不放宽成"附近有谁就叫"），只放宽"目标类型"。
-                if (mob.getTarget() == null || !mob.getTarget().isAlive()) continue;
-                UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
-                if (targetId == null) continue;
-                if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
-
+                // 【v0.2.105】增援：直接调 spawnZombie 在玩家周围生成 8~12 只，
+                // 目标用尖啸者当前锁定的活玩家（不是 NBT 里可能已死的旧 targetId）。
+                // 生成的僵尸带 horde 标记与 AI，黎明由现有清理机制处理。
+                if (!(mob.getTarget() instanceof ServerPlayer player)) continue;
+                UUID reinforceTarget = player.getUUID();
                 int reinforce = 8 + RANDOM.nextInt(5);
-                boolean isVillager = villagerHordeRadii.containsKey(targetId);
-                if (!activeHordes.containsKey(targetId)) {
-                    spawnedCount.put(targetId, 0);
-                    totalCount.put(targetId, reinforce);
-                    batchTimer.put(targetId, Math.max(1, config.batchTick()));
+                int spawned = 0;
+                for (int i = 0; i < reinforce; i++) {
+                    if (spawnZombie(level, reinforceTarget, config, false)) spawned++;
                 }
-                activeHordes.merge(targetId, reinforce, Integer::sum);
-                com.enik.zombietide.config.HordeProgressData.get(level)
-                        .setRemaining(targetId, activeHordes.get(targetId), isVillager);
 
-                EnikZombietide.LOGGER.info("[尖啸者] 僵尸 {} 尖叫（增援 {} 只，剩余 {}，目标 {}）",
-                        mob.getUUID(), reinforce, activeHordes.get(targetId),
-                        mob.getTarget().getType().getDescriptionId());
-                notifyCreativeDebug(level, "尖叫！增援 " + reinforce + " 只 @ " + mob.blockPosition()
-                        + " 目标=" + mob.getTarget().getType().getDescriptionId());
+                EnikZombietide.LOGGER.info("[尖啸者] 僵尸 {} 尖叫，为玩家 {} 增援生成 {} 只",
+                        mob.getUUID(), player.getScoreboardName(), spawned);
+                notifyCreativeDebug(level, "尖叫！增援生成 " + spawned + " 只 @ " + mob.blockPosition());
                 continue;
             }
 
             // ===== 已在蓄力中：等 pending 到点 =====
             if (pending > 0L) continue;
 
-            // ===== 发起蓄力：AI 锁定活物 + 冷却结束 =====
-            // 【v0.2.103】接受玩家或村民（村民尸潮的僵尸锁定村民）。
-            // 仍要求 AI 真正锁定目标，不放宽成"距离判定"。
+            // ===== 发起蓄力：锁定玩家 + 冷却结束 =====
             if (lastScream > 0L && now - lastScream < SCREAMER_COOLDOWN_TICKS) continue;
-            var lockedTarget = mob.getTarget();
-            if (lockedTarget == null || !lockedTarget.isAlive()) continue;
-            UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
-            if (targetId == null) continue;
-            if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
+            if (!(mob.getTarget() instanceof ServerPlayer)) continue;
+            // 【v0.2.105】删除 activeHordes/totalCount 前置检查：
+            // 诊断日志证实 5 只尖啸者全卡在这里——刷怪阶段早已结束（剩余 0），
+            // 但僵尸还活着追玩家。尖叫不该依赖"是否还在刷怪"。
 
             // 蓄力粒子：SCULK_SOUL 延迟 8 tick 出现，形成"向内聚集"的预备感
             level.sendParticles(new net.minecraft.core.particles.ShriekParticleOption((int) SCREAMER_CHARGE_TICKS),
@@ -492,8 +478,7 @@ public class HordeSpawner {
             level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
                     px, py, pz, 24, 1.2, 1.0, 1.2, 0.02);
             tag.putLong(SCREAMER_PENDING_KEY, now + SCREAMER_CHARGE_TICKS);
-            notifyCreativeDebug(level, "蓄力开始（" + SCREAMER_CHARGE_TICKS + " tick 后尖叫）@ " + mob.blockPosition()
-                    + " 目标=" + lockedTarget.getType().getDescriptionId());
+            notifyCreativeDebug(level, "蓄力开始（" + SCREAMER_CHARGE_TICKS + " tick 后尖叫）@ " + mob.blockPosition());
         }
     }
 
