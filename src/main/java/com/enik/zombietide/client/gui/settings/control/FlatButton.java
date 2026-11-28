@@ -6,24 +6,41 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 
+import java.util.function.Supplier;
+
 /**
  * 【v0.2.133】Sodium 风格扁平按钮：无原版纹理，仅 1px 边框 + 纯色底 + 居中文字。
  * <p>用于底栏「重置本页」「完成」。
  * <ul>
  *   <li>{@code accent = true}：主按钮（完成），橙色边框与文字，悬停加深底色</li>
- *   <li>{@code accent = false}：次按钮（重置本页），白色边框与文字</li>
+ *   <li>{@code accent = false}：次按钮（重置本页 / 循环按钮），白色边框与文字</li>
  * </ul>
+ * <p>可选 {@code dynamicText}：每帧取一次文字。循环按钮（血债模式）靠它自动反映新值，
+ * 不需要在点击后手动 {@code setMessage}（手动刷新会在重建列表时打断当前点击事件）。
  */
 public class FlatButton extends AbstractWidget {
 
     private final boolean accent;
     private final Runnable onPress;
+    /** 动态文字（可空）；非空时优先于静态 message */
+    private final Supplier<Component> dynamicText;
 
     public FlatButton(int x, int y, int width, int height, Component text,
                       boolean accent, Runnable onPress) {
+        this(x, y, width, height, text, accent, onPress, null);
+    }
+
+    public FlatButton(int x, int y, int width, int height, Component text,
+                      boolean accent, Runnable onPress, Supplier<Component> dynamicText) {
         super(x, y, width, height, text);
         this.accent = accent;
         this.onPress = onPress;
+        this.dynamicText = dynamicText;
+    }
+
+    /** 当前应显示的文字 */
+    private Component label() {
+        return dynamicText != null ? dynamicText.get() : getMessage();
     }
 
     @Override
@@ -47,8 +64,9 @@ public class FlatButton extends AbstractWidget {
         g.fill(x + w - 1, y, x + w, y + h, border);
 
         Minecraft mc = Minecraft.getInstance();
-        int tw = mc.font.width(getMessage());
-        g.drawString(mc.font, getMessage(),
+        Component label = label();
+        int tw = mc.font.width(label);
+        g.drawString(mc.font, label,
                 x + (w - tw) / 2, y + (h - 8) / 2 + 1, textColor, false);
     }
 
@@ -61,6 +79,6 @@ public class FlatButton extends AbstractWidget {
 
     @Override
     protected void updateWidgetNarration(NarrationElementOutput output) {
-        output.add(net.minecraft.client.gui.narration.NarratedElementType.TITLE, getMessage());
+        output.add(net.minecraft.client.gui.narration.NarratedElementType.TITLE, label());
     }
 }

@@ -20,7 +20,6 @@ import net.minecraft.client.resources.language.I18n;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Renderable;
@@ -922,18 +921,24 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         return slider;
     }
 
-    private Button addCycleButton(OptionEntry e, java.util.function.Supplier<String> valueText,
-                                  int y, Runnable onPress) {
+    /**
+     * 【v0.2.134】循环按钮改用自绘扁平按钮。
+     * <p>文字走 {@code dynamicText} 每帧取值：点击后 onPress 改配置，下一帧自动显示新值，
+     * 无需手动 setMessage（旧写法在重建列表时会打断当前点击）。
+     */
+    private FlatButton addCycleButton(OptionEntry e, java.util.function.Supplier<String> valueText,
+                                      int y, Runnable onPress) {
         this.tabLabels.add(new LabelData(labelTextFor(e),
                 contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
         this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, e));
-        Button btn = Button.builder(Component.literal(valueText.get()), b -> {
-            onPress.run();
-            pushConfig();
-            // 直接刷新按钮文字，避免重建整页（重建会打断当前点击事件）
-            b.setMessage(Component.literal(valueText.get()));
-        }).bounds(controlX(), y + (ROW_HEIGHT - FIELD_HEIGHT) / 2,
-                controlWidth(), FIELD_HEIGHT).build();
+        FlatButton btn = new FlatButton(
+                controlX(), y + (ROW_HEIGHT - FIELD_HEIGHT) / 2, controlWidth(), FIELD_HEIGHT,
+                Component.literal(valueText.get()), false,
+                () -> {
+                    onPress.run();
+                    pushConfig();
+                },
+                () -> Component.literal(valueText.get()));
         this.addRenderableWidget(btn);
         return btn;
     }
