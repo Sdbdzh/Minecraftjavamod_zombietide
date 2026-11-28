@@ -220,19 +220,9 @@ public final class ZombietideAtmosphere {
             // 上/下：边缘暗红 → 中心透明
             g.fillGradient(0, 0, w, edgeH, borderAlpha | red, clear);
             g.fillGradient(0, h - edgeH, w, h, clear, borderAlpha | red);
-            // 【v0.2.118】左右要水平渐变，但 MC 的 fillGradient 只做垂直渐变
-            // （左列固定色1、右列固定色2）。改用逐列窄条 fill 模拟水平渐变。
-            int maxA = (borderAlpha >>> 24) & 0xFF;
-            int cols = Math.min(24, edgeW);
-            for (int i = 0; i < cols; i++) {
-                float t = i / (float) (cols - 1);          // 0=边缘 → 1=中心
-                int a = (int) (maxA * (1.0F - t));
-                int col = (a << 24) | red;
-                int x1 = (edgeW * i) / cols;
-                int x2 = (edgeW * (i + 1)) / cols;
-                g.fill(x1, edgeH, x2 + 1, h - edgeH, col);            // 左
-                g.fill(w - x2 - 1, edgeH, w - x1, h - edgeH, col);    // 右（镜像）
-            }
+            // 【v0.2.119】左右用 VertexConsumer 直接画 4 顶点，GPU 水平插值（无竖条纹）
+            drawHorizontalGradient(g, 0, edgeW, edgeH, h - edgeH, borderAlpha | red, clear);
+            drawHorizontalGradient(g, w - edgeW, w, edgeH, h - edgeH, clear, borderAlpha | red);
         }
 
         // 触发瞬间的全屏暗红闪烁（短促），叠在边框之上
@@ -242,6 +232,21 @@ public final class ZombietideAtmosphere {
             int flashAlpha = ((int) (progress * 170.0F) & 0xFF) << 24;  // 峰值 67%
             g.fill(0, 0, w, h, flashAlpha | 0x3C0000);
         }
+    }
 
+    /**
+     * 【v0.2.119】画纯水平渐变矩形：左边界 leftColor、右边界 rightColor，GPU 线性插值。
+     * MC 自带 fillGradient 只做垂直渐变；逐列 fill 有可见竖条纹。
+     * 直接塞 4 个顶点（左两个用 leftColor、右两个用 rightColor），插值天然平滑。
+     */
+    private static void drawHorizontalGradient(net.minecraft.client.gui.GuiGraphics g,
+                                               int x1, int x2, int y1, int y2,
+                                               int leftColor, int rightColor) {
+        var vc = g.bufferSource().getBuffer(net.minecraft.client.renderer.RenderType.gui());
+        var matrix = g.pose().last().pose();
+        vc.addVertex(matrix, (float) x1, (float) y1, 0.0F).setColor(leftColor);
+        vc.addVertex(matrix, (float) x1, (float) y2, 0.0F).setColor(leftColor);
+        vc.addVertex(matrix, (float) x2, (float) y2, 0.0F).setColor(rightColor);
+        vc.addVertex(matrix, (float) x2, (float) y1, 0.0F).setColor(rightColor);
     }
 }
