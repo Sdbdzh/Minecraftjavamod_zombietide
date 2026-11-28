@@ -294,5 +294,11 @@
   "zombietide.settings.atmo.item5.tip": "纯视觉冲击，不影响玩法。",
   "zombietide.settings.atmo.item6.name": "常驻红边",
   "zombietide.settings.atmo.item6.desc": "尸潮中屏幕四周泛红，附近尸潮僵尸越多越红",
-  "zombietide.settings.atmo.item6.tip": "纯视觉氛围，僵尸散去后自动消失。"
+  "zombietide.settings.atmo.item6.tip": "纯视觉氛围，僵尸散去后自动消失。",
+  "zombietide.settings.spawn.item13.name": "尖啸冷却基准（秒）",
+  "zombietide.settings.spawn.item13.desc": "尖啸者两次尖叫之间的基准冷却秒数",
+  "zombietide.settings.spawn.item13.tip": "默认 100 秒。范围 10~600。实际冷却为基准 ± 浮动。存档级设置。",
+  "zombietide.settings.spawn.item14.name": "尖啸冷却浮动（秒）",
+  "zombietide.settings.spawn.item14.desc": "在基准冷却上随机加减的秒数",
+  "zombietide.settings.spawn.item14.tip": "默认 20 秒（即 80~120 秒）。范围 0~300，会自动限制不超过基准。存档级设置。"
 }

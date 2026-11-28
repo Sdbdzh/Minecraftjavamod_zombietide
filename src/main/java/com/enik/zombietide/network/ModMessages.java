@@ -349,6 +349,8 @@ public class ModMessages {
                 buf.writeFloat(c.distanceWeight());
                 buf.writeFloat(c.darkWeight());
                 buf.writeBoolean(c.screamerEnabled());
+                buf.writeInt(c.screamerCooldownBase());
+                buf.writeInt(c.screamerCooldownJitter());
                 // 全局上限
                 buf.writeInt(c.globalCap());
                 // 世界规则
@@ -418,6 +420,8 @@ public class ModMessages {
                 float distanceWeight = buf.readFloat();
                 float darkWeight = buf.readFloat();
                 boolean screamerEnabled = buf.readBoolean();
+                int screamerCooldownBase = buf.readInt();
+                int screamerCooldownJitter = buf.readInt();
                 // 全局上限
                 int globalCap = buf.readInt();
                 // 世界规则
@@ -465,7 +469,7 @@ public class ModMessages {
                         ),
                         new ZombietideConfig.SpawnConfig(
                                 batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome,
-                                minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled
+                                minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownBase, screamerCooldownJitter
                         ),
                         new ZombietideConfig.WorldConfig(
                                 globalCap, daylightBurn, blockSleep,

@@ -423,6 +423,18 @@ public class ZombietideSettingsScreen extends Screen {
                         config.screamerEnabled(), centerX, y,
                         (cb, v) -> config = config.withScreamerEnabled(v), false);
                 y += ROW_HEIGHT;
+                addIntField("zombietide.settings.spawn.item13.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item13.desc",
+                        "zombietide.settings.spawn.item13.tip",
+                        config.screamerCooldownBase(), centerX, y, 10, 600,
+                        v -> config = config.withScreamerCooldownBase(v), false);
+                y += ROW_HEIGHT;
+                addIntField("zombietide.settings.spawn.item14.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item14.desc",
+                        "zombietide.settings.spawn.item14.tip",
+                        config.screamerCooldownJitter(), centerX, y, 0, 300,
+                        v -> config = config.withScreamerCooldownJitter(v), false);
+                y += ROW_HEIGHT;
                 addCheckbox("zombietide.settings.spawn.item8.name", Scope.WORLD,
                         "zombietide.settings.spawn.item8.desc",
                         "zombietide.settings.spawn.item8.tip",
