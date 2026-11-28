@@ -124,6 +124,10 @@ public class ModMessages {
     public static final ResourceLocation HORDE_FLASH_ID = ResourceLocation.fromNamespaceAndPath(
             "enik_zombietide", "horde_flash");
 
+    /** 服务端 -> 客户端：尸潮预兆强度（v0.2.78）。0=无预兆，0~1=黄昏前逐渐增强。 */
+    public static final ResourceLocation OMEN_ID = ResourceLocation.fromNamespaceAndPath(
+            "enik_zombietide", "omen");
+
     /** 村民职业 registry key 的编解码长度上限（两侧必须一致）。原版最长约 21 字符，64 留足余量 */
     public static final int MAX_PROFESSION_KEY_LEN = 64;
 
@@ -205,6 +209,28 @@ public class ModMessages {
             @Override
             public HordeFlashPayload decode(FriendlyByteBuf buf) {
                 return INSTANCE;
+            }
+        };
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** 服务端 -> 客户端：尸潮预兆强度（0=无，越大越接近黄昏）。 */
+    public record OmenPayload(float strength) implements CustomPacketPayload {
+        public static final Type<OmenPayload> TYPE = new Type<>(OMEN_ID);
+
+        public static final StreamCodec<FriendlyByteBuf, OmenPayload> STREAM_CODEC = new StreamCodec<>() {
+            @Override
+            public void encode(FriendlyByteBuf buf, OmenPayload payload) {
+                buf.writeFloat(payload.strength);
+            }
+
+            @Override
+            public OmenPayload decode(FriendlyByteBuf buf) {
+                return new OmenPayload(buf.readFloat());
             }
         };
 
@@ -490,6 +516,13 @@ public class ModMessages {
                                 ZombietideAtmosphere.onHordeFlash();
                             });
                         })
+                // 服务端 -> 客户端：尸潮预兆强度
+                .playToClient(OmenPayload.TYPE, OmenPayload.STREAM_CODEC,
+                        (payload, context) -> {
+                            context.enqueueWork(() -> {
+                                ZombietideAtmosphere.onOmenReceived(payload.strength());
+                            });
+                        })
                 // 服务端 -> 客户端：村民广播批次开始
                 .playToClient(VillagerBroadcastStartPayload.TYPE, VillagerBroadcastStartPayload.STREAM_CODEC,
                         (payload, context) -> {
@@ -595,6 +628,11 @@ public class ModMessages {
     /** 尸潮触发瞬间的一次性视觉冲击（暗红闪烁），只发给指定玩家 */
     public static void sendHordeFlash(ServerPlayer player) {
         PacketDistributor.sendToPlayer(player, HordeFlashPayload.INSTANCE);
+    }
+
+    /** 发送尸潮预兆强度给指定玩家（0=无） */
+    public static void sendOmen(ServerPlayer player, float strength) {
+        PacketDistributor.sendToPlayer(player, new OmenPayload(strength));
     }
 
     /** 将村民职业 registry key 提取，返回标准格式 "namespace:path"，保证不泄露 Holder 包装格式到 UI */

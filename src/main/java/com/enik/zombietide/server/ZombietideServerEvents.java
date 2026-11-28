@@ -9,6 +9,7 @@ import com.enik.zombietide.config.VillagerScheduleData;
 import com.enik.zombietide.config.ZombietideConfig;
 import com.enik.zombietide.config.ZombietideConfigData;
 import com.enik.zombietide.horde.HordeBgmScheduler;
+import com.enik.zombietide.horde.HordeOmenScheduler;
 import com.enik.zombietide.horde.HordeSpawner;
 import com.enik.zombietide.horde.HordeTimer;
 import com.enik.zombietide.network.ModMessages;
@@ -61,6 +62,7 @@ public class ZombietideServerEvents {
     @SubscribeEvent
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         HordeBgmScheduler.onPlayerLogout(event.getEntity().getUUID());
+        HordeOmenScheduler.onPlayerLogout(event.getEntity().getUUID());
     }
 
     /** 玩家登入：将当前配置发送给客户端，同步模组天数 */
@@ -232,6 +234,9 @@ public class ZombietideServerEvents {
 
         // 定制背景音乐调度（仅玩家尸潮触发者，每 30s~2min 随机播放一段）
         HordeBgmScheduler.onServerTick(overworld, data.getConfig());
+
+        // 尸潮预兆调度（黄昏前天色渐变 + 极低音量 drone 铺垫，v0.2.78）
+        HordeOmenScheduler.onServerTick(overworld, data.getConfig(), overworld.getGameTime());
 
         // 周期性广播村民模组天数给客户端（每 20 tick = 1 秒），确保 HUD 村民尸潮信息实时刷新
         villagerModDayBroadcastTick++;

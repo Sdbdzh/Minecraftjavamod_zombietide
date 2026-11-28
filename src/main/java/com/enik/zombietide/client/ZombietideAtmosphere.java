@@ -43,6 +43,8 @@ public final class ZombietideAtmosphere {
     private static boolean lastWaveActive = false;
     /** 触发闪光截止 tick（客户端 tick 计数），0 表示当前无闪光 */
     private static int flashUntilTick = 0;
+    /** 尸潮预兆强度 0~1（v0.2.78，服务端同步）；黄昏前逐渐增强，触发后归零 */
+    private static float omenStrength = 0.0F;
     /** 闪光总时长（tick）：0.6 秒，短促不闹 */
     private static final int FLASH_TICKS = 12;
 
@@ -54,12 +56,18 @@ public final class ZombietideAtmosphere {
         flashUntilTick = clientTicks + FLASH_TICKS;
     }
 
+    /** 收到服务端的预兆强度（0~1）。 */
+    public static void onOmenReceived(float strength) {
+        omenStrength = Math.max(0.0F, Math.min(1.0F, strength));
+    }
+
     /** 断线/换世界时清掉氛围状态，避免重连后误用上一局的 waveStartTick。 */
     public static void reset() {
         clientTicks = 0;
         waveStartTick = -10000;
         lastWaveActive = false;
         flashUntilTick = 0;
+        omenStrength = 0.0F;
     }
 
     /** 每客户端 tick 记录「波次刚开始」的时刻，供镜头下沉使用。 */
@@ -100,7 +108,9 @@ public final class ZombietideAtmosphere {
         UUID id = mc.player.getUUID();
         boolean wave = ZombietideHud.isWaveActiveFor(id);
         boolean hordeDay = ZombietideHud.isHordeDayFor(id);
-        if (!wave && !hordeDay) return;
+        // v0.2.78：预兆期也生效——黄昏前天色一点点"脏"下去，是"今天不对劲"的铺垫。
+        // 预兆强度与 hordeDay 用同一压色方向，取较强者，避免叠加过暗。
+        if (!wave && !hordeDay && omenStrength <= 0.0F) return;
 
         // 压蓝绿、留一点红，偏"脏"的冷灰；波次中压得更狠
         float r = event.getRed();
@@ -110,10 +120,15 @@ public final class ZombietideAtmosphere {
             event.setRed(r * 0.70F);
             event.setGreen(g * 0.72F);
             event.setBlue(b * 0.80F);
-        } else {
+        } else if (hordeDay) {
             event.setRed(r * 0.90F);
             event.setGreen(g * 0.90F);
             event.setBlue(b * 0.93F);
+        } else {
+            // 预兆强度 0~1：从几乎无变化（1.0）渐变到尸潮日的偏冷（0.90/0.93）
+            event.setRed(r * (1.0F - 0.10F * omenStrength));
+            event.setGreen(g * (1.0F - 0.10F * omenStrength));
+            event.setBlue(b * (1.0F - 0.07F * omenStrength));
         }
     }
 

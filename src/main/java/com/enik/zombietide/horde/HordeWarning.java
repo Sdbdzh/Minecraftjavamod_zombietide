@@ -97,6 +97,12 @@ public class HordeWarning {
 
         // 【v0.2.73】触发瞬间的一次性暗红闪烁（0.6 秒），客户端渲染，只发给目标玩家
         com.enik.zombietide.network.ModMessages.sendHordeFlash(player);
+        // 【v0.2.78】触发即清预兆状态：服务端下发强度 0 并清调度档位，
+        // 否则预兆的极低音量 drone 会与波次期 drone 叠加。
+        com.enik.zombietide.horde.HordeOmenScheduler.onHordeStart(player.getUUID());
+        com.enik.zombietide.network.ModMessages.sendOmen(player, 0.0F);
+        // 预兆 drone 与波次 drone 是同一个 SoundEvent，必须先掐掉再让 BGM 调度器重新起播
+        com.enik.zombietide.sound.ModSounds.stopDroneForPlayer(player);
 
         // 突袭旁白：无条件发送，从语言文件随机抽 1 段
         int index = RANDOM.nextInt(AMBUSH_LINE_COUNT) + 1;
