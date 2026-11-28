@@ -288,5 +288,11 @@
   "zombietide.settings.version": "版本号",
   "zombietide.settings.hud.item14.name": "DAY X 渐进红",
   "zombietide.settings.hud.item14.desc": "DAY X 随时间逐渐变红，到尸潮预兆期开始时刚好全红",
-  "zombietide.settings.hud.item14.tip": "从上次尸潮结束后开始渐变。关闭后回退为「尸潮日红 / 其余白」。"
+  "zombietide.settings.hud.item14.tip": "从上次尸潮结束后开始渐变。关闭后回退为「尸潮日红 / 其余白」。",
+  "zombietide.settings.atmo.item5.name": "触发暗红闪烁",
+  "zombietide.settings.atmo.item5.desc": "尸潮触发瞬间全屏闪一下暗红",
+  "zombietide.settings.atmo.item5.tip": "纯视觉冲击，不影响玩法。",
+  "zombietide.settings.atmo.item6.name": "常驻红边",
+  "zombietide.settings.atmo.item6.desc": "尸潮中屏幕四周泛红，附近尸潮僵尸越多越红",
+  "zombietide.settings.atmo.item6.tip": "纯视觉氛围，僵尸散去后自动消失。"
 }

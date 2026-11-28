@@ -288,5 +288,11 @@
   "zombietide.settings.version": "Version",
   "zombietide.settings.hud.item14.name": "Gradient red DAY X",
   "zombietide.settings.hud.item14.desc": "DAY X gradually turns red, fully red when the omen window begins",
-  "zombietide.settings.hud.item14.tip": "Gradient starts after the last horde ends. Disable to fall back to red on horde day / white otherwise."
+  "zombietide.settings.hud.item14.tip": "Gradient starts after the last horde ends. Disable to fall back to red on horde day / white otherwise.",
+  "zombietide.settings.atmo.item5.name": "Horde Trigger Flash",
+  "zombietide.settings.atmo.item5.desc": "Brief full-screen red flash on horde trigger",
+  "zombietide.settings.atmo.item5.tip": "Visual only, no gameplay effect.",
+  "zombietide.settings.atmo.item6.name": "Persistent Red Border",
+  "zombietide.settings.atmo.item6.desc": "Red vignette during hordes, stronger with more nearby horde zombies",
+  "zombietide.settings.atmo.item6.tip": "Visual only, fades away when zombies disperse."
 }

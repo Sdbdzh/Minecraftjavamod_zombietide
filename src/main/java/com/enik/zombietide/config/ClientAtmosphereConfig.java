@@ -29,6 +29,10 @@ public final class ClientAtmosphereConfig {
     private static boolean fogEnabled = true;
     /** 触发瞬间的镜头轻微下沉（默认关：3D 敏感玩家较多） */
     private static boolean cameraShakeEnabled = false;
+    /** 【v0.2.121】触发瞬间的全屏暗红闪烁 */
+    private static boolean flashEnabled = true;
+    /** 【v0.2.121】波次中常驻的红色边框 */
+    private static boolean borderEnabled = true;
 
     private static boolean loaded = false;
 
@@ -50,11 +54,23 @@ public final class ClientAtmosphereConfig {
         return atmosphereEnabled && cameraShakeEnabled;
     }
 
+    /** 【v0.2.121】暗红闪烁是否启用（含总开关） */
+    public static boolean flashEnabled() {
+        ensureLoaded();
+        return atmosphereEnabled && flashEnabled;
+    }
+
+    /** 【v0.2.121】常驻红边是否启用（含总开关） */
+    public static boolean borderEnabled() {
+        ensureLoaded();
+        return atmosphereEnabled && borderEnabled;
+    }
+
     /**
      * 【设置界面专用】返回原始存储值，**不带总开关 AND**。
      * <p>v0.2.74 修复：设置页总开关回调若用 {@link #fogEnabled()} 这类派生 getter，
      * 在总开关关闭期间取值会全是 false，重新开启总开关时会把子项全部写成 false 并落盘。
-     * 设置界面保存 3 个开关时必须用这 3 个 raw getter。
+     * 设置界面保存 5 个开关时必须用这 5 个 raw getter。
      */
     public static boolean rawFogEnabled() {
         ensureLoaded();
@@ -67,11 +83,25 @@ public final class ClientAtmosphereConfig {
         return cameraShakeEnabled;
     }
 
-    public static synchronized void set(boolean atmosphere, boolean fog, boolean shake) {
+    /** 见 {@link #rawFogEnabled()}：设置界面保存用的原始值 */
+    public static boolean rawFlashEnabled() {
+        ensureLoaded();
+        return flashEnabled;
+    }
+
+    /** 见 {@link #rawFogEnabled()}：设置界面保存用的原始值 */
+    public static boolean rawBorderEnabled() {
+        ensureLoaded();
+        return borderEnabled;
+    }
+
+    public static synchronized void set(boolean atmosphere, boolean fog, boolean shake, boolean flash, boolean border) {
         ensureLoaded();
         atmosphereEnabled = atmosphere;
         fogEnabled = fog;
         cameraShakeEnabled = shake;
+        flashEnabled = flash;
+        borderEnabled = border;
         save();
     }
 
@@ -92,6 +122,8 @@ public final class ClientAtmosphereConfig {
         atmosphereEnabled = bool(p, "atmosphereEnabled", true);
         fogEnabled = bool(p, "fogEnabled", true);
         cameraShakeEnabled = bool(p, "cameraShakeEnabled", false);
+        flashEnabled = bool(p, "flashEnabled", true);
+        borderEnabled = bool(p, "borderEnabled", true);
     }
 
     private static void save() {
@@ -99,6 +131,8 @@ public final class ClientAtmosphereConfig {
         p.setProperty("atmosphereEnabled", String.valueOf(atmosphereEnabled));
         p.setProperty("fogEnabled", String.valueOf(fogEnabled));
         p.setProperty("cameraShakeEnabled", String.valueOf(cameraShakeEnabled));
+        p.setProperty("flashEnabled", String.valueOf(flashEnabled));
+        p.setProperty("borderEnabled", String.valueOf(borderEnabled));
         try {
             Files.createDirectories(FILE.getParent());
             try (OutputStream out = Files.newOutputStream(FILE)) {

@@ -211,7 +211,7 @@ public final class ZombietideAtmosphere {
         // 用 alpha 从强到弱线性衰减，0.6 秒内结束；这是"火光抖一下"的视觉替代（不改 gamma/shader）。
         // 【v0.2.117】常驻红色边框：强度随威胁强度（= 周围尸潮僵尸数量）实时变化。
         // 波次中一直有，黎明僵尸散去后 threatStrength 归零 → 边框自然消失。
-        if (ClientAtmosphereConfig.atmosphereEnabled() && threatStrength > 0.0F && !mc.options.hideGui) {
+        if (ClientAtmosphereConfig.borderEnabled() && threatStrength > 0.0F && !mc.options.hideGui) {
             int edgeW = Math.max(8, (int) (w * 0.18F));
             int edgeH = Math.max(8, (int) (h * 0.18F));
             int borderAlpha = ((int) (threatStrength * 130.0F) & 0xFF) << 24;  // 0~130（约 51%）
@@ -227,7 +227,7 @@ public final class ZombietideAtmosphere {
         }
 
         // 触发瞬间的全屏暗红闪烁（短促），叠在边框之上
-        if (flashUntilTick > clientTicks && ClientAtmosphereConfig.atmosphereEnabled()) {
+        if (flashUntilTick > clientTicks && ClientAtmosphereConfig.flashEnabled()) {
             int remain = flashUntilTick - clientTicks;
             float progress = remain / (float) FLASH_TICKS;   // 1 → 0
             int flashAlpha = ((int) (progress * 170.0F) & 0xFF) << 24;  // 峰值 67%

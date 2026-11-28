@@ -17,11 +17,11 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 尸潮威胁检测（v0.2.86）：统一的氛围/音频判定入口——**氛围 = 玩家正被尸潮僵尸锁定**。
+ * 尸潮威胁检测（v0.2.121）：统一的氛围/音频判定入口。
  * <p>
- * 不再区分尸潮是玩家触发还是村民触发：只要某只带 horde 标记的僵尸的 {@code getTarget()}
- * 是该玩家，就认为该玩家"身处威胁"，享受 drone + 视觉氛围；僵尸四散（state==1 会
- * {@code setTarget(null)}）或改打别人后，威胁自然消失。
+ * <b>强度 = 玩家附近 64 格内的活跃尸潮僵尸数量</b>（不限触发者，只认 horde 标记），
+ * 20 只或以上为满强度 1.0。不再依赖"是否被锁定"——这样红边能随周围僵尸数量实时变化。
+ * 僵尸四散（state==1）不计入。
  * <p><b>去抖</b>：索敌每 20 tick 刷新一次且可能在多个目标间横跳，因此用连续计数——
  * 连续 {@link #DEBOUNCE_SAMPLES} 次（3 秒）判定"被锁定"才激活，连续 3 秒"没被锁定"才关闭。
  * <p>状态只在内存，每 20 tick 评估一次；发包只在状态**变化**时，不每 tick 刷。
@@ -36,6 +36,8 @@ public final class HordeThreatDetector {
     private static final Map<UUID, Integer> DEBOUNCE = new HashMap<>();
     /** 玩家 UUID -> 当前威胁是否激活（权威状态） */
     private static final Map<UUID, Boolean> ACTIVE = new HashMap<>();
+    /** 玩家 UUID -> 上次下发的强度（避免重复发包） */
+    private static final Map<UUID, Float> LAST_STRENGTH = new HashMap<>();
 
     private HordeThreatDetector() {
     }
@@ -53,12 +55,16 @@ public final class HordeThreatDetector {
             boolean eligible = player.level().dimension() == Level.OVERWORLD
                     && player.serverLevel().getDifficulty() != Difficulty.PEACEFUL
                     && !player.isCreative() && !player.isSpectator();
-            boolean locked = eligible && isLockedByHordeZombie(overworld, player);
+            int nearby = eligible ? countNearbyHordeZombies(overworld, player) : 0;
+            // 【v0.2.122】不设封顶数量：渐近曲线 strength = count/(count+32)
+            // 1只≈0.03  10只≈0.24  32只=0.5  64只≈0.67  128只≈0.8  256只≈0.89
+            // 僵尸越多红边越深，但永不突兀"满"，也没有硬上限。
+            float strength = nearby / (float) (nearby + 32);
 
-            // 去抖：连续 N 次一致才翻转
+            // 去抖：连续 N 次接近才算状态翻转（0↔非0 用原计数器，强度用平滑插值由客户端做）
             int counter = DEBOUNCE.getOrDefault(id, 0);
-            counter = locked ? Math.min(DEBOUNCE_SAMPLES, counter + 1)
-                             : Math.max(-DEBOUNCE_SAMPLES, counter - 1);
+            counter = nearby > 0 ? Math.min(DEBOUNCE_SAMPLES, counter + 1)
+                                 : Math.max(-DEBOUNCE_SAMPLES, counter - 1);
             DEBOUNCE.put(id, counter);
 
             boolean current = Boolean.TRUE.equals(ACTIVE.get(id));
@@ -66,9 +72,13 @@ public final class HordeThreatDetector {
             if (!current && counter >= DEBOUNCE_SAMPLES) next = true;
             else if (current && counter <= -DEBOUNCE_SAMPLES) next = false;
 
-            if (next == current) continue;
+            // 发包：强度变化超过阈值才发（避免每 tick 刷包），状态翻转时必发
+            Float lastSent = LAST_STRENGTH.get(id);
+            boolean changed = next != current || lastSent == null || Math.abs(lastSent - strength) >= 0.05F;
+            if (!changed && next == current) continue;
             ACTIVE.put(id, next);
-            ModMessages.sendThreat(player, next ? 1.0F : 0.0F);
+            LAST_STRENGTH.put(id, strength);
+            ModMessages.sendThreat(player, next ? strength : 0.0F);
 
             // 音频：激活时起播 drone 并静默原版音乐；关闭时停掉 drone
             if (next) {
@@ -85,18 +95,19 @@ public final class HordeThreatDetector {
     }
 
     /**
-     * 是否有**活着的尸潮僵尸**正锁定该玩家。
-     * <p>遍历 {@code hordeZombieUuids}（O(尸潮僵尸数)，不是全实体表）；只认 state==0 的活跃僵尸，
-     * 四散态（state==1）已 {@code setTarget(null)} 不算。
+     * 【v0.2.121】统计玩家附近 64 格内的活跃尸潮僵尸数（不限触发者）。
+     * <p>遍历 {@code hordeZombieUuids}（O(尸潮僵尸数)）；只认 state==0 的活跃僵尸。
      */
-    private static boolean isLockedByHordeZombie(ServerLevel level, ServerPlayer player) {
+    private static int countNearbyHordeZombies(ServerLevel level, ServerPlayer player) {
+        int count = 0;
+        double maxDistSq = 64.0 * 64.0;
         for (UUID zombieUuid : HordeSpawner.getHordeZombieIds()) {
             var entity = level.getEntity(zombieUuid);
             if (!(entity instanceof Mob mob) || !mob.isAlive()) continue;
             if (mob.getPersistentData().getInt(HordeSpawner.hordeStateKey()) != 0) continue;
-            if (mob.getTarget() == player) return true;
+            if (mob.distanceToSqr(player) <= maxDistSq) count++;
         }
-        return false;
+        return count;
     }
 
     /** 玩家是否处于威胁态（供其它系统查询） */
@@ -108,6 +119,7 @@ public final class HordeThreatDetector {
     public static void onPlayerLogout(UUID playerId) {
         ACTIVE.remove(playerId);
         DEBOUNCE.remove(playerId);
+        LAST_STRENGTH.remove(playerId);
     }
 
     /** 服务器启动/清场时全清。
@@ -116,6 +128,7 @@ public final class HordeThreatDetector {
     public static void reset(net.minecraft.server.MinecraftServer server) {
         ACTIVE.clear();
         DEBOUNCE.clear();
+        LAST_STRENGTH.clear();
         if (server != null && server.getPlayerList() != null) {
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 ModMessages.sendThreat(player, 0.0F);

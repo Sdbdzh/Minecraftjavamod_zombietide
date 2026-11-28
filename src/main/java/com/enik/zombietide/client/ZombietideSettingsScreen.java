@@ -646,7 +646,9 @@ public class ZombietideSettingsScreen extends Screen {
                         com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(), centerX, y,
                         (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(v,
                                 com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled()), true);
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFlashEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawBorderEnabled()), true);
                 y += ROW_HEIGHT;
                 addCheckbox("zombietide.settings.atmo.item2.name", null,
                         "zombietide.settings.atmo.item2.desc",
@@ -654,7 +656,9 @@ public class ZombietideSettingsScreen extends Screen {
                         com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(), centerX, y,
                         (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
                                 com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(), v,
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled()), true);
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFlashEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawBorderEnabled()), true);
                 y += ROW_HEIGHT;
                 addCheckbox("zombietide.settings.atmo.item4.name", null,
                         "zombietide.settings.atmo.item4.desc",
@@ -662,7 +666,29 @@ public class ZombietideSettingsScreen extends Screen {
                         com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled(), centerX, y,
                         (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
                                 com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(), v), true);
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(), v,
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFlashEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawBorderEnabled()), true);
+                y += ROW_HEIGHT;
+                addCheckbox("zombietide.settings.atmo.item5.name", null,
+                        "zombietide.settings.atmo.item5.desc",
+                        "zombietide.settings.atmo.item5.tip",
+                        com.enik.zombietide.config.ClientAtmosphereConfig.rawFlashEnabled(), centerX, y,
+                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
+                                com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled(), v,
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawBorderEnabled()), true);
+                y += ROW_HEIGHT;
+                addCheckbox("zombietide.settings.atmo.item6.name", null,
+                        "zombietide.settings.atmo.item6.desc",
+                        "zombietide.settings.atmo.item6.tip",
+                        com.enik.zombietide.config.ClientAtmosphereConfig.rawBorderEnabled(), centerX, y,
+                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
+                                com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled(),
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFlashEnabled(), v), true);
                 y += ROW_HEIGHT;
             }
         }
