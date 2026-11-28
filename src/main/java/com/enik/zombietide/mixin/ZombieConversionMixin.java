@@ -29,6 +29,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Zombie.class)
 public abstract class ZombieConversionMixin {
 
+    /** 【v0.2.113】首次转化打 info（确认机制生效），之后打 debug 避免刷屏 */
+    private static boolean zombietide$loggedOnce = false;
+
     @Inject(
         method = "convertToZombieType",
         at = @At("RETURN")
@@ -55,7 +58,15 @@ public abstract class ZombieConversionMixin {
         // 重新纳入追踪集合（旧 UUID 已随实体 discard 移除）
         HordeSpawner.retrackConvertedZombie(level, converted.getUUID(), old.getUUID());
 
-        EnikZombietide.LOGGER.info("[尸潮] 僵尸 {} 转化为 {}，已精确保留尸潮标记与 AI",
-                converted.getUUID(), type.getDescriptionId());
+        // 【v0.2.113】首次转化打 info 确认机制生效，后续降 debug 避免刷屏
+        // （一波几十只僵尸落水会各打一条，全 info 会很吵）
+        if (!zombietide$loggedOnce) {
+            zombietide$loggedOnce = true;
+            EnikZombietide.LOGGER.info("[尸潮] 僵尸转化保留机制已启用（首次：{} → {}）",
+                    converted.getUUID(), type.getDescriptionId());
+        } else {
+            EnikZombietide.LOGGER.debug("[尸潮] 僵尸 {} 转化为 {}，已精确保留尸潮标记与 AI",
+                    converted.getUUID(), type.getDescriptionId());
+        }
     }
 }
