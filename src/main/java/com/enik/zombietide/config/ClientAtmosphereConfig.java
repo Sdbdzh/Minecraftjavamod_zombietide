@@ -23,12 +23,10 @@ public final class ClientAtmosphereConfig {
 
     private static final Path FILE = FMLPaths.CONFIGDIR.get().resolve("enik_zombietide-atmosphere.properties");
 
-    /** 氛围效果总开关：关掉后雾、暗角、抖动全部不生效 */
+    /** 氛围效果总开关：关掉后雾、抖动全部不生效 */
     private static boolean atmosphereEnabled = true;
     /** 尸潮日/波次中的雾色与视距变化 */
     private static boolean fogEnabled = true;
-    /** 波次中的屏幕暗角 */
-    private static boolean vignetteEnabled = true;
     /** 触发瞬间的镜头轻微下沉（默认关：3D 敏感玩家较多） */
     private static boolean cameraShakeEnabled = false;
 
@@ -47,11 +45,6 @@ public final class ClientAtmosphereConfig {
         return atmosphereEnabled && fogEnabled;
     }
 
-    public static boolean vignetteEnabled() {
-        ensureLoaded();
-        return atmosphereEnabled && vignetteEnabled;
-    }
-
     public static boolean cameraShakeEnabled() {
         ensureLoaded();
         return atmosphereEnabled && cameraShakeEnabled;
@@ -61,17 +54,11 @@ public final class ClientAtmosphereConfig {
      * 【设置界面专用】返回原始存储值，**不带总开关 AND**。
      * <p>v0.2.74 修复：设置页总开关回调若用 {@link #fogEnabled()} 这类派生 getter，
      * 在总开关关闭期间取值会全是 false，重新开启总开关时会把子项全部写成 false 并落盘。
-     * 设置界面保存 4 个开关时必须用这 4 个 raw getter。
+     * 设置界面保存 3 个开关时必须用这 3 个 raw getter。
      */
     public static boolean rawFogEnabled() {
         ensureLoaded();
         return fogEnabled;
-    }
-
-    /** 见 {@link #rawFogEnabled()}：设置界面保存用的原始值 */
-    public static boolean rawVignetteEnabled() {
-        ensureLoaded();
-        return vignetteEnabled;
     }
 
     /** 见 {@link #rawFogEnabled()}：设置界面保存用的原始值 */
@@ -80,11 +67,10 @@ public final class ClientAtmosphereConfig {
         return cameraShakeEnabled;
     }
 
-    public static synchronized void set(boolean atmosphere, boolean fog, boolean vignette, boolean shake) {
+    public static synchronized void set(boolean atmosphere, boolean fog, boolean shake) {
         ensureLoaded();
         atmosphereEnabled = atmosphere;
         fogEnabled = fog;
-        vignetteEnabled = vignette;
         cameraShakeEnabled = shake;
         save();
     }
@@ -105,7 +91,6 @@ public final class ClientAtmosphereConfig {
         }
         atmosphereEnabled = bool(p, "atmosphereEnabled", true);
         fogEnabled = bool(p, "fogEnabled", true);
-        vignetteEnabled = bool(p, "vignetteEnabled", true);
         cameraShakeEnabled = bool(p, "cameraShakeEnabled", false);
     }
 
@@ -113,7 +98,6 @@ public final class ClientAtmosphereConfig {
         Properties p = new Properties();
         p.setProperty("atmosphereEnabled", String.valueOf(atmosphereEnabled));
         p.setProperty("fogEnabled", String.valueOf(fogEnabled));
-        p.setProperty("vignetteEnabled", String.valueOf(vignetteEnabled));
         p.setProperty("cameraShakeEnabled", String.valueOf(cameraShakeEnabled));
         try {
             Files.createDirectories(FILE.getParent());

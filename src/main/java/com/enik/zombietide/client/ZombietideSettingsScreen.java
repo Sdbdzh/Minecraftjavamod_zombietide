@@ -646,7 +646,6 @@ public class ZombietideSettingsScreen extends Screen {
                         com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(), centerX, y,
                         (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(v,
                                 com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawVignetteEnabled(),
                                 com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled()), true);
                 y += ROW_HEIGHT;
                 addCheckbox("zombietide.settings.atmo.item2.name", null,
@@ -655,16 +654,6 @@ public class ZombietideSettingsScreen extends Screen {
                         com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(), centerX, y,
                         (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
                                 com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(), v,
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawVignetteEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled()), true);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.atmo.item3.name", null,
-                        "zombietide.settings.atmo.item3.desc",
-                        "zombietide.settings.atmo.item3.tip",
-                        com.enik.zombietide.config.ClientAtmosphereConfig.rawVignetteEnabled(), centerX, y,
-                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
-                                com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(), v,
                                 com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled()), true);
                 y += ROW_HEIGHT;
                 addCheckbox("zombietide.settings.atmo.item4.name", null,
@@ -673,8 +662,7 @@ public class ZombietideSettingsScreen extends Screen {
                         com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled(), centerX, y,
                         (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
                                 com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawVignetteEnabled(), v), true);
+                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(), v), true);
                 y += ROW_HEIGHT;
             }
         }

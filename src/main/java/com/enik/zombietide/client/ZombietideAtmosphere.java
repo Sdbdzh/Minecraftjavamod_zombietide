@@ -14,7 +14,7 @@ import net.neoforged.neoforge.client.event.ViewportEvent;
 import java.util.UUID;
 
 /**
- * 客户端氛围渲染（v0.2.70）：雾色、视距压缩、屏幕暗角、触发瞬间镜头下沉。
+ * 客户端氛围渲染（v0.2.70）：雾色、视距压缩、触发瞬间镜头下沉。
  * <p>
  * 状态来源全部是服务端已同步的权威值（{@link ZombietideHud#isHordeDayFor} /
  * {@link ZombietideHud#isWaveActiveFor}），客户端不自行推算。
@@ -23,8 +23,7 @@ import java.util.UUID;
  * <ul>
  *   <li><b>尸潮日白天</b>：雾色轻微偏冷，天空"不对劲"但说不出哪里不对</li>
  *   <li><b>波次中</b>：雾色更冷更暗 + 视距压到 96 格——看不见远处，大脑自己补最坏的东西</li>
- *   <li><b>暗角</b>：波次中常驻，血债越高越重</li>
- *   <li><b>镜头下沉</b>：触发瞬间 1 秒内轻微下沉再回位，默认关</li>
+ *    *   <li><b>镜头下沉</b>：触发瞬间 1 秒内轻微下沉再回位，默认关</li>
  * </ul>
  * 所有效果都可通过 {@link ClientAtmosphereConfig} 关闭；总开关关闭后一律不生效。
  * <p><b>注意</b>：本类只能通过 {@code @EventBusSubscriber(value = Dist.CLIENT)} 注册，
@@ -47,7 +46,7 @@ public final class ZombietideAtmosphere {
     private static float omenStrength = 0.0F;
     /** 服务端下发的威胁目标值（0/1，v0.2.86） */
     private static float threatTarget = 0.0F;
-    /** 客户端插值后的威胁强度（0~1），用于雾/视距/暗角淡入淡出 */
+    /** 客户端插值后的威胁强度（0~1），用于雾/视距淡入淡出 */
     private static float threatStrength = 0.0F;
     /** 威胁淡入淡出速度：每 tick 变化量（20 tick = 1 秒完成过渡） */
     private static final float THREAT_LERP_STEP = 0.05F;
@@ -77,7 +76,7 @@ public final class ZombietideAtmosphere {
         threatTarget = Math.max(0.0F, Math.min(1.0F, strength));
     }
 
-    /** 当前威胁强度（0~1，已插值），供雾/视距/暗角使用 */
+    /** 当前威胁强度（0~1，已插值），供雾/视距使用 */
     public static float threatStrength() {
         return threatStrength;
     }
@@ -121,7 +120,7 @@ public final class ZombietideAtmosphere {
      * <p>服务端同步的 waveActive 在换维度时保留（reconcileStaleWaves 会跳过非主世界玩家
      * 且不主动清 waveActive），所以下界/末地玩家的 syncedWaveActive 仍可能是 true。
      * 但音频侧（HordeBgmScheduler）已有 OVERWORLD 判断、进下界即停——若视觉不跟着停，
-     * 就会出现「音频停了、雾和暗角还在」的音画不一致，甚至覆盖下界原生雾。
+     * 就会出现「音频停了、雾还在」的音画不一致，甚至覆盖下界原生雾。
      * 与音频侧口径保持一致：只认主世界。
      */
     private static boolean inOverworld(Minecraft mc) {
@@ -191,9 +190,8 @@ public final class ZombietideAtmosphere {
     }
 
     /**
-     * 屏幕暗角：波次中常驻，血债越高越重。
-     * <p>用 {@code RenderGuiEvent.Pre} 而不是 Post——这样暗角压在世界之上、HUD 之下，
-     * 不会把 DAY X 和面板文字一起压暗。
+     * 触发瞬间的暗红闪烁（画在 HUD 之下）。
+     * <p>用 {@code RenderGuiEvent.Pre} 而不是 Post——这样闪烁压在世界之上、HUD 之下，不会遮住文字。
      */
     @SubscribeEvent
     public static void onRenderGuiPre(RenderGuiEvent.Pre event) {
@@ -216,22 +214,5 @@ public final class ZombietideAtmosphere {
             g.fill(0, 0, w, h, flashAlpha | 0x3C0000);
         }
 
-        if (!ClientAtmosphereConfig.vignetteEnabled()) return;
-        if (mc.options.hideGui) return;
-        if (threatStrength <= 0.0F) return;
-
-        int debt = ZombietideHud.bloodDebtFor(mc.player.getUUID());
-        // 【v0.2.114】浓度 0.25 基础 + 0.20 上限（原 0.14+0.11 太淡，用户实测看不到）
-        // 仍乘 threatStrength 实现淡入淡出：只在尸潮中显示，不干扰平时游玩。
-        float strength = (0.25F + Math.min(0.20F, debt * 0.003F)) * threatStrength;
-        int alpha = ((int) (strength * 255.0F) & 0xFF) << 24;
-
-        // 上下渐变高度 h*0.18（原 h*0.12 太窄）。中段画面仍保持通透，
-        // 但边缘压暗明显到能一眼看出「今夜不同」。
-        int edge = Math.max(8, (int) (h * 0.18F));
-
-        // fillGradient 内部自己管理 blend，这里不需要手动 enableBlend（手动开启后没恢复会污染后续渲染）。
-        g.fillGradient(0, 0, w, edge, alpha, 0x00000000);                 // 上
-        g.fillGradient(0, h - edge, w, h, 0x00000000, alpha);             // 下
     }
 }
