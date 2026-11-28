@@ -200,6 +200,12 @@ public class ZombietideServerEvents {
                 var config = ConfigManager.getConfigData(level).getConfig();
                 com.enik.zombietide.horde.HordeZombieBehavior.apply(mob, targetId, config);
                 HordeSpawner.noteScatterTarget(zombieUuid, targetId);
+                // 【v0.2.97】尖啸者体积恢复：Attributes.SCALE 不持久化到 NBT，
+                // 重启/区块重载后属性会回到 1.0 → 根据 NBT 标记重新设回 1.4。
+                if (tag.getBoolean(HordeSpawner.SCREAMER_KEY)) {
+                    var scaleAttr = mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.SCALE);
+                    if (scaleAttr != null) scaleAttr.setBaseValue(HordeSpawner.screamerScale());
+                }
             }
         } else if (event.getEntity() instanceof Villager villager) {
             // 村民加载时：从调度表恢复数据，并把 modDay 对齐为当前游戏日（modDay = gameDay 铁律）

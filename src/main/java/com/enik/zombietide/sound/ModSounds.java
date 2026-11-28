@@ -49,6 +49,10 @@ public final class ModSounds {
     public static final DeferredHolder<SoundEvent, SoundEvent> HORDE_DRONE =
             register("horde_drone", false);
 
+    /** 【v0.2.97】尖啸者尖叫：发现玩家后空间化播放，触发增援。两段 mono 变体随机。 */
+    public static final DeferredHolder<SoundEvent, SoundEvent> SCREAMER_CALL =
+            register("screamer_call", 512.0F);
+
     /** 音效分类：中文「环境」(AMBIENT)，不是「音乐」(MUSIC)；停止包必须与之保持一致 */
     public static final SoundSource BGM_SOURCE = SoundSource.AMBIENT;
     public static final ResourceLocation DRONE_ID =

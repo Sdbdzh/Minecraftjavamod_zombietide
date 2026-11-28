@@ -58,6 +58,21 @@ public class HordeSpawner {
     private static final String HORDE_STATE_KEY = "zombietide_state"; // 0=active, 1=scattering, 2=despawned（预留，当前无任何写入点，分支不可达）
     /** 【v0.2.90】僵尸出生点（BlockPos.asLong），四散时直接走回这里，取代 Marker 诱饵 */
     public static final String HORDE_SPAWN_POS_KEY = "zombietide_spawn_pos";
+    /** 【v0.2.97】尖啸者标记：5% 尸潮僵尸会被标记，放大体积并在发现玩家后尖叫增援 */
+    public static final String SCREAMER_KEY = "zombietide_screamer";
+    /** 尖啸者生成概率 */
+    private static final float SCREAMER_CHANCE = 0.05F;
+    /** 尖啸者体积倍率（Attributes.SCALE，原版模型/材质包自动跟随） */
+    private static final double SCREAMER_SCALE = 1.4D;
+    /** 尖啸者上次尖叫的游戏 tick（NBT，0 = 从未叫过） */
+    public static final String SCREAMER_LAST_TICK_KEY = "zombietide_screamer_last_tick";
+    /** 同一只尖啸者的尖叫冷却：30 秒 = 600 tick */
+    private static final long SCREAMER_COOLDOWN_TICKS = 600L;
+
+    /** 供重启/区块重载时恢复尖啸者体积（SCALE 属性不持久化） */
+    public static double screamerScale() {
+        return SCREAMER_SCALE;
+    }
 
     // 正在进行的尸潮：target UUID -> 剩余需刷怪数量
     private static final Map<UUID, Integer> activeHordes = new HashMap<>();
@@ -209,6 +224,11 @@ public class HordeSpawner {
 
     /** 每 tick 更新尸潮刷怪状态（分批生成）+ 更新四散僵尸计时器 */
     public static void update(ServerLevel level, ZombietideConfig config) {
+        // 【v0.2.97】尖啸者检查：每 20 tick 扫一次，发现玩家后尖叫并追加增援
+        if (level.getGameTime() % 20L == 0L) {
+            checkScreamers(level, config);
+        }
+
         // 【重启恢复】按 HordeProgressData 重建被重启清空的刷怪状态。
         // 校验目标仍处于当天波次中才恢复；校验不过（波次已结束/跨天）则 remove 自愈。
         var progress = com.enik.zombietide.config.HordeProgressData.get(level);
@@ -351,6 +371,62 @@ public class HordeSpawner {
         }
     }
 
+    /**
+     * 【v0.2.97】尖啸者：发现玩家后尖叫一次并追加 8~12 只增援。
+     * <p>每 20 tick 由 {@link #update} 调用。只处理带 {@link #SCREAMER_KEY} 标记、
+     * state==0（活跃）、且当前目标就是玩家的僵尸；同一只 30 秒冷却（NBT 记录游戏 tick）。
+     * <p>增援走方案 A：直接往 {@code activeHordes} 剩余数追加，由刷怪引擎自然产出——
+     * 不另开独立刷怪路径，黎明清理/血债结算/进度持久化全部复用现有逻辑。
+     */
+    private static void checkScreamers(ServerLevel level, ZombietideConfig config) {
+        long now = level.getGameTime();
+        for (UUID zombieUuid : hordeZombieUuids) {
+            var entity = level.getEntity(zombieUuid);
+            if (!(entity instanceof net.minecraft.world.entity.monster.Zombie mob) || !mob.isAlive()) continue;
+            CompoundTag tag = mob.getPersistentData();
+            if (!tag.getBoolean(SCREAMER_KEY)) continue;
+            if (tag.getInt(HORDE_STATE_KEY) != 0) continue;   // 四散中的不叫
+
+            long lastScream = tag.getLong(SCREAMER_LAST_TICK_KEY);
+            if (lastScream > 0L && now - lastScream < SCREAMER_COOLDOWN_TICKS) continue;
+
+            // 只有锁定到玩家才尖叫（村民尸潮的尖啸者不叫，避免无人区乱刷）
+            if (!(mob.getTarget() instanceof ServerPlayer player)) continue;
+
+            UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
+            if (targetId == null) continue;
+            // 【v0.2.97】即使原波次已刷完（activeHordes 被移除），只要目标仍在波次中，
+            // 尖啸者仍能叫来增援——直接新建一条 activeHordes 由刷怪引擎自然产出。
+            // 判断"仍在波次中"用 totalCount 是否残留（波次结束才会清掉）。
+            if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
+
+            tag.putLong(SCREAMER_LAST_TICK_KEY, now);
+
+            // 空间化尖叫：从僵尸位置发给附近玩家（64 格可闻）
+            for (ServerPlayer p : level.getPlayers(p -> p.distanceToSqr(mob) <= 64.0 * 64.0)) {
+                ModSounds.playAtPosition(p, ModSounds.SCREAMER_CALL,
+                        mob.getX(), mob.getY(), mob.getZ(),
+                        net.minecraft.sounds.SoundSource.HOSTILE, 1.0F, 1.0F);
+            }
+
+            // 追加 8~12 只到现有波次（含该玩家的血债波次）
+            int reinforce = 8 + RANDOM.nextInt(5);
+            boolean isVillager = villagerHordeRadii.containsKey(targetId);
+            if (!activeHordes.containsKey(targetId)) {
+                // 原波次已刷完但仍在波次中：新建一条增援波次，补齐配套字段
+                spawnedCount.put(targetId, 0);
+                totalCount.put(targetId, reinforce);
+                batchTimer.put(targetId, Math.max(1, config.batchTick()));
+            }
+            activeHordes.merge(targetId, reinforce, Integer::sum);
+            com.enik.zombietide.config.HordeProgressData.get(level)
+                    .setRemaining(targetId, activeHordes.get(targetId), isVillager);
+
+            EnikZombietide.LOGGER.info("[尖啸者] 僵尸 {} 尖叫，为玩家 {} 追加 {} 只增援（剩余 {}）",
+                    mob.getUUID(), player.getScoreboardName(), reinforce, activeHordes.get(targetId));
+        }
+    }
+
     /** 在目标背后/视线外刷出一只僵尸，返回是否成功。绝不因找不到刷点而放弃。 */
     private static boolean spawnZombie(ServerLevel level, UUID targetId, ZombietideConfig config, boolean isVillager) {
         net.minecraft.world.entity.Entity target = findTarget(level, targetId);
@@ -401,6 +477,14 @@ public class HordeSpawner {
         tag.putInt(HORDE_STATE_KEY, 0);
         // 【v0.2.90】记录出生点：四散时直接走回这里（不用 Marker 诱饵，性能更好）
         tag.putLong(HORDE_SPAWN_POS_KEY, feetPos.asLong());
+
+        // 【v0.2.97】5% 概率标记为尖啸者：放大体积（原版实体类型不变，兼容僵尸材质包）。
+        // SCALE 属性是 1.21.1 原生、可同步的，渲染与碰撞自动跟随，无需 mixin/自定义实体类。
+        if (RANDOM.nextFloat() < SCREAMER_CHANCE) {
+            tag.putBoolean(SCREAMER_KEY, true);
+            var scaleAttr = mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.SCALE);
+            if (scaleAttr != null) scaleAttr.setBaseValue(SCREAMER_SCALE);
+        }
 
         // 注入尸潮僵尸行为：主目标锁定 Goal + 永不消失（破门功能已移除）
         HordeZombieBehavior.apply(mob, targetId, config);

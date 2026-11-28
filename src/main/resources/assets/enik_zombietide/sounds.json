@@ -1,31 +1,75 @@
 {
   "morning_warning": {
     "sounds": [
-      { "name": "enik_zombietide:morning_warning" }
+      {
+        "name": "enik_zombietide:morning_warning"
+      }
     ]
   },
   "horde_trigger": {
     "sounds": [
-      { "name": "enik_zombietide:horde_trigger", "attenuation_distance": 48 }
+      {
+        "name": "enik_zombietide:horde_trigger",
+        "attenuation_distance": 48
+      }
     ]
   },
   "horde_scatter": {
     "sounds": [
-      { "name": "enik_zombietide:horde_scatter" }
+      {
+        "name": "enik_zombietide:horde_scatter"
+      }
     ]
   },
   "horde_drone": {
     "sounds": [
-      { "name": "enik_zombietide:horde_drone", "stream": true }
+      {
+        "name": "enik_zombietide:horde_drone",
+        "stream": true
+      }
     ]
   },
   "horde_call": {
     "sounds": [
-      { "name": "enik_zombietide:bgm_p1", "stream": true, "attenuation_distance": 512 },
-      { "name": "enik_zombietide:bgm_p4_1", "stream": true, "attenuation_distance": 512 },
-      { "name": "enik_zombietide:bgm_p4_2", "stream": true, "attenuation_distance": 512 },
-      { "name": "enik_zombietide:bgm_p4_3", "stream": true, "attenuation_distance": 512 },
-      { "name": "enik_zombietide:bgm_p4_4", "stream": true, "attenuation_distance": 512 }
+      {
+        "name": "enik_zombietide:bgm_p1",
+        "stream": true,
+        "attenuation_distance": 512
+      },
+      {
+        "name": "enik_zombietide:bgm_p4_1",
+        "stream": true,
+        "attenuation_distance": 512
+      },
+      {
+        "name": "enik_zombietide:bgm_p4_2",
+        "stream": true,
+        "attenuation_distance": 512
+      },
+      {
+        "name": "enik_zombietide:bgm_p4_3",
+        "stream": true,
+        "attenuation_distance": 512
+      },
+      {
+        "name": "enik_zombietide:bgm_p4_4",
+        "stream": true,
+        "attenuation_distance": 512
+      }
+    ]
+  },
+  "screamer_call": {
+    "sounds": [
+      {
+        "name": "enik_zombietide:screamer_1",
+        "stream": true,
+        "attenuation_distance": 64
+      },
+      {
+        "name": "enik_zombietide:screamer_2",
+        "stream": true,
+        "attenuation_distance": 64
+      }
     ]
   }
 }
