@@ -1829,13 +1829,19 @@ public class HordeSpawner {
     /** 供调试命令使用：清空所有活跃尸潮（原 Map，非副本）并重置所有目标的 waveActive 与触发记录（测试可重复触发） */
     public static void clearActiveHordes(ServerLevel level) {
         // 重置所有玩家和村民的 waveActive + lastTriggerDay（clear 用于测试，必须允许同一天重新触发）
+        // 【v0.2.92】lastTriggerDay 用 modDay-1（"上次尸潮是昨天"）而不是 -1：
+        //  - -1 表示"从未触发"，会让 hordeProgress 的起点回到世界开始（-540），
+        //    清除后进度仍然很高（已过 N 天）→ DAY X 依旧偏红，用户反馈"清了还是红的"。
+        //  - modDay-1 让进度从「昨天清场」起算 ≈ 0 → DAY X 立刻变淡/变白，符合直觉。
+        //  - 不会误判尸潮日（lastTriggerDay != modDay），当天若是尸潮日仍可正常触发。
         if (level != null) {
             for (ServerPlayer player : level.getPlayers(p -> true)) {
                 if (player.level().dimension() == Level.OVERWORLD) {
                     var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
+                    int clearTriggerDay = Math.max(-1, data.modDay() - 1);
                     player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                             new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data.modDay(), -1, data.waveCount(), false
+                                    data.modDay(), clearTriggerDay, data.waveCount(), false
                             ));
                 }
             }
@@ -1845,13 +1851,14 @@ public class HordeSpawner {
                     com.enik.zombietide.config.VillagerScheduleData.ID);
             for (var entry : schedule.getAllSchedules().entrySet()) {
                 var sched = entry.getValue();
+                int clearTriggerDay = Math.max(-1, sched.modDay() - 1);
                 schedule.put(entry.getKey(), new com.enik.zombietide.config.VillagerScheduleData.ScheduleEntry(
-                        sched.modDay(), -1, sched.waveCount(), false));
+                        sched.modDay(), clearTriggerDay, sched.waveCount(), false));
                 var villagerEntity = findTarget(level, entry.getKey());
                 if (villagerEntity instanceof net.minecraft.world.entity.npc.Villager villager) {
                     villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
                             new com.enik.zombietide.attachments.VillagerHordeData(
-                                    sched.modDay(), -1, sched.waveCount(), false));
+                                    sched.modDay(), clearTriggerDay, sched.waveCount(), false));
                 }
             }
         }
@@ -1873,6 +1880,21 @@ public class HordeSpawner {
             com.enik.zombietide.config.HordeProgressData.get(level).clearAll();
             // debug clear 是「全清」语义：连 BGM 调度也一起重置，避免清完后残留播放计划
             HordeBgmScheduler.reset(level != null ? level.getServer() : null);
+            // 【v0.2.92】威胁态也要一起清：否则清除尸潮后 drone/氛围还挂着，
+            // 因为 HordeThreatDetector 有自己的 3 秒去抖状态，不会随僵尸消失立刻归零。
+            // 传 server 以便同时给客户端下发强度 0（否则雾/暗角仍按 1 渲染）。
+            HordeThreatDetector.reset(level.getServer());
+        }
+
+        // 【v0.2.92】清除后立即刷新 HUD，不等 20 tick 周期同步。
+        // 否则玩家清完尸潮仍看到 DAY X 全红（客户端缓存还是清除前的 hordeDay/waveActive）。
+        if (level != null) {
+            var config = com.enik.zombietide.config.ConfigManager.getConfigData(level).getConfig();
+            for (ServerPlayer player : level.getPlayers(p -> true)) {
+                HordeTimer.syncPlayerHudState(level, config, player);
+            }
+            // 村民面板同样立即刷新（清场后 waveActive/hordeDay 都变了）
+            ModMessages.broadcastAllVillagerModDays();
         }
 
         EnikZombietide.LOGGER.info("已清空所有活跃尸潮并重置所有目标 waveActive/lastTriggerDay（可重新触发）");

@@ -110,9 +110,21 @@ public final class HordeThreatDetector {
         DEBOUNCE.remove(playerId);
     }
 
-    /** 服务器启动/清场时全清 */
-    public static void reset() {
+    /** 服务器启动/清场时全清。
+     *  <p>【v0.2.92】带 server 时还要给所有在线玩家下发强度 0——
+     *  否则客户端 threatTarget 仍是 1，雾/视距/暗角会一直挂着（服务端状态清了但客户端不知道）。 */
+    public static void reset(net.minecraft.server.MinecraftServer server) {
         ACTIVE.clear();
         DEBOUNCE.clear();
+        if (server != null && server.getPlayerList() != null) {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                ModMessages.sendThreat(player, 0.0F);
+            }
+        }
+    }
+
+    /** 无 server 上下文时的退化版本（只清服务端内存状态）。 */
+    public static void reset() {
+        reset(null);
     }
 }
