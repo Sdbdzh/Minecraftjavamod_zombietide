@@ -67,6 +67,17 @@ public final class HordeBgmScheduler {
                     && player.level().dimension() == Level.OVERWORLD
                     && player.serverLevel().getDifficulty() != Difficulty.PEACEFUL;
 
+            // ---- 原版音乐静默（v0.2.84）----
+            // 独立于 warningEnabled 与 hordeBgmSound：只要该玩家处于尸潮波次，世界就该安静。
+            // 原版 MusicManager 在 currentMusic 为 null 时会按 nextSongDelay 自己起播，
+            // 只在进入波次时停一次挡不住（那一刻可能本来就没在播）。每 20 tick 补停一次。
+            boolean silenceVanilla = data.waveActive()
+                    && player.level().dimension() == Level.OVERWORLD
+                    && player.serverLevel().getDifficulty() != Difficulty.PEACEFUL;
+            if (silenceVanilla && now % 20L == 0L) {
+                ModSounds.stopVanillaMusic(player);
+            }
+
             if (!inHorde) {
                 // 波次结束或开关关闭：掐掉 drone，不留残响
                 if (DRONE_REPLAY_TICK.remove(id) != null) {
@@ -79,13 +90,9 @@ public final class HordeBgmScheduler {
             if (config.hordeBgmSound()) {
                 Long droneNext = DRONE_REPLAY_TICK.get(id);
                 if (droneNext == null) {
-                    // 进入波次：先掐掉原版 BGM，再起播 drone，避免两种音乐叠在一起
-                    ModSounds.stopVanillaMusic(player);
                     ModSounds.playToPlayer(player, ModSounds.HORDE_DRONE, SoundSource.AMBIENT, DRONE_VOLUME, 1.0F);
                     DRONE_REPLAY_TICK.put(id, now + DRONE_DURATION_TICKS - DRONE_REPLAY_LEAD_TICKS);
                 } else if (now >= droneNext) {
-                    // 原版音乐调度器过一阵会自己重新起播，借 drone 重播的节奏再掐一次
-                    ModSounds.stopVanillaMusic(player);
                     ModSounds.playToPlayer(player, ModSounds.HORDE_DRONE, SoundSource.AMBIENT, DRONE_VOLUME, 1.0F);
                     DRONE_REPLAY_TICK.put(id, now + DRONE_DURATION_TICKS - DRONE_REPLAY_LEAD_TICKS);
                 }
