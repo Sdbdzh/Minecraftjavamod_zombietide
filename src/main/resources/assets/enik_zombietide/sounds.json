@@ -6,7 +6,7 @@
   },
   "horde_trigger": {
     "sounds": [
-      { "name": "enik_zombietide:horde_trigger" }
+      { "name": "enik_zombietide:horde_trigger", "attenuation_distance": 48 }
     ]
   },
   "horde_scatter": {
@@ -30,11 +30,11 @@
   },
   "horde_call": {
     "sounds": [
-      { "name": "enik_zombietide:bgm_p1", "stream": true },
-      { "name": "enik_zombietide:bgm_p4_1", "stream": true },
-      { "name": "enik_zombietide:bgm_p4_2", "stream": true },
-      { "name": "enik_zombietide:bgm_p4_3", "stream": true },
-      { "name": "enik_zombietide:bgm_p4_4", "stream": true }
+      { "name": "enik_zombietide:bgm_p1", "stream": true, "attenuation_distance": 512 },
+      { "name": "enik_zombietide:bgm_p4_1", "stream": true, "attenuation_distance": 512 },
+      { "name": "enik_zombietide:bgm_p4_2", "stream": true, "attenuation_distance": 512 },
+      { "name": "enik_zombietide:bgm_p4_3", "stream": true, "attenuation_distance": 512 },
+      { "name": "enik_zombietide:bgm_p4_4", "stream": true, "attenuation_distance": 512 }
     ]
   }
 }

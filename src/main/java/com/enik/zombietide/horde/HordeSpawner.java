@@ -435,17 +435,18 @@ public class HordeSpawner {
         // 业务范围 = 当前配置的最大生成半径（随配置变化）
         double radius = Math.max(config.playerRadius(), config.villagerRadius());
         double radiusSq = radius * radius;
+        int sent = 0;
         for (ServerPlayer player : level.getPlayers(p -> true)) {
-            double d2 = player.distanceToSqr(mob);
-            if (d2 > radiusSq) continue;   // 超出本次生成半径，不发给该玩家
-            // 距离越远音量越低，但边缘仍保留 0.45（听得到、能辨方位）
-            double ratio = Math.sqrt(d2) / Math.max(1.0, radius);
-            float volume = (float) (1.0 - 0.55 * Math.min(1.0, ratio));
+            if (player.distanceToSqr(mob) > radiusSq) continue;   // 超出本次生成半径，不发给该玩家
+            // volume 统一 1.0：距离衰减交给引擎（sounds.json 的 attenuation_distance=512 线性衰减），
+            // 150 格处约 0.71，清晰可闻；自己再乘一层会双重衰减、边缘听不到。
             com.enik.zombietide.sound.ModSounds.playAtPosition(player,
                     com.enik.zombietide.sound.ModSounds.HORDE_CALL,
                     mob.getX(), mob.getY(), mob.getZ(),
-                    net.minecraft.sounds.SoundSource.HOSTILE, volume, 1.0F);
+                    net.minecraft.sounds.SoundSource.HOSTILE, 1.0F, 1.0F);
+            sent++;
         }
+        EnikZombietide.LOGGER.info("[出生大叫] 僵尸@{} 半径={} 已发给 {} 名玩家", mob.blockPosition(), (int) radius, sent);
     }
 
     /** 出生大叫触发概率 */
