@@ -75,7 +75,8 @@ public class ModMessages {
     public record PlayerModDayPayload(UUID playerUuid, int modDay, boolean hordeDay,
                                       boolean waveActive, int bloodDebt,
                                       int activePlayerHordes, int activeVillagerHordes,
-                                      int aliveHordeZombies, float hordeProgress) implements CustomPacketPayload {
+                                      int aliveHordeZombies, float hordeProgress,
+                                      boolean hordeDayToday) implements CustomPacketPayload {
         public static final Type<PlayerModDayPayload> TYPE = new Type<>(PLAYER_MOD_DAY_ID);
 
         public static final StreamCodec<FriendlyByteBuf, PlayerModDayPayload> STREAM_CODEC = new StreamCodec<>() {
@@ -90,6 +91,7 @@ public class ModMessages {
                 buf.writeInt(payload.activeVillagerHordes);
                 buf.writeInt(payload.aliveHordeZombies);
                 buf.writeFloat(payload.hordeProgress);
+                buf.writeBoolean(payload.hordeDayToday());
             }
 
             @Override
@@ -103,8 +105,9 @@ public class ModMessages {
                 int activeVillagerHordes = buf.readInt();
                 int aliveHordeZombies = buf.readInt();
                 float hordeProgress = buf.readFloat();
+                boolean hordeDayToday = buf.readBoolean();
                 return new PlayerModDayPayload(uuid, modDay, hordeDay, waveActive, bloodDebt,
-                        activePlayerHordes, activeVillagerHordes, aliveHordeZombies, hordeProgress);
+                        activePlayerHordes, activeVillagerHordes, aliveHordeZombies, hordeProgress, hordeDayToday);
             }
         };
 
@@ -142,10 +145,11 @@ public class ModMessages {
     private record VillagerSnapshot(UUID uuid, String registryKey, int modDay,
                                     double x, double y, double z,
                                     boolean waveActive, boolean hordeDay, float progress,
+                                    boolean hordeDayToday,
                                     net.minecraft.world.entity.Entity entity) {
     }
 
-    public record VillagerModDayPayload(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay, float hordeProgress) implements CustomPacketPayload {
+    public record VillagerModDayPayload(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay, float hordeProgress, boolean hordeDayToday) implements CustomPacketPayload {
         public static final Type<VillagerModDayPayload> TYPE = new Type<>(VILLAGER_MOD_DAY_ID);
 
         public static final StreamCodec<FriendlyByteBuf, VillagerModDayPayload> STREAM_CODEC = new StreamCodec<>() {
@@ -166,6 +170,7 @@ public class ModMessages {
                 buf.writeBoolean(payload.waveActive());
                 buf.writeBoolean(payload.hordeDay());
                 buf.writeFloat(payload.hordeProgress());
+                buf.writeBoolean(payload.hordeDayToday());
             }
 
             @Override
@@ -179,7 +184,8 @@ public class ModMessages {
                 boolean waveActive = buf.readBoolean();
                 boolean hordeDay = buf.readBoolean();
                 float hordeProgress = buf.readFloat();
-                return new VillagerModDayPayload(uuid, registryKey, modDay, x, y, z, waveActive, hordeDay, hordeProgress);
+                boolean hordeDayToday = buf.readBoolean();
+                return new VillagerModDayPayload(uuid, registryKey, modDay, x, y, z, waveActive, hordeDay, hordeProgress, hordeDayToday);
             }
         };
 
@@ -528,7 +534,7 @@ public class ModMessages {
                 .playToClient(PlayerModDayPayload.TYPE, PlayerModDayPayload.STREAM_CODEC,
                         (payload, context) -> {
                             context.enqueueWork(() -> {
-                                ZombietideHud.onModDayReceived(payload.playerUuid(), payload.modDay(), payload.hordeDay(), payload.waveActive(), payload.bloodDebt(), payload.activePlayerHordes(), payload.activeVillagerHordes(), payload.aliveHordeZombies(), payload.hordeProgress());
+                                ZombietideHud.onModDayReceived(payload.playerUuid(), payload.modDay(), payload.hordeDay(), payload.waveActive(), payload.bloodDebt(), payload.activePlayerHordes(), payload.activeVillagerHordes(), payload.aliveHordeZombies(), payload.hordeProgress(), payload.hordeDayToday());
                             });
                         })
                 // 服务端 -> 客户端：村民模组天数同步
@@ -537,7 +543,8 @@ public class ModMessages {
                             context.enqueueWork(() -> {
                                 ZombietideHud.onVillagerModDayReceived(payload.villagerUuid(), payload.registryKey(),
                                         payload.modDay(), payload.x(), payload.y(), payload.z(),
-                                        payload.waveActive(), payload.hordeDay(), payload.hordeProgress());
+                                        payload.waveActive(), payload.hordeDay(), payload.hordeProgress(),
+                                        payload.hordeDayToday());
                             });
                         })
                 // 服务端 -> 客户端：mod info 常驻显示开关
@@ -601,14 +608,15 @@ public class ModMessages {
     /** 发送玩家模组天数给特定玩家 */
     public static void sendModDay(ServerPlayer player, int modDay, boolean hordeDay, boolean waveActive, int bloodDebt,
                                   int activePlayerHordes, int activeVillagerHordes, int aliveHordeZombies,
-                                  float hordeProgress) {
+                                  float hordeProgress, boolean hordeDayToday) {
         PacketDistributor.sendToPlayer(player, new PlayerModDayPayload(player.getUUID(), modDay, hordeDay,
-                waveActive, bloodDebt, activePlayerHordes, activeVillagerHordes, aliveHordeZombies, hordeProgress));
+                waveActive, bloodDebt, activePlayerHordes, activeVillagerHordes, aliveHordeZombies,
+                hordeProgress, hordeDayToday));
     }
 
     /** 发送村民模组天数给特定玩家（用于 HUD 显示附近村民） */
-    public static void sendVillagerModDay(ServerPlayer player, UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay, float hordeProgress) {
-        PacketDistributor.sendToPlayer(player, new VillagerModDayPayload(villagerUuid, registryKey, modDay, x, y, z, waveActive, hordeDay, hordeProgress));
+    public static void sendVillagerModDay(ServerPlayer player, UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay, float hordeProgress, boolean hordeDayToday) {
+        PacketDistributor.sendToPlayer(player, new VillagerModDayPayload(villagerUuid, registryKey, modDay, x, y, z, waveActive, hordeDay, hordeProgress, hordeDayToday));
     }
 
     /** 广播所有村民的模组天数给范围内的在线客户端（≤128 格，避免全服广播风暴）
@@ -654,9 +662,13 @@ public class ModMessages {
                         config, true, dayTime) || sched.waveActive();
             float progress = com.enik.zombietide.horde.HordeTimer.hordeProgress(
                         villager.getUUID(), sched.modDay(), sched.lastTriggerDay(), config, true, dayTime);
+            // 【v0.2.94】hordeDayToday = 5 参（不看时刻）：今天是否为该村民的尸潮日，整天有效。
+            // 供 DAY X 二态模式使用——「尸潮日红」必须是整天，而不是只在黄昏窗口。
+            boolean hordeDayToday = com.enik.zombietide.horde.HordeTimer.isHordeDay(
+                        villager.getUUID(), sched.modDay(), sched.lastTriggerDay(), config, true);
             snapshots.add(new VillagerSnapshot(villager.getUUID(), extractVillagerRegistryKey(villager),
                     sched.modDay(), villager.getX(), villager.getY(), villager.getZ(),
-                    sched.waveActive(), villagerHordeDay, progress, villager));
+                    sched.waveActive(), villagerHordeDay, progress, hordeDayToday, villager));
         }
 
         // 对每个玩家，仅发送距离 ≤128 格的村民快照
@@ -664,7 +676,8 @@ public class ModMessages {
             for (VillagerSnapshot snap : snapshots) {
                 if (player.distanceToSqr(snap.entity()) <= 128.0 * 128.0) {
                     sendVillagerModDay(player, snap.uuid(), snap.registryKey(), snap.modDay(),
-                            snap.x(), snap.y(), snap.z(), snap.waveActive(), snap.hordeDay(), snap.progress());
+                            snap.x(), snap.y(), snap.z(), snap.waveActive(), snap.hordeDay(),
+                            snap.progress(), snap.hordeDayToday());
                 }
             }
         }

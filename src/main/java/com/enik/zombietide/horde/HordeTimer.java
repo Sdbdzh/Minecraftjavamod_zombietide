@@ -242,11 +242,15 @@ public class HordeTimer {
                 || data.waveActive();
         float progress = hordeProgress(player.getUUID(), data.modDay(), data.lastTriggerDay(),
                 config, false, dayTime);
+        // 【v0.2.94】hordeDayToday = 5 参（不看时刻）：今天是否为该玩家的尸潮日，整天有效。
+        // DAY X 二态模式必须用它——「尸潮日红」是整天红，不是只在黄昏窗口红。
+        boolean playerHordeDayToday = isHordeDay(player.getUUID(), data.modDay(), data.lastTriggerDay(),
+                config, false) || data.waveActive();
         ModMessages.sendModDay(player, data.modDay(),
                 playerHordeDay,
                 data.waveActive(), debt,
                 activePlayerHordes, activeVillagerHordes, aliveHordeZombies,
-                progress);
+                progress, playerHordeDayToday);
     }
 
     /** 推进所有在线玩家和所有村民的模组天数（modDay 直接等于主世界游戏日）
@@ -545,7 +549,8 @@ public class HordeTimer {
                             ModMessages.extractVillagerRegistryKey(villager), modDay,
                             villager.getX(), villager.getY(), villager.getZ(), true,
                             isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()),
-                            hordeProgress(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
+                            hordeProgress(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()),
+                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true) || sched.waveActive());
                 }
             }
         }
@@ -672,7 +677,8 @@ public class HordeTimer {
                             ModMessages.extractVillagerRegistryKey(villager), targetModDay,
                             villager.getX(), villager.getY(), villager.getZ(), true,
                             isHordeDay(villager.getUUID(), targetModDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()),
-                            hordeProgress(villager.getUUID(), targetModDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
+                            hordeProgress(villager.getUUID(), targetModDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()),
+                            isHordeDay(villager.getUUID(), targetModDay, sched.lastTriggerDay(), config, true) || sched.waveActive());
                 }
             }
         }
@@ -759,7 +765,8 @@ public class HordeTimer {
                             ModMessages.extractVillagerRegistryKey(villager), modDay,
                             villager.getX(), villager.getY(), villager.getZ(), true,
                             isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()),
-                            hordeProgress(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
+                            hordeProgress(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()),
+                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true) || sched.waveActive());
                 }
             }
         }

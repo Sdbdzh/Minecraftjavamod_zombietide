@@ -148,7 +148,8 @@ public class ZombietideServerEvents {
                             villager.getX(), villager.getY(), villager.getZ(),
                             vActive,
                             HordeTimer.isHordeDay(villager.getUUID(), vModDay, vLastTrigger, config, true, level.getDayTime()),
-                            HordeTimer.hordeProgress(villager.getUUID(), vModDay, vLastTrigger, config, true, level.getDayTime()));
+                            HordeTimer.hordeProgress(villager.getUUID(), vModDay, vLastTrigger, config, true, level.getDayTime()),
+                            HordeTimer.isHordeDay(villager.getUUID(), vModDay, vLastTrigger, config, true));
                 }
             }
         }

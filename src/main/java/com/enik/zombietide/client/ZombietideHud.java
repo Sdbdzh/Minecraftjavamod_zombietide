@@ -60,6 +60,9 @@ public class ZombietideHud {
     /** 【v0.2.91】距下次尸潮预兆期开始的进度（0~1），驱动 DAY X 渐进红 */
     private static final Map<UUID, Float> syncedHordeProgress = new HashMap<>();
     private static final Map<UUID, Float> villagerHordeProgress = new HashMap<>();
+    /** 【v0.2.94】今天是否为该目标的尸潮日（5 参，整天有效）。DAY X 二态模式用。 */
+    private static final Map<UUID, Boolean> syncedHordeDayToday = new HashMap<>();
+    private static final Map<UUID, Boolean> villagerHordeDayToday = new HashMap<>();
 
     /** 客户端缓存的 mod info 常驻显示开关（由服务端通过 InfoOverlayPayload 同步） */
     private static boolean infoOverlayEnabled = false;
@@ -77,10 +80,11 @@ public class ZombietideHud {
     /** 接收服务端同步的玩家模组天数（PlayerModDayPayload） */
     public static void onModDayReceived(UUID playerUuid, int modDay, boolean hordeDay, boolean waveActive, int bloodDebt,
                                         int activePlayerHordes, int activeVillagerHordes, int aliveHordeZombies,
-                                        float hordeProgress) {
+                                        float hordeProgress, boolean hordeDayToday) {
         syncedModDays.put(playerUuid, modDay);
         syncedHordeDay.put(playerUuid, hordeDay);
         syncedHordeProgress.put(playerUuid, hordeProgress);
+        syncedHordeDayToday.put(playerUuid, hordeDayToday);
         syncedWaveActive.put(playerUuid, waveActive);
         syncedDebt.put(playerUuid, bloodDebt);
         syncedActivePlayerHordes.put(playerUuid, activePlayerHordes);
@@ -122,11 +126,12 @@ public class ZombietideHud {
     }
 
     /** 接收服务端同步的村民模组天数（VillagerModDayPayload） */
-    public static void onVillagerModDayReceived(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay, float hordeProgress) {
+    public static void onVillagerModDayReceived(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay, float hordeProgress, boolean hordeDayToday) {
         villagerModDays.put(villagerUuid, modDay);
         villagerWaveActive.put(villagerUuid, waveActive);
         villagerHordeDayMap.put(villagerUuid, hordeDay);
         villagerHordeProgress.put(villagerUuid, hordeProgress);
+        villagerHordeDayToday.put(villagerUuid, hordeDayToday);
         thisBatchVillagers.add(villagerUuid); // 记录本批次收到的村民
         // 客户端本地化：直接使用 Minecraft Java 原版标准译名（entity.minecraft.villager.*）
         String localizedProfession = ModMessages.localizeProfession(registryKey);
@@ -165,6 +170,8 @@ public class ZombietideHud {
         villagerHordeDayMap.clear();
         syncedHordeProgress.clear();
         villagerHordeProgress.clear();
+        syncedHordeDayToday.clear();
+        villagerHordeDayToday.clear();
         thisBatchVillagers.clear();
         // 【v0.1.62 修复 #145】断线时也要清掉这两个静态字段，否则进入
         // 未安装本模组的服务器时，配置缓存与右上角面板开关仍残留上一局的值。
@@ -216,7 +223,10 @@ public class ZombietideHud {
         // 同时支持固定间隔与随机间隔，客户端不再自行用 modDay % interval 推算
         UUID playerUuid = minecraft.player.getUUID();
         Integer modDay = syncedModDays.get(playerUuid);
-        boolean hordeDay = Boolean.TRUE.equals(syncedHordeDay.get(playerUuid));
+        // 【v0.2.94】今天是不是尸潮日（整天，不看黄昏窗口）——二态模式的「尸潮日红」用它。
+        // 注意：syncedHordeDay（窗口版）仍供雾色使用，这里不再引用。
+        boolean hordeDayToday = Boolean.TRUE.equals(syncedHordeDayToday.get(playerUuid))
+                || Boolean.TRUE.equals(syncedWaveActive.get(playerUuid));
         String dayText;
         int dayColor = 0xFFFFFF;
         if (modDay != null) {
@@ -225,14 +235,16 @@ public class ZombietideHud {
                 // 尸潮日/波次中强制 1.0（保持深红）。
                 // 注意：文字里绝不能带颜色色码（§c/§6/§e 会覆盖 drawString 的颜色参数），只留 §l/§r。
                 float p = hordeProgressFor(playerUuid);
-                if (hordeDay) p = 1.0F;
+                // 波次中强制全红（手动触发在非尸潮日时进度可能是 0，但正在打就该红）
+                if (Boolean.TRUE.equals(syncedWaveActive.get(playerUuid))) p = 1.0F;
                 dayColor = argbForProgress(p);
                 dayText = "§r" + (dayBold ? "§l" : "") + "DAY " + modDay + "§r";
-            } else if (hordeDay) {
-                // 【v0.2.93】开关关闭 = 严格二态：尸潮日（或波次中）亮红
+            } else if (hordeDayToday) {
+                // 【v0.2.94】开关关闭 = 严格二态：**今天整天**是尸潮日（或波次中）→ 亮红。
+                // 注意用 hordeDayToday（5 参，不看时刻），不是 hordeDay（只在黄昏窗口为 true）。
                 dayText = dayBold ? "§r§c§lDAY " + modDay + "§r" : "§r§cDAY " + modDay + "§r";
             } else {
-                // 非尸潮日：纯白（不再保留旧的预兆期黄/金渐变——与设置描述「尸潮日红/其余白」一致）
+                // 非尸潮日：纯白
                 dayText = "§r" + (dayBold ? "§l" : "") + "DAY " + modDay + "§r";
             }
         } else {
@@ -318,8 +330,9 @@ public class ZombietideHud {
                     if (villagerHordeDay) pv = 1.0F;
                     daySegmentColor = argbForProgress(pv);
                     dayPartSegment = "§r" + (villagerBold ? "§l" : "") + "DAY " + villagerModDay + "§r";
-                } else if (villagerHordeDay) {
-                    // 【v0.2.93】开关关闭 = 严格二态：该村民的尸潮日亮红
+                } else if (Boolean.TRUE.equals(villagerHordeDayToday.get(entry.getKey()))
+                        || Boolean.TRUE.equals(villagerWaveActive.get(entry.getKey()))) {
+                    // 【v0.2.94】开关关闭 = 严格二态：该村民**今天整天**是尸潮日（或波次中）→ 亮红
                     dayPartSegment = villagerBold
                             ? "§r§c§lDAY " + villagerModDay + "§r"
                             : "§r§cDAY " + villagerModDay + "§r";
