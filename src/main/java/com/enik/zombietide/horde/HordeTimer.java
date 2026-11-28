@@ -409,14 +409,22 @@ public class HordeTimer {
 
         int base = lastTriggerDay < 0 ? -1 : lastTriggerDay;
         int nextHordeDay;
+        boolean overdue;   // 间隔已过期（随时可能触发）或从未触发
         if (random) {
             int need = randomIntervalDays(targetId, lastTriggerDay, min, max);
+            overdue = lastTriggerDay < 0 || base + need <= modDay;
             nextHordeDay = Math.max(modDay, base + need);
         } else {
             nextHordeDay = modDay + Math.floorMod(interval - 1 - Math.floorMod(modDay, interval), interval);
+            overdue = lastTriggerDay < 0;
         }
 
-        long start = base * 24000L + 23460L;
+        // 【v0.2.106】间隔已过期/从未触发时，start 不能用 base（=-1 时是世界开始），
+        // 否则 Math.max(modDay, base+need) 钳到今天 → 跨度从世界开始到今天，
+        // 进度恒接近 1 → DAY X 一直全红（新村庄村民 lastTriggerDay=-1 必现）。
+        // 改为从"昨天清场"起算：当天 0 点约 0.04，到预兆期(12000)刚好 1.0。
+        long start = overdue ? (modDay - 1L) * 24000L + 23460L
+                             : base * 24000L + 23460L;
         long target = nextHordeDay * 24000L + 12000L;
         long span = target - start;
         if (span <= 0) return 1.0F;
