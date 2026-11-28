@@ -7,6 +7,7 @@ import com.enik.zombietide.client.gui.settings.SettingRow;
 import com.enik.zombietide.client.gui.settings.SettingsCategory;
 import com.enik.zombietide.client.gui.settings.SettingsHost;
 import com.enik.zombietide.client.gui.settings.SettingsRegistry;
+import com.enik.zombietide.client.gui.settings.control.IntSliderControl;
 import com.enik.zombietide.config.ClientHudConfig;
 import com.enik.zombietide.config.ZombietideConfig;
 import com.enik.zombietide.network.ModMessages;
@@ -27,7 +28,6 @@ import net.neoforged.fml.ModList;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.IntConsumer;
 
 /**
  * 尸潮配置界面。
@@ -67,8 +67,10 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     /** 【P2】每行的纵向范围 + 悬停提示内容（本屏幕不调用 super.render，tooltip 必须手绘） */
     private final List<RowBounds> rowBounds = new ArrayList<>();
 
-    // 底部完成按钮（固定，不加入 renderable 列表）
+    // 底部按钮（固定，不加入 renderable 列表）
     private Button doneBtn;
+    /** 【P3】重置当前分类全部选项 */
+    private Button resetPageBtn;
 
     // UI 状态
     private int scrollOffset = 0;
@@ -223,6 +225,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         this.tabButtons.clear();
         this.clearWidgets();
         this.doneBtn = null;
+        this.resetPageBtn = null;
 
         // ===== 【P2】左侧竖排分类栏（固定，不进入滚动容器） =====
         SettingsCategory[] categories = SettingsCategory.values();
@@ -249,14 +252,10 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
                 case SettingRow.OptionRow optRow -> {
                     OptionEntry e = optRow.entry();
                     switch (e.type()) {
-                        case TOGGLE -> addCheckbox(e.nameKey(), e.scope(), e.descKey(), e.tipKey(),
-                                e.reader().applyAsInt(this) != 0, y,
+                        case TOGGLE -> addCheckbox(e, e.reader().applyAsInt(this) != 0, y,
                                 (cb, v) -> applyOption(e, v ? 1 : 0), e.clientOnly());
-                        case INT -> addIntField(e.nameKey(), e.scope(), e.descKey(), e.tipKey(),
-                                e.reader().applyAsInt(this), y, e.min(), e.max(),
-                                v -> applyOption(e, v), e.clientOnly());
-                        case CYCLE -> addCycleButton(e.nameKey(), e.scope(), e.descKey(), e.tipKey(),
-                                () -> e.cycleLabel().apply(this), y,
+                        case INT -> addIntSlider(e, e.reader().applyAsInt(this), y);
+                        case CYCLE -> addCycleButton(e, () -> e.cycleLabel().apply(this), y,
                                 () -> e.cycleAction().accept(this));
                     }
                     y += ROW_HEIGHT;
@@ -264,9 +263,13 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
             }
         }
 
-        // ===== 固定底部完成按钮（手动渲染/命中） =====
+        // ===== 固定底部按钮（手动渲染/命中）：重置本页 + 完成 =====
+        int btnY = this.height - 28;
+        this.resetPageBtn = Button.builder(Component.literal(tr("zombietide.settings.button.reset_page")),
+                        b -> resetCurrentPage())
+                .bounds(this.width / 2 - 123, btnY, 120, 20).build();
         this.doneBtn = Button.builder(Component.literal(tr("zombietide.settings.button.done")), b -> this.onClose())
-                .bounds(this.width / 2 - 60, this.height - 28, 120, 20).build();
+                .bounds(this.width / 2 + 3, btnY, 120, 20).build();
 
         // 内容高度：以最后一行底边为准 + 底部留白（P2 行高变小，公式同步简化）
         this.contentHeight = Math.max(ROW_HEIGHT, (y - CONTENT_TOP) + 16);
@@ -426,6 +429,19 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
                 }
             }
 
+            // 【P3】「已改动」标记：值 ≠ 默认值时在行尾点一个橙点（右键可单项重置）
+            for (RowBounds rb : this.rowBounds) {
+                OptionEntry e = rb.entry();
+                // CYCLE（血债模式）的 reader 恒为 0，改为直接比较配置值
+                boolean modified = e.isCycle()
+                        ? !"cumulative".equals(this.config.debtMode())
+                        : e.reader().applyAsInt(this) != e.defaultValue();
+                if (modified) {
+                    int dotY = rb.y() + rb.height() / 2;
+                    guiGraphics.fill(this.width - 14, dotY - 2, this.width - 10, dotY + 2, 0xFFFFB347);
+                }
+            }
+
             // 分区标题（左对齐 + 右侧延伸分隔线），随内容滚动
             for (SectionHeader s : this.sectionHeaders) {
                 int screenY = s.y() - this.scrollOffset;
@@ -459,6 +475,9 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
         drawScrollBar(guiGraphics);
 
+        if (this.resetPageBtn != null) {
+            this.resetPageBtn.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
         if (this.doneBtn != null) {
             this.doneBtn.render(guiGraphics, mouseX, mouseY, partialTick);
         }
@@ -470,9 +489,11 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
             double cy = mouseY + this.scrollOffset;
             for (RowBounds rb : this.rowBounds) {
                 if (cy >= rb.y() && cy < rb.y() + rb.height()) {
-                    guiGraphics.renderTooltip(this.font,
-                            List.of(Component.literal("§f" + tr(rb.desc())),
-                                    Component.literal("§7" + tr(rb.tip()))),
+                    List<Component> lines = new ArrayList<>();
+                    lines.add(Component.literal("§f" + tr(rb.entry().descKey())));
+                    lines.add(Component.literal("§7" + tr(rb.entry().tipKey())));
+                    lines.add(Component.literal("§8" + tr("zombietide.settings.tooltip.reset_hint")));
+                    guiGraphics.renderTooltip(this.font, lines,
                             java.util.Optional.empty(), mouseX, mouseY);
                     break;
                 }
@@ -583,10 +604,27 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
                     return true;
                 }
             }
+            if (this.resetPageBtn != null && isInside(this.resetPageBtn, mouseX, mouseY)) {
+                this.setFocused(null);
+                this.resetPageBtn.mouseClicked(mouseX, mouseY, button);
+                return true;
+            }
             if (this.doneBtn != null && isInside(this.doneBtn, mouseX, mouseY)) {
                 this.setFocused(null);
                 this.doneBtn.mouseClicked(mouseX, mouseY, button);
                 return true;
+            }
+        }
+
+        // 【P3】右键点某一行 = 该选项恢复默认值
+        if (button == 1 && isOverContent(mouseY) && mouseX >= contentLeft() - 8) {
+            double cy = mouseY + this.scrollOffset;
+            for (RowBounds rb : this.rowBounds) {
+                if (cy >= rb.y() && cy < rb.y() + rb.height()) {
+                    this.setFocused(null);
+                    resetOption(rb.entry());
+                    return true;
+                }
             }
         }
 
@@ -704,12 +742,11 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         return y + 18;
     }
 
-    private Checkbox addCheckbox(String label, OptionScope scope, String desc, String tip,
-                                 boolean checked, int y,
+    private Checkbox addCheckbox(OptionEntry e, boolean checked, int y,
                                  Checkbox.OnValueChange onChange, boolean clientOnly) {
-        this.tabLabels.add(new LabelData(labelText(scope, label),
+        this.tabLabels.add(new LabelData(labelText(e.scope(), e.nameKey()),
                 contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
-        this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, desc, tip));
+        this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, e));
         // 【P2】开关带「开启/关闭」文字，填满右对齐的控件区，视觉上与输入框同宽
         Checkbox cb = Checkbox.builder(checkLabel(checked), this.font)
                 .pos(controlX(), y + (ROW_HEIGHT - FIELD_HEIGHT) / 2)
@@ -730,61 +767,27 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         return cb;
     }
 
-    private EditBox addIntField(String label, OptionScope scope, String desc, String tip,
-                                int value, int y, int minValue,
-                                IntConsumer onChange, boolean clientOnly) {
-        return addIntField(label, scope, desc, tip, value, y, minValue,
-                Integer.MAX_VALUE, onChange, clientOnly);
+    /** 【P3】数字选项改用滑块：拖动调值 / 点击轨道跳转 / Shift 精调 */
+    private IntSliderControl addIntSlider(OptionEntry e, int value, int y) {
+        this.tabLabels.add(new LabelData(labelText(e.scope(), e.nameKey()),
+                contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
+        this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, e));
+        IntSliderControl slider = new IntSliderControl(
+                controlX(), y + (ROW_HEIGHT - FIELD_HEIGHT) / 2, controlWidth(), FIELD_HEIGHT,
+                e.min(), e.max(), value,
+                // 拖动中只改内存状态，不发包
+                v -> e.writer().accept(this, v),
+                // 松手/跳转后提交一次
+                () -> commitOption(e));
+        this.addRenderableWidget(slider);
+        return slider;
     }
 
-    private EditBox addIntField(String label, OptionScope scope, String desc, String tip,
-                                int value, int y, int minValue, int maxValue,
-                                IntConsumer onChange, boolean clientOnly) {
-        this.tabLabels.add(new LabelData(labelText(scope, label),
+    private Button addCycleButton(OptionEntry e, java.util.function.Supplier<String> valueText,
+                                  int y, Runnable onPress) {
+        this.tabLabels.add(new LabelData(labelText(e.scope(), e.nameKey()),
                 contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
-        this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, desc, tip));
-        EditBox field = new EditBox(this.font, controlX(), y + (ROW_HEIGHT - FIELD_HEIGHT) / 2,
-                controlWidth(), FIELD_HEIGHT, Component.literal(tr(label)));
-        field.setValue(String.valueOf(value));
-        final boolean[] isSetting = { false };
-        final int[] lastSentValue = { value };
-        field.setResponder((s) -> {
-            if (isSetting[0]) return;
-            try {
-                int v = Integer.parseInt(s);
-                if (v < minValue) {
-                    isSetting[0] = true;
-                    field.setValue(String.valueOf(minValue));
-                    isSetting[0] = false;
-                    v = minValue;
-                } else if (v > maxValue) {
-                    isSetting[0] = true;
-                    field.setValue(String.valueOf(maxValue));
-                    isSetting[0] = false;
-                    v = maxValue;
-                }
-                onChange.accept(v);
-                if (v != lastSentValue[0]) {
-                    lastSentValue[0] = v;
-                    if (clientOnly) {
-                        commitClientHud();
-                    } else {
-                        pushConfig();
-                    }
-                }
-            } catch (NumberFormatException ignored) {
-                // 输入中间态（空串/负号）不提交
-            }
-        });
-        this.addRenderableWidget(field);
-        return field;
-    }
-
-    private Button addCycleButton(String label, OptionScope scope, String desc, String tip,
-                                  java.util.function.Supplier<String> valueText, int y, Runnable onPress) {
-        this.tabLabels.add(new LabelData(labelText(scope, label),
-                contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
-        this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, desc, tip));
+        this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, e));
         Button btn = Button.builder(Component.literal(valueText.get()), b -> {
             onPress.run();
             pushConfig();
@@ -796,14 +799,46 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         return btn;
     }
 
-    /** 把选项值写回编辑状态，并按它属于本机配置还是存档级配置选择提交路径 */
+    /** 写值 + 立即提交（开关/循环按钮用；滑块拖动走 commitOption 单独提交） */
     private void applyOption(OptionEntry entry, int value) {
         entry.writer().accept(this, value);
+        commitOption(entry);
+    }
+
+    /** 按选项属于本机配置还是存档级配置选择提交路径 */
+    private void commitOption(OptionEntry entry) {
         if (entry.clientOnly()) {
             commitClientHud();
         } else {
             pushConfig();
         }
+    }
+
+    /** 【P3】单项恢复默认值 */
+    private void resetOption(OptionEntry entry) {
+        entry.writer().accept(this, entry.defaultValue());
+        commitOption(entry);
+        this.rebuildWidgets();
+    }
+
+    /** 【P3】重置当前分类全部选项为默认值，只提交一次 */
+    private void resetCurrentPage() {
+        boolean touchedWorld = false;
+        boolean touchedClient = false;
+        for (SettingRow row : SettingsRegistry.rowsFor(this.currentTab)) {
+            if (row instanceof SettingRow.OptionRow optRow) {
+                OptionEntry e = optRow.entry();
+                e.writer().accept(this, e.defaultValue());
+                if (e.clientOnly()) {
+                    touchedClient = true;
+                } else {
+                    touchedWorld = true;
+                }
+            }
+        }
+        if (touchedClient) commitClientHud();
+        if (touchedWorld) pushConfig();
+        this.rebuildWidgets();
     }
 
     // ==================== SettingsHost（P1） ====================
@@ -872,8 +907,8 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
     private record LabelData(String text, int x, int y) {}
 
-    /** 【P2】一行的纵向范围 + 悬停提示用的描述/详细说明语言键 */
-    private record RowBounds(int y, int height, String desc, String tip) {}
+    /** 【P3】一行的纵向范围 + 对应选项（tooltip、重置、改动标记都用它） */
+    private record RowBounds(int y, int height, OptionEntry entry) {}
 
     private record SectionHeader(String title, int x, int y) {}
 }

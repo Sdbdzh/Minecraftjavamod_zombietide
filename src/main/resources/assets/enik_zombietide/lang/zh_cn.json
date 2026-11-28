@@ -302,5 +302,7 @@
   "zombietide.settings.spawn.item14.desc": "两次尖叫之间的最长冷却秒数",
   "zombietide.settings.spawn.item14.tip": "默认 120 秒。范围 10~600，小于最小值时自动取最小值。存档级设置。",
   "zombietide.settings.value.on": "开启",
-  "zombietide.settings.value.off": "关闭"
+  "zombietide.settings.value.off": "关闭",
+  "zombietide.settings.button.reset_page": "重置本页",
+  "zombietide.settings.tooltip.reset_hint": "右键恢复默认值"
 }

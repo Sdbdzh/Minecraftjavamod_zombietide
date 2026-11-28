@@ -302,5 +302,7 @@
   "zombietide.settings.spawn.item14.desc": "Maximum cooldown between screams in seconds",
   "zombietide.settings.spawn.item14.tip": "Default 120s. Range 10-600, auto-clamped to min if smaller. World-level setting.",
   "zombietide.settings.value.on": "ON",
-  "zombietide.settings.value.off": "OFF"
+  "zombietide.settings.value.off": "OFF",
+  "zombietide.settings.button.reset_page": "Reset Page",
+  "zombietide.settings.tooltip.reset_hint": "Right-click to restore default"
 }

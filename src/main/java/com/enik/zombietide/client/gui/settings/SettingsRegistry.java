@@ -22,6 +22,10 @@ public final class SettingsRegistry {
     private SettingsRegistry() {
     }
 
+    /** 默认配置实例：选项默认值直接从这里读，避免硬编码走样 */
+    private static final ZombietideConfig DEF_CFG = ZombietideConfig.defaults();
+    private static final HudConfig DEF_HUD = HudConfig.defaults();
+
     // ==================== 对外入口 ====================
 
     /** 取某个分类的全部行（顺序即渲染顺序） */
@@ -44,23 +48,23 @@ public final class SettingsRegistry {
                     ZombietideConfig::playerHordeEnabled, ZombietideConfig::withPlayerHordeEnabled)),
 
             section("zombietide.settings.common.text2"),
-            opt(wInt("zombietide.settings.player.item2.name", OptionScope.PLAYER, 1,
+            opt(wInt("zombietide.settings.player.item2.name", OptionScope.PLAYER, 1, 100,
                     ZombietideConfig::playerIntervalDays, ZombietideConfig::withPlayerIntervalDays)),
             opt(wBool("zombietide.settings.player.item3.name", OptionScope.PLAYER,
                     ZombietideConfig::playerIntervalRandom, ZombietideConfig::withPlayerIntervalRandom)),
-            opt(wInt("zombietide.settings.player.item4.name", OptionScope.PLAYER, 1,
+            opt(wInt("zombietide.settings.player.item4.name", OptionScope.PLAYER, 1, 100,
                     ZombietideConfig::playerIntervalMin, ZombietideConfig::withPlayerIntervalMin)),
-            opt(wInt("zombietide.settings.player.item5.name", OptionScope.PLAYER, 1,
+            opt(wInt("zombietide.settings.player.item5.name", OptionScope.PLAYER, 1, 100,
                     ZombietideConfig::playerIntervalMax, ZombietideConfig::withPlayerIntervalMax)),
 
             section("zombietide.settings.common.text3"),
-            opt(wInt("zombietide.settings.player.item6.name", OptionScope.PLAYER, 1,
+            opt(wInt("zombietide.settings.player.item6.name", OptionScope.PLAYER, 1, 1024,
                     ZombietideConfig::playerCount, ZombietideConfig::withPlayerCount)),
             opt(wBool("zombietide.settings.player.item7.name", OptionScope.PLAYER,
                     ZombietideConfig::playerCountRandom, ZombietideConfig::withPlayerCountRandom)),
-            opt(wInt("zombietide.settings.player.item8.name", OptionScope.PLAYER, 1,
+            opt(wInt("zombietide.settings.player.item8.name", OptionScope.PLAYER, 1, 1024,
                     ZombietideConfig::playerCountMin, ZombietideConfig::withPlayerCountMin)),
-            opt(wInt("zombietide.settings.player.item9.name", OptionScope.PLAYER, 1,
+            opt(wInt("zombietide.settings.player.item9.name", OptionScope.PLAYER, 1, 1024,
                     ZombietideConfig::playerCountMax, ZombietideConfig::withPlayerCountMax))
     );
 
@@ -72,23 +76,23 @@ public final class SettingsRegistry {
                     ZombietideConfig::villagerHordeEnabled, ZombietideConfig::withVillagerHordeEnabled)),
 
             section("zombietide.settings.common.text5"),
-            opt(wInt("zombietide.settings.villager.item2.name", OptionScope.VILLAGER, 1,
+            opt(wInt("zombietide.settings.villager.item2.name", OptionScope.VILLAGER, 1, 100,
                     ZombietideConfig::villagerIntervalDays, ZombietideConfig::withVillagerIntervalDays)),
             opt(wBool("zombietide.settings.villager.item3.name", OptionScope.VILLAGER,
                     ZombietideConfig::villagerIntervalRandom, ZombietideConfig::withVillagerIntervalRandom)),
-            opt(wInt("zombietide.settings.villager.item4.name", OptionScope.VILLAGER, 1,
+            opt(wInt("zombietide.settings.villager.item4.name", OptionScope.VILLAGER, 1, 100,
                     ZombietideConfig::villagerIntervalMin, ZombietideConfig::withVillagerIntervalMin)),
-            opt(wInt("zombietide.settings.villager.item5.name", OptionScope.VILLAGER, 1,
+            opt(wInt("zombietide.settings.villager.item5.name", OptionScope.VILLAGER, 1, 100,
                     ZombietideConfig::villagerIntervalMax, ZombietideConfig::withVillagerIntervalMax)),
 
             section("zombietide.settings.common.text6"),
-            opt(wInt("zombietide.settings.villager.item6.name", OptionScope.VILLAGER, 1,
+            opt(wInt("zombietide.settings.villager.item6.name", OptionScope.VILLAGER, 1, 1024,
                     ZombietideConfig::villagerCount, ZombietideConfig::withVillagerCount)),
             opt(wBool("zombietide.settings.villager.item7.name", OptionScope.VILLAGER,
                     ZombietideConfig::villagerCountRandom, ZombietideConfig::withVillagerCountRandom)),
-            opt(wInt("zombietide.settings.villager.item8.name", OptionScope.VILLAGER, 1,
+            opt(wInt("zombietide.settings.villager.item8.name", OptionScope.VILLAGER, 1, 1024,
                     ZombietideConfig::villagerCountMin, ZombietideConfig::withVillagerCountMin)),
-            opt(wInt("zombietide.settings.villager.item9.name", OptionScope.VILLAGER, 1,
+            opt(wInt("zombietide.settings.villager.item9.name", OptionScope.VILLAGER, 1, 1024,
                     ZombietideConfig::villagerCountMax, ZombietideConfig::withVillagerCountMax))
     );
 
@@ -98,11 +102,11 @@ public final class SettingsRegistry {
 
     private static final List<SettingRow> SPAWN_ROWS = List.of(
             section("zombietide.settings.common.text7"),
-            opt(wInt("zombietide.settings.spawn.item1.name", OptionScope.WORLD, 1,
+            opt(wInt("zombietide.settings.spawn.item1.name", OptionScope.WORLD, 1, 2000,
                     ZombietideConfig::batchTick, ZombietideConfig::withBatchTick)),
-            opt(wInt("zombietide.settings.spawn.item2.name", OptionScope.WORLD, 1,
+            opt(wInt("zombietide.settings.spawn.item2.name", OptionScope.WORLD, 1, 64,
                     ZombietideConfig::batchSize, ZombietideConfig::withBatchSize)),
-            opt(wInt("zombietide.settings.spawn.item3.name", OptionScope.WORLD, 1,
+            opt(wInt("zombietide.settings.spawn.item3.name", OptionScope.WORLD, 1, 64,
                     ZombietideConfig::villagerBatchSize, ZombietideConfig::withVillagerBatchSize)),
 
             section("zombietide.settings.common.text8"),
@@ -110,9 +114,9 @@ public final class SettingsRegistry {
                     ZombietideConfig::playerRadius, ZombietideConfig::withPlayerRadius)),
             opt(wInt("zombietide.settings.spawn.item5.name", OptionScope.WORLD, 1, MAX_RADIUS,
                     ZombietideConfig::villagerRadius, ZombietideConfig::withVillagerRadius)),
-            opt(wInt("zombietide.settings.spawn.item6.name", OptionScope.WORLD, 1,
+            opt(wInt("zombietide.settings.spawn.item6.name", OptionScope.WORLD, 1, 512,
                     ZombietideConfig::minSpawnDist, ZombietideConfig::withMinSpawnDist)),
-            opt(wInt("zombietide.settings.spawn.item7.name", OptionScope.WORLD, 1,
+            opt(wInt("zombietide.settings.spawn.item7.name", OptionScope.WORLD, 1, 1000,
                     ZombietideConfig::spawnAttempts, ZombietideConfig::withSpawnAttempts)),
 
             section("zombietide.settings.common.text9"),
@@ -125,15 +129,15 @@ public final class SettingsRegistry {
             opt(wBool("zombietide.settings.spawn.item8.name", OptionScope.WORLD,
                     ZombietideConfig::spawnByBiome, ZombietideConfig::withSpawnByBiome)),
             // 权重在配置里是 0.0~1.0 的 float，界面上按 ×100 展示与编辑
-            opt(wInt("zombietide.settings.spawn.item9.name", OptionScope.WORLD, 0,
+            opt(wInt("zombietide.settings.spawn.item9.name", OptionScope.WORLD, 0, 100,
                     cfg -> Math.round(cfg.distanceWeight() * 100),
                     (cfg, v) -> cfg.withDistanceWeight(v / 100.0f))),
-            opt(wInt("zombietide.settings.spawn.item10.name", OptionScope.WORLD, 0,
+            opt(wInt("zombietide.settings.spawn.item10.name", OptionScope.WORLD, 0, 100,
                     cfg -> Math.round(cfg.darkWeight() * 100),
                     (cfg, v) -> cfg.withDarkWeight(v / 100.0f))),
 
             section("zombietide.settings.common.text10"),
-            opt(wInt("zombietide.settings.spawn.item11.name", OptionScope.WORLD, 1,
+            opt(wInt("zombietide.settings.spawn.item11.name", OptionScope.WORLD, 1, 4096,
                     ZombietideConfig::globalCap, ZombietideConfig::withGlobalCap))
     );
 
@@ -145,16 +149,16 @@ public final class SettingsRegistry {
                     ZombietideConfig::daylightBurn, ZombietideConfig::withDaylightBurn)),
             opt(wBool("zombietide.settings.world.item2.name", OptionScope.WORLD,
                     ZombietideConfig::blockSleep, ZombietideConfig::withBlockSleep)),
-            opt(wInt("zombietide.settings.world.item3.name", OptionScope.VILLAGER, 1,
+            opt(wInt("zombietide.settings.world.item3.name", OptionScope.VILLAGER, 1, 512,
                     ZombietideConfig::villagerSleepBlockRange, ZombietideConfig::withVillagerSleepBlockRange)),
 
             section("zombietide.settings.common.text12"),
             opt(debtModeEntry()),
-            opt(wInt("zombietide.settings.world.item5.name", OptionScope.PLAYER, 0,
+            opt(wInt("zombietide.settings.world.item5.name", OptionScope.PLAYER, 0, 1024,
                     ZombietideConfig::debtCap, ZombietideConfig::withDebtCap)),
 
             section("zombietide.settings.common.text13"),
-            opt(wInt("zombietide.settings.world.item6.name", OptionScope.WORLD, 1,
+            opt(wInt("zombietide.settings.world.item6.name", OptionScope.WORLD, 1, 600,
                     ZombietideConfig::despawnSeconds, ZombietideConfig::withDespawnSeconds)),
 
             section("zombietide.settings.common.text14"),
@@ -182,7 +186,7 @@ public final class SettingsRegistry {
                     ZombietideConfig::hordeBgmSound, ZombietideConfig::withHordeBgmSound)),
 
             section("zombietide.settings.common.text17"),
-            opt(wInt("zombietide.settings.warning.item7.name", OptionScope.VILLAGER, 1,
+            opt(wInt("zombietide.settings.warning.item7.name", OptionScope.VILLAGER, 1, 512,
                     ZombietideConfig::villagerWarningRange, ZombietideConfig::withVillagerWarningRange))
     );
 
@@ -200,22 +204,22 @@ public final class SettingsRegistry {
             opt(hBool("zombietide.settings.hud.item4.name", HudConfig::villagerHordeBold, HudConfig::withVillagerHordeBold)),
 
             section("zombietide.settings.common.text20"),
-            opt(hInt("zombietide.settings.hud.item5.name", 0, HudConfig::hudX, HudConfig::withHudX)),
-            opt(hInt("zombietide.settings.hud.item6.name", 0, HudConfig::hudY, HudConfig::withHudY)),
+            opt(hInt("zombietide.settings.hud.item5.name", 0, 3840, HudConfig::hudX, HudConfig::withHudX)),
+            opt(hInt("zombietide.settings.hud.item6.name", 0, 2160, HudConfig::hudY, HudConfig::withHudY)),
             // 缩放是 float，界面按 ×10 展示
-            opt(hInt("zombietide.settings.hud.item7.name", 1,
+            opt(hInt("zombietide.settings.hud.item7.name", 1, 100,
                     hud -> Math.round(hud.hudScale() * 10),
                     (hud, v) -> hud.withHudScale(v / 10.0f))),
-            opt(hInt("zombietide.settings.hud.item8.name", 0, HudConfig::villagerHordeX, HudConfig::withVillagerHordeX)),
-            opt(hInt("zombietide.settings.hud.item9.name", 0, HudConfig::villagerHordeY, HudConfig::withVillagerHordeY)),
-            opt(hInt("zombietide.settings.hud.item10.name", 1,
+            opt(hInt("zombietide.settings.hud.item8.name", 0, 3840, HudConfig::villagerHordeX, HudConfig::withVillagerHordeX)),
+            opt(hInt("zombietide.settings.hud.item9.name", 0, 2160, HudConfig::villagerHordeY, HudConfig::withVillagerHordeY)),
+            opt(hInt("zombietide.settings.hud.item10.name", 1, 100,
                     hud -> Math.round(hud.villagerHordeScale() * 10),
                     (hud, v) -> hud.withVillagerHordeScale(v / 10.0f))),
 
             section("zombietide.settings.common.text21"),
-            opt(hInt("zombietide.settings.hud.item11.name", 1,
+            opt(hInt("zombietide.settings.hud.item11.name", 1, 512,
                     HudConfig::villagerHordeDisplayRange, HudConfig::withVillagerHordeDisplayRange)),
-            opt(hInt("zombietide.settings.hud.item12.name", 1,
+            opt(hInt("zombietide.settings.hud.item12.name", 1, 200,
                     HudConfig::villagerHordeMaxEntries, HudConfig::withVillagerHordeMaxEntries)),
 
             section("zombietide.settings.common.text22"),
@@ -231,22 +235,18 @@ public final class SettingsRegistry {
     private static OptionEntry wBool(String nameKey, OptionScope scope,
                                      Predicate<ZombietideConfig> get,
                                      BiFunction<ZombietideConfig, Boolean, ZombietideConfig> set) {
-        return new OptionEntry(nameKey, scope, ControlType.TOGGLE, 0, 0, false,
+        return new OptionEntry(nameKey, scope, ControlType.TOGGLE, 0, 0,
+                get.test(DEF_CFG) ? 1 : 0, false,
                 h -> get.test(h.config()) ? 1 : 0,
                 (h, v) -> h.setConfig(set.apply(h.config(), v != 0)),
                 null, null);
     }
 
-    private static OptionEntry wInt(String nameKey, OptionScope scope, int min,
-                                    ToIntFunction<ZombietideConfig> get,
-                                    BiFunction<ZombietideConfig, Integer, ZombietideConfig> set) {
-        return wInt(nameKey, scope, min, Integer.MAX_VALUE, get, set);
-    }
-
     private static OptionEntry wInt(String nameKey, OptionScope scope, int min, int max,
                                     ToIntFunction<ZombietideConfig> get,
                                     BiFunction<ZombietideConfig, Integer, ZombietideConfig> set) {
-        return new OptionEntry(nameKey, scope, ControlType.INT, min, max, false,
+        return new OptionEntry(nameKey, scope, ControlType.INT, min, max,
+                get.applyAsInt(DEF_CFG), false,
                 h -> get.applyAsInt(h.config()),
                 (h, v) -> h.setConfig(set.apply(h.config(), v)),
                 null, null);
@@ -257,16 +257,18 @@ public final class SettingsRegistry {
     private static OptionEntry hBool(String nameKey,
                                      Predicate<HudConfig> get,
                                      BiFunction<HudConfig, Boolean, HudConfig> set) {
-        return new OptionEntry(nameKey, null, ControlType.TOGGLE, 0, 0, true,
+        return new OptionEntry(nameKey, null, ControlType.TOGGLE, 0, 0,
+                get.test(DEF_HUD) ? 1 : 0, true,
                 h -> get.test(h.hud()) ? 1 : 0,
                 (h, v) -> h.setHud(set.apply(h.hud(), v != 0)),
                 null, null);
     }
 
-    private static OptionEntry hInt(String nameKey, int min,
+    private static OptionEntry hInt(String nameKey, int min, int max,
                                     ToIntFunction<HudConfig> get,
                                     BiFunction<HudConfig, Integer, HudConfig> set) {
-        return new OptionEntry(nameKey, null, ControlType.INT, min, Integer.MAX_VALUE, true,
+        return new OptionEntry(nameKey, null, ControlType.INT, min, max,
+                get.applyAsInt(DEF_HUD), true,
                 h -> get.applyAsInt(h.hud()),
                 (h, v) -> h.setHud(set.apply(h.hud(), v)),
                 null, null);
@@ -274,7 +276,8 @@ public final class SettingsRegistry {
 
     /** DAY X 渐进红：字段在屏幕/ClientHudConfig 上，不在 HudConfig record 里 */
     private static OptionEntry dayGradientRedEntry() {
-        return new OptionEntry("zombietide.settings.hud.item14.name", null, ControlType.TOGGLE, 0, 0, true,
+        return new OptionEntry("zombietide.settings.hud.item14.name", null, ControlType.TOGGLE, 0, 0,
+                1, true,   // ClientHudConfig 默认开启
                 h -> h.dayGradientRed() ? 1 : 0,
                 (h, v) -> h.setDayGradientRed(v != 0),
                 null, null);
@@ -285,7 +288,9 @@ public final class SettingsRegistry {
     private enum AtmoToggle { ATMOSPHERE, FOG, CAMERA_SHAKE, FLASH, BORDER }
 
     private static OptionEntry aBool(String nameKey, AtmoToggle which) {
-        return new OptionEntry(nameKey, null, ControlType.TOGGLE, 0, 0, true,
+        // 除镜头下沉默认关闭外，其余氛围开关默认开启（与 ClientAtmosphereConfig 初始值一致）
+        int def = which == AtmoToggle.CAMERA_SHAKE ? 0 : 1;
+        return new OptionEntry(nameKey, null, ControlType.TOGGLE, 0, 0, def, true,
                 h -> readAtmo(which) ? 1 : 0,
                 (h, v) -> writeAtmo(which, v != 0),
                 null, null);
@@ -315,11 +320,10 @@ public final class SettingsRegistry {
 
     private static OptionEntry debtModeEntry() {
         return new OptionEntry("zombietide.settings.world.item4.name", OptionScope.PLAYER,
-                ControlType.CYCLE, 0, 0, false,
+                ControlType.CYCLE, 0, 0, 0, false,
                 h -> 0,
-                (h, v) -> {
-                    // 值由 cycleAction 推进，writer 不参与
-                },
+                // writer 只用于「重置」：血债模式默认 cumulative（值由 cycleAction 推进）
+                (h, v) -> h.setConfig(h.config().withDebtMode("cumulative")),
                 h -> tr("zombietide.settings.debt.prefix") + debtModeLabel(h.config().debtMode()),
                 h -> h.setConfig(h.config().withDebtMode(nextDebtMode(h.config().debtMode()))));
     }
