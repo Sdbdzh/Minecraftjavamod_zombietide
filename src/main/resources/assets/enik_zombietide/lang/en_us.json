@@ -306,5 +306,6 @@
   "zombietide.settings.button.reset_page": "Reset Page",
   "zombietide.settings.tooltip.reset_hint": "Right-click to restore default",
   "zombietide.settings.search.hint": "Search settings…",
-  "zombietide.settings.search.none": "No matching settings"
+  "zombietide.settings.search.none": "No matching settings",
+  "zombietide.settings.tab.atmo": "Atmosphere"
 }

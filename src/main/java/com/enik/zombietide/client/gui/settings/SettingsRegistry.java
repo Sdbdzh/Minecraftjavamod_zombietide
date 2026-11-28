@@ -37,6 +37,7 @@ public final class SettingsRegistry {
             case WORLD -> WORLD_ROWS;
             case WARNING -> WARNING_ROWS;
             case HUD -> HUD_ROWS;
+            case ATMO -> ATMO_ROWS;
         };
     }
 
@@ -190,8 +191,7 @@ public final class SettingsRegistry {
                     ZombietideConfig::villagerWarningRange, ZombietideConfig::withVillagerWarningRange))
     );
 
-    // ==================== HUD（含氛围） ====================
-    // 注意：氛围 5 项目前仍在本分类末尾，与旧实现一致；P2 拆为独立分类。
+    // ==================== HUD ====================
 
     private static final List<SettingRow> HUD_ROWS = List.of(
             note("zombietide.settings.common.text18"),
@@ -220,8 +220,12 @@ public final class SettingsRegistry {
             opt(hInt("zombietide.settings.hud.item11.name", 1, 512,
                     HudConfig::villagerHordeDisplayRange, HudConfig::withVillagerHordeDisplayRange)),
             opt(hInt("zombietide.settings.hud.item12.name", 1, 200,
-                    HudConfig::villagerHordeMaxEntries, HudConfig::withVillagerHordeMaxEntries)),
+                    HudConfig::villagerHordeMaxEntries, HudConfig::withVillagerHordeMaxEntries))
+    );
 
+    // ==================== 氛围（纯客户端视觉，独立分类） ====================
+
+    private static final List<SettingRow> ATMO_ROWS = List.of(
             section("zombietide.settings.common.text22"),
             opt(aBool("zombietide.settings.atmo.item1.name", AtmoToggle.ATMOSPHERE)),
             opt(aBool("zombietide.settings.atmo.item2.name", AtmoToggle.FOG)),

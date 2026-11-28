@@ -37,7 +37,7 @@ import java.util.Map;
  * <p>
  * 信息架构：
  * <ul>
- *   <li>按作用对象分为 6 个分页：玩家尸潮 / 村民尸潮 / 生成性能 / 世界规则 / 警告提示 / HUD。</li>
+ *   <li>按作用对象分为 7 个分页：玩家尸潮 / 村民尸潮 / 生成性能 / 世界规则 / 警告提示 / HUD / 氛围。</li>
  *   <li>每个分页内部再按功能分区（总开关、触发节奏、规模、范围……），带分隔线与分区标题。</li>
  *   <li>每个设置项统一为「作用域标签 + 名称」「灰色说明」「控件」三行结构，并带悬停详细提示。</li>
  *   <li>HUD 分页为<b>本机全局</b>配置（{@link ClientHudConfig}），不随存档保存；其余分页写入存档级配置。</li>
@@ -61,8 +61,8 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
     /** 分页：按作用对象/主题划分 */
     private SettingsCategory currentTab = SettingsCategory.PLAYER;
-    /** 固定顶部标签页（不加入 renderable 列表，手动渲染/命中） */
-    private final List<Button> tabButtons = new ArrayList<>();
+    // 【v0.2.132】侧栏改为自绘扁平项（Sodium 风格），不再持有 Button 控件；
+    // 布局位置由 sidebarItemY(i) 计算，绘制在 render()、命中在 mouseClicked()。
     /** 普通文本行（设置名 + 说明） */
     private final List<LabelData> tabLabels = new ArrayList<>();
     /** 分区标题（带分隔线） */
@@ -239,24 +239,9 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         this.rowBounds.clear();
         this.searchCategoryOf.clear();
         ensureSearchBox();
-        this.tabButtons.clear();
         this.clearWidgets();
         this.doneBtn = null;
         this.resetPageBtn = null;
-
-        // ===== 【P2】左侧竖排分类栏（固定，不进入滚动容器） =====
-        SettingsCategory[] categories = SettingsCategory.values();
-        for (int i = 0; i < categories.length; i++) {
-            SettingsCategory tab = categories[i];
-            int itemY = CONTENT_TOP + SIDEBAR_TOP_PAD + i * (SIDEBAR_ITEM_H + SIDEBAR_ITEM_GAP);
-            Button btn = Button.builder(Component.literal(tr(tab.key())), b -> {
-                this.currentTab = tab;
-                this.scrollOffset = 0;
-                clearSearch();
-                this.rebuildWidgets();
-            }).bounds(SIDEBAR_X, itemY, SIDEBAR_WIDTH, SIDEBAR_ITEM_H).build();
-            this.tabButtons.add(btn);
-        }
 
         // ===== 内容控件（进入 renderable 列表，随 pose 平移） =====
         int y = CONTENT_TOP + 8;
@@ -419,28 +404,31 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         guiGraphics.fill(contentLeft() - 8, scissorTop, this.width - 8,
                 scissorBottom, 0x8C101014);
 
-        // 左侧分类栏（固定，不随内容滚动）
-        for (int i = 0; i < this.tabButtons.size(); i++) {
-            this.tabButtons.get(i).render(guiGraphics, mouseX, mouseY, partialTick);
-        }
+        // ===== 左侧分类栏：Sodium 风格扁平项（自绘，无原版按钮纹理） =====
+        // 对齐《设置页重构方案》3.1：分类名左对齐 + 选项数量右对齐灰字；
+        // 选中 = 淡橙底 + 左侧 3px 实橙条；未选中悬停 = 淡白底。
+        SettingsCategory[] cats = SettingsCategory.values();
+        for (int i = 0; i < cats.length; i++) {
+            int ix = SIDEBAR_X;
+            int iy = sidebarItemY(i);
+            int iw = SIDEBAR_WIDTH;
+            int ih = SIDEBAR_ITEM_H;
+            boolean selected = i == this.currentTab.ordinal();
+            boolean hovered = mouseX >= ix && mouseX < ix + iw
+                    && mouseY >= iy && mouseY < iy + ih;
 
-        // 【P2 修】选中态装饰必须画在「面板 + 按钮」之后，否则橙色条会被深色面板压暗。
-        // 之前用的是 30% 透明橙底 + 按钮纹理叠加，右侧那条看起来像被盖住。
-        int selIndex = this.currentTab.ordinal();
-        if (selIndex >= 0 && selIndex < this.tabButtons.size()) {
-            Button sel = this.tabButtons.get(selIndex);
-            int bx = sel.getX();
-            int by = sel.getY();
-            int bw = sel.getWidth();
-            int bh = sel.getHeight();
-            // 淡橙底：覆盖按钮本体，形成明确选中态
-            guiGraphics.fill(bx, by, bx + bw, by + bh, 0x33FFB347);
-            // 四边 1px 橙框（上/下/右；左侧由高亮竖条接管）
-            guiGraphics.fill(bx - 1, by - 1, bx + bw + 1, by, 0xAAFFB347);
-            guiGraphics.fill(bx - 1, by + bh, bx + bw + 1, by + bh + 1, 0xAAFFB347);
-            guiGraphics.fill(bx + bw, by - 1, bx + bw + 1, by + bh + 1, 0xAAFFB347);
-            // 左侧实色高亮竖条（3px，最亮）
-            guiGraphics.fill(bx - 3, by - 1, bx, by + bh + 1, 0xFFFFB347);
+            if (selected) {
+                guiGraphics.fill(ix, iy, ix + iw, iy + ih, 0x4DFFB347);
+                guiGraphics.fill(ix, iy, ix + 3, iy + ih, 0xFFFFB347);
+            } else if (hovered) {
+                guiGraphics.fill(ix, iy, ix + iw, iy + ih, 0x26FFFFFF);
+            }
+
+            guiGraphics.drawString(this.font, (selected ? "§f§l" : "§7") + tr(cats[i].key()),
+                    ix + 10, iy + 7, 0xFFFFFF, false);
+            String cnt = String.valueOf(optionCountOf(cats[i]));
+            guiGraphics.drawString(this.font, "§8" + cnt,
+                    ix + iw - 9 - this.font.width(cnt), iy + 7, 0xFFFFFF, false);
         }
 
         if (scissorBottom > scissorTop) {
@@ -633,10 +621,17 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         }
 
         if (button == 0) {
-            for (Button btn : this.tabButtons) {
-                if (isInside(btn, mouseX, mouseY)) {
+            // 侧栏分类（自绘，按矩形命中）
+            SettingsCategory[] clickCats = SettingsCategory.values();
+            for (int i = 0; i < clickCats.length; i++) {
+                int iy = sidebarItemY(i);
+                if (mouseX >= SIDEBAR_X && mouseX < SIDEBAR_X + SIDEBAR_WIDTH
+                        && mouseY >= iy && mouseY < iy + SIDEBAR_ITEM_H) {
                     this.setFocused(null);
-                    btn.mouseClicked(mouseX, mouseY, button);
+                    this.currentTab = clickCats[i];
+                    this.scrollOffset = 0;
+                    clearSearch();
+                    this.rebuildWidgets();
                     return true;
                 }
             }
@@ -831,6 +826,22 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     /** 内容区右边界 */
     private int contentRight() {
         return this.width - 16;
+    }
+
+    /** 侧栏第 index 项的顶部 Y（固定布局，不随滚动） */
+    private int sidebarItemY(int index) {
+        return CONTENT_TOP + SIDEBAR_TOP_PAD + index * (SIDEBAR_ITEM_H + SIDEBAR_ITEM_GAP);
+    }
+
+    /** 某分类的选项数量（侧栏右侧显示，方案 3.1 布局图要求） */
+    private int optionCountOf(SettingsCategory cat) {
+        int n = 0;
+        for (SettingRow row : SettingsRegistry.rowsFor(cat)) {
+            if (row instanceof SettingRow.OptionRow) {
+                n++;
+            }
+        }
+        return n;
     }
 
     /** 控件宽度：窗口很窄时收缩，保证标签至少留 140px */

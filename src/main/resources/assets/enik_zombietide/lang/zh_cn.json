@@ -306,5 +306,6 @@
   "zombietide.settings.button.reset_page": "重置本页",
   "zombietide.settings.tooltip.reset_hint": "右键恢复默认值",
   "zombietide.settings.search.hint": "搜索设置…",
-  "zombietide.settings.search.none": "没有匹配的设置项"
+  "zombietide.settings.search.none": "没有匹配的设置项",
+  "zombietide.settings.tab.atmo": "氛围"
 }
