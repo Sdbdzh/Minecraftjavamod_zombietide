@@ -62,8 +62,7 @@
     "sounds": [
       {
         "name": "enik_zombietide:screamer_new",
-        "stream": true,
-        "attenuation_distance": 192
+        "attenuation_distance": 256
       }
     ]
   }

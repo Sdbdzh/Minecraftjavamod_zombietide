@@ -439,10 +439,11 @@ public class HordeSpawner {
                                 new org.joml.Vector3f(0.45F, 0.03F, 0.03F), 1.2F),
                         px, py, pz, 40, 2.5, 1.0, 2.5, 0.06);
 
-                // 空间化音效（192 格可闻，由 sounds.json 的 attenuation_distance 控制）
-                for (ServerPlayer p : level.getPlayers(p -> p.distanceToSqr(mob) <= 192.0 * 192.0)) {
+                // 【v0.2.109】空间化尖叫：为避免被几十只僵尸的 HOSTILE 通道叫声淹没，
+                // 改走 MASTER 通道 + 音量 2.0。sounds.json 关掉 stream（短音效不该流式解码）。
+                for (ServerPlayer p : level.getPlayers(p -> p.distanceToSqr(mob) <= 256.0 * 256.0)) {
                     ModSounds.playAtPosition(p, ModSounds.SCREAMER_CALL,
-                            px, py, pz, net.minecraft.sounds.SoundSource.HOSTILE, 1.0F, 1.0F);
+                            px, py, pz, net.minecraft.sounds.SoundSource.MASTER, 2.0F, 1.0F);
                 }
 
                 // 【v0.2.105】增援：直接调 spawnZombie 在玩家周围生成 8~12 只，
