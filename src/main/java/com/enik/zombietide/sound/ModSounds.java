@@ -43,6 +43,13 @@ public final class ModSounds {
     public static final DeferredHolder<SoundEvent, SoundEvent> HORDE_BGM =
             register("horde_bgm", false);
 
+    /** 僵尸出生大叫（v0.2.82）：从僵尸生成位置发出，用于判断"它从哪来"。
+     *  <p><b>业务范围不在这里定</b>——服务端按配置的生成半径（`max(playerRadius, villagerRadius)`）
+     *  逐个玩家过滤后发包，范围随配置变化。这里注册 512 格只是**技术上限**
+     *  （设置页半径输入上限也是 512），保证客户端在任何配置下都接受播放。 */
+    public static final DeferredHolder<SoundEvent, SoundEvent> HORDE_CALL =
+            register("horde_call", 512.0F);
+
     /** 持续低频底鸣（drone）：尸潮期间常驻播放的压迫性底噪，非旋律。
      *  <p>源素材 74 秒，已拼接为约 3 分 42 秒的 OGG，靠「长音频 + 到点重播」近似无缝循环
      *  （Minecraft 的 SoundEvent 不支持原生 loop）。 */

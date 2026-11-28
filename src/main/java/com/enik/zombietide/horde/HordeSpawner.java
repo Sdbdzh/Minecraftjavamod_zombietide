@@ -408,11 +408,52 @@ public class HordeSpawner {
         }
         hordeZombieUuids.add(mob.getUUID());
 
+        // 【v0.2.82】出生大叫：50% 概率从僵尸生成位置广播，所有玩家都能听到、可判断方位。
+        // 带 3 秒全局冷却：一波几百只时不会刷屏成"整晚都在叫"。
+        maybePlaySpawnCall(level, mob, config);
+
         // 刷怪提醒：记录日志（不再每只僵尸发聊天消息，避免大波次刷屏；波次详情已在 startHorde() 中一次性发送）
         EnikZombietide.LOGGER.debug("尸潮僵尸生成：目标={} 位置={} 维度={} 半径={}", targetId, spawnPos, level.dimension().location(), radius);
         
         return true;
     }
+
+    /**
+     * 【v0.2.82】僵尸出生大叫：50% 概率在生成位置发出，**范围随配置的生成半径**。
+     * <p>范围不用音效注册值决定（那是 512 的技术上限），而是服务端按
+     * {@code max(playerRadius, villagerRadius)} 逐个玩家过滤——配置改大改小，可听范围跟着变。
+     * 音量按距离线性衰减（近 1.0 → 边缘 0.45），保证半径边缘也听得到、又不会近处爆音。
+     * <p>3 秒全局冷却：避免一波几百只僵尸时每只都叫、把氛围变成噪音。
+     */
+    private static void maybePlaySpawnCall(ServerLevel level, net.minecraft.world.entity.Mob mob,
+                                           ZombietideConfig config) {
+        long now = level.getGameTime();
+        if (now - LAST_SPAWN_CALL_TICK < SPAWN_CALL_COOLDOWN_TICKS) return;
+        if (RANDOM.nextFloat() >= SPAWN_CALL_CHANCE) return;
+        LAST_SPAWN_CALL_TICK = now;
+
+        // 业务范围 = 当前配置的最大生成半径（随配置变化）
+        double radius = Math.max(config.playerRadius(), config.villagerRadius());
+        double radiusSq = radius * radius;
+        for (ServerPlayer player : level.getPlayers(p -> true)) {
+            double d2 = player.distanceToSqr(mob);
+            if (d2 > radiusSq) continue;   // 超出本次生成半径，不发给该玩家
+            // 距离越远音量越低，但边缘仍保留 0.45（听得到、能辨方位）
+            double ratio = Math.sqrt(d2) / Math.max(1.0, radius);
+            float volume = (float) (1.0 - 0.55 * Math.min(1.0, ratio));
+            com.enik.zombietide.sound.ModSounds.playAtPosition(player,
+                    com.enik.zombietide.sound.ModSounds.HORDE_CALL,
+                    mob.getX(), mob.getY(), mob.getZ(),
+                    net.minecraft.sounds.SoundSource.HOSTILE, volume, 1.0F);
+        }
+    }
+
+    /** 出生大叫触发概率 */
+    private static final float SPAWN_CALL_CHANCE = 0.5F;
+    /** 出生大叫全局冷却（tick）：3 秒，防止大波次刷屏 */
+    private static final int SPAWN_CALL_COOLDOWN_TICKS = 60;
+    /** 上次出生大叫的游戏 tick（静态，仅运行时） */
+    private static long LAST_SPAWN_CALL_TICK = -1000L;
 
     /**
      * 黎明收尾：把所有目标的 {@code waveActive} 重置为 false。

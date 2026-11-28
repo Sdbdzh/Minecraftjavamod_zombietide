@@ -35,14 +35,6 @@ import java.util.UUID;
  */
 public final class HordeBgmScheduler {
 
-    /** 首次叫声延迟：10 秒（触发音效 8.1 秒播完后立刻接上，不再等 30~120 秒）。
-     *  <p>v0.2.81：原 30~120 秒延迟导致快进时间测试时波次几秒就结束、叫声永远等不到；
-     *  正常游玩也太久，尸潮刚开始毫无声音。 */
-    private static final int FIRST_CALL_DELAY_TICKS = 10 * 20;
-    /** 后续叫声间隔：20~60 秒（原来 30~120 秒太长，一晚上听不到几声） */
-    private static final int MIN_INTERVAL_TICKS = 20 * 20;
-    private static final int MAX_INTERVAL_TICKS = 60 * 20;
-    private static final float BGM_VOLUME = 0.7F;
     /** drone 是底噪，音量压低，避免盖住叫声与游戏音效 */
     private static final float DRONE_VOLUME = 0.35F;
     /** drone 素材实际 221.786 秒，重播周期取 223 秒（留约 1.2 秒静音间隙）。
@@ -53,11 +45,8 @@ public final class HordeBgmScheduler {
     private static final int DRONE_DURATION_TICKS = 223 * 20;
     private static final int DRONE_REPLAY_LEAD_TICKS = 0;
 
-    /** 玩家 UUID -> 下一次播放叫声的服务端 tick（纯运行时状态） */
-    private static final Map<UUID, Long> NEXT_PLAY_TICK = new HashMap<>();
     /** 玩家 UUID -> drone 下一次重播的服务端 tick */
     private static final Map<UUID, Long> DRONE_REPLAY_TICK = new HashMap<>();
-    private static final Random RANDOM = new Random();
 
     private HordeBgmScheduler() {
     }
@@ -79,10 +68,8 @@ public final class HordeBgmScheduler {
                     && player.serverLevel().getDifficulty() != Difficulty.PEACEFUL;
 
             if (!inHorde) {
-                // 波次结束或开关关闭：两条音轨一起掐掉，不留残响
-                boolean hadBgm = NEXT_PLAY_TICK.remove(id) != null;
-                boolean hadDrone = DRONE_REPLAY_TICK.remove(id) != null;
-                if (hadBgm || hadDrone) {
+                // 波次结束或开关关闭：掐掉 drone，不留残响
+                if (DRONE_REPLAY_TICK.remove(id) != null) {
                     ModSounds.stopAllHordeAudio(player);
                 }
                 continue;
@@ -106,60 +93,31 @@ public final class HordeBgmScheduler {
                 ModSounds.stopDroneForPlayer(player);
             }
 
-            // ---- 顶层叫声：随机间隔 ----
-            if (!config.hordeBgmSound()) {
-                if (NEXT_PLAY_TICK.remove(id) != null) {
-                    ModSounds.stopForPlayer(player);
-                }
-                continue;
-            }
-
-            Long next = NEXT_PLAY_TICK.get(id);
-            if (next == null) {
-                // 进入波次后先等 10 秒（触发音效播完），之后按 20~60 秒随机间隔
-                NEXT_PLAY_TICK.put(id, now + FIRST_CALL_DELAY_TICKS);
-                continue;
-            }
-            if (now >= next) {
-                // 【v0.2.81】叫声回到**玩家位置**播放（v0.2.70~76 的可靠做法）。
-                // 两次空间化尝试都失败：
-                //  - v0.2.77 实体绑定包：客户端查不到视距外实体 → 静默丢弃；
-                //  - v0.2.79 僵尸坐标包：固定 64 格范围，僵尸刷在 60~150 格外 → 超出范围听不到。
-                // 现在优先保证"听得到"。空间化暂放弃，僵尸方位感由 HUD/视觉承担。
-                ModSounds.playToPlayer(player, ModSounds.HORDE_BGM, SoundSource.AMBIENT, BGM_VOLUME, 1.0F);
-                EnikZombietide.LOGGER.debug("[僵尸叫声] 已发给玩家 {}", player.getScoreboardName());
-                NEXT_PLAY_TICK.put(id, now + randomInterval());
-            }
+            // 【v0.2.82】原「定时在玩家耳边播叫声」已移除：
+            // 叫声改由 HordeSpawner.maybePlaySpawnCall 在**僵尸出生位置**广播（50% 概率、
+            // 固定 192 格范围、所有玩家可听），玩家能判断"它从哪来"。
+            // 这里只负责底层 drone，不再发任何叫声包。
         }
-    }
-
-    private static int randomInterval() {
-        return MIN_INTERVAL_TICKS + RANDOM.nextInt(MAX_INTERVAL_TICKS - MIN_INTERVAL_TICKS + 1);
     }
 
     /** 清空音频调度状态；带 server 时先给「有排程」的在线玩家下发停止包，掐掉残留音频。
      *  调用点：服务器启动时（换世界/重启）与 `/zombietide debug clear`。
-     *  <p>两条音轨分别判断：只要任一 map 里有该玩家，就一起发停止包（多停一次无副作用）。
      */
     public static void reset(MinecraftServer server) {
         if (server != null && server.getPlayerList() != null) {
-            java.util.Set<UUID> scheduled = new java.util.HashSet<>(NEXT_PLAY_TICK.keySet());
-            scheduled.addAll(DRONE_REPLAY_TICK.keySet());
-            for (UUID id : scheduled) {
+            for (UUID id : new java.util.HashSet<>(DRONE_REPLAY_TICK.keySet())) {
                 ServerPlayer player = server.getPlayerList().getPlayer(id);
                 if (player != null && player.connection != null) {
                     ModSounds.stopAllHordeAudio(player);
                 }
             }
         }
-        NEXT_PLAY_TICK.clear();
         DRONE_REPLAY_TICK.clear();
     }
 
     /** 玩家退出时清掉该玩家的调度条目，避免 UUID 残留（内存泄漏）。
      *  <p>音频本身会随客户端断开自然停止；这里只清服务端状态。 */
     public static void onPlayerLogout(java.util.UUID playerId) {
-        NEXT_PLAY_TICK.remove(playerId);
         DRONE_REPLAY_TICK.remove(playerId);
     }
 
