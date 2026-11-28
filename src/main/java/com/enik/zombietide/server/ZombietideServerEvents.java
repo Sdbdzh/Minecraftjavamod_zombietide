@@ -128,10 +128,11 @@ public class ZombietideServerEvents {
         // 玩家想关面板时第一次 toggle 反而会发 enable=true（要按两次）。这里强制归零，保证两边一致。
         ZombietideCommands.resetOverlayState(player.getUUID());
         ModMessages.sendInfoOverlay(player, false);
+        // 【v0.2.139】顺序调整：先对账再首次下发，避免登录瞬间下发残留 waveActive=true。
+        // 对账内部也会对「被它改过状态的玩家」重发一次（幂等），保证跨天残留彻底清除。
+        HordeSpawner.reconcileStaleWaves(level, config);
         // 同步玩家 HUD 状态（modDay / 尸潮日 / 进行中 / 血债 / 全局统计）
         HordeTimer.syncPlayerHudState(level, config, player);
-        // 登录时对账一次：立即结束跨天残留的尸潮（避免白天加载存档后状态卡住）
-        HordeSpawner.reconcileStaleWaves(level, config);
         // 【BUG3 修复】同步附近村民的模组天数给新登录玩家，确保 HUD 立即显示实时村民状态。
         // 数据源与周期广播保持一致：优先读 VillagerScheduleData（权威），附件只是运行时镜像；
         // 只在调度表缺条目时回退附件，避免两处读不同来源导致 HUD 数值打架。

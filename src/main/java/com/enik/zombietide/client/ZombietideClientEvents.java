@@ -34,15 +34,37 @@ public class ZombietideClientEvents {
     }
 
     /**
+     * 【v0.2.139】登录/重进世界时清空上一局的服务端同步缓存。
+     * <p>此前只在 LoggingOut 清；但单人游戏「存档 → 主菜单 → 再进」不一定触发 LoggingOut，
+     * 客户端 static Map 残留上一局的 waveActive=true → DAY X 一直红，
+     * 直到服务端下发新值或执行 /zombietide debug clear 才恢复。
+     * <p>清空后服务端登录时会下发权威状态（onPlayerLoggedIn → syncPlayerHudState），
+     * 短暂空窗显示 DAY -- 属正常。
+     */
+    @SubscribeEvent
+    public static void onLoggingIn(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
+        clearWorldSyncedState();
+    }
+
+    /** 【v0.2.139】重生/跨维度切换（Clone 事件）同样清空，避免残留状态 */
+    @SubscribeEvent
+    public static void onClone(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.Clone event) {
+        clearWorldSyncedState();
+    }
+
+    private static void clearWorldSyncedState() {
+        ZombietideHud.clearAllSynced();
+        ZombietideAtmosphere.reset();
+        com.enik.zombietide.network.ClientPermission.reset();
+    }
+
+    /**
      * 断线时清空 HUD 的服务端同步缓存（v0.1.60 修复 #123）。
      * <p>否则退出存档后进入「没装本模组」的服务器，左上角仍显示上一局的 DAY X。
      */
     @SubscribeEvent
     public static void onLoggingOut(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
-        ZombietideHud.clearAllSynced();
-        ZombietideAtmosphere.reset();
-        // 【v0.2.137】清空上一台服务器的权限，避免换服后误判为 OP
-        com.enik.zombietide.network.ClientPermission.reset();
+        clearWorldSyncedState();
     }
 
     /** 按键输入：按下设置键时，仅在游戏内打开模组设置界面（game bus）；防止重复打开多个设置界面

@@ -1797,6 +1797,10 @@ public class HordeSpawner {
     public static void reconcileStaleWaves(ServerLevel level, ZombietideConfig config) {
         int currentDay = (int) (level.getDayTime() / 24000L);
         Set<UUID> stillActive = new HashSet<>();
+        // 【v0.2.139】记录被对账改过 waveActive 的玩家，方法末尾必须重发 HUD 状态。
+        // 登录流程是「先 sync 再 reconcile」，此前对账改完不重发 →
+        // 客户端拿到残留 waveActive=true → DAY X 一直红，直到 /zombietide debug clear 才恢复。
+        Set<UUID> reconciledPlayers = new HashSet<>();
 
         // 1) 玩家：跨天残留则结束
         for (ServerPlayer player : level.getPlayers(p -> true)) {
@@ -1808,6 +1812,7 @@ public class HordeSpawner {
                         new com.enik.zombietide.attachments.PlayerHordeData(
                                 data.modDay(), data.lastTriggerDay(), data.waveCount(), false));
                 clearInternalState(level, player.getUUID());
+                reconciledPlayers.add(player.getUUID());
                 EnikZombietide.LOGGER.info("对账：玩家 {} 的尸潮为跨天残留（触发日 DAY {} < 当前 DAY {}），已结束",
                         player.getScoreboardName(), data.lastTriggerDay(), currentDay);
             } else {
@@ -1868,6 +1873,15 @@ public class HordeSpawner {
                 scatterZombieTarget.remove(entity.getUUID());
                 entity.discard();
             }
+        }
+
+        // 【v0.2.139】对账改过 waveActive 的玩家必须重新下发 HUD 状态，
+        // 否则客户端缓存停留在对账前的残留值（waveActive=true → DAY X 一直红）。
+        if (!reconciledPlayers.isEmpty()) {
+            ZombietideConfig cfg = config != null ? config : com.enik.zombietide.config.ConfigManager
+                    .getConfigData(level).getConfig();
+            HordeTimer.syncPlayerHudState(level, cfg, player -> reconciledPlayers.contains(player.getUUID()));
+            EnikZombietide.LOGGER.debug("[对账] 重新下发 {} 名玩家的 HUD 状态", reconciledPlayers.size());
         }
 
         // 注：不在此清理 hordeZombieUuids —— level.getEntity 对未加载区块的僵尸也返回 null，

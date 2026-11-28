@@ -228,6 +228,19 @@ public class HordeTimer {
                 HordeSpawner.countAliveHordeZombies(overworld));
     }
 
+    /**
+     * 【v0.2.139】按条件批量重发 HUD 状态（对账改过状态的玩家用）。
+     */
+    public static void syncPlayerHudState(ServerLevel overworld, ZombietideConfig config,
+                                          java.util.function.Predicate<ServerPlayer> filter) {
+        if (overworld.getServer() == null) return;
+        for (ServerPlayer player : overworld.getServer().getPlayerList().getPlayers()) {
+            if (filter.test(player)) {
+                syncPlayerHudState(overworld, config, player);
+            }
+        }
+    }
+
     /** 批量同步时由调用方先算好全局统计，避免每个玩家重复扫描实体 */
     public static void syncPlayerHudState(ServerLevel overworld, ZombietideConfig config, ServerPlayer player,
                                           int activePlayerHordes, int activeVillagerHordes, int aliveHordeZombies) {
