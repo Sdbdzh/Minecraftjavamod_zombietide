@@ -388,6 +388,15 @@ public class HordeSpawner {
      * <p>增援走方案 A：直接往 {@code activeHordes} 剩余数追加，由刷怪引擎自然产出——
      * 不另开独立刷怪路径，黎明清理/血债结算/进度持久化全部复用现有逻辑。
      */
+    /** 【v0.2.101】只给创造/旁观者玩家发尖啸者调试消息（生存玩家看不到，不干扰正常游玩）。 */
+    private static void notifyCreativeDebug(ServerLevel level, String msg) {
+        var text = net.minecraft.network.chat.Component.literal("§8[尖啸者调试] §7" + msg);
+        for (ServerPlayer p : level.getPlayers(p -> p.isCreative() || p.isSpectator())) {
+            p.sendSystemMessage(text);
+        }
+        EnikZombietide.LOGGER.info("[尖啸者调试] {}", msg);
+    }
+
     private static void checkScreamers(ServerLevel level, ZombietideConfig config) {
         long now = level.getGameTime();
         for (UUID zombieUuid : hordeZombieUuids) {
@@ -437,7 +446,8 @@ public class HordeSpawner {
                 }
 
                 // 增援：追加 8~12 只到现有波次
-                if (!(mob.getTarget() instanceof ServerPlayer player)) continue;
+                // 【v0.2.101】不再要求 getTarget() 是玩家——创造/旁观模式的玩家会被 AI 跳过，
+                // 导致永远不尖叫。用 NBT 里记录的尸潮目标 ID 即可，与 AI 锁定解耦。
                 UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
                 if (targetId == null) continue;
                 if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
@@ -455,15 +465,23 @@ public class HordeSpawner {
 
                 EnikZombietide.LOGGER.info("[尖啸者] 僵尸 {} 尖叫（增援 {} 只，剩余 {}）",
                         mob.getUUID(), reinforce, activeHordes.get(targetId));
+                notifyCreativeDebug(level, "尖叫！增援 " + reinforce + " 只 @ " + mob.blockPosition());
                 continue;
             }
 
             // ===== 已在蓄力中：等 pending 到点 =====
             if (pending > 0L) continue;
 
-            // ===== 发起蓄力：锁定玩家 + 冷却结束 =====
+            // ===== 发起蓄力：附近有玩家 + 冷却结束 =====
+            // 【v0.2.101】用距离判定代替 AI 锁定：创造/旁观玩家不会被僵尸攻击，
+            // 但仍然应该能触发尖叫（否则 debug 测试时永远看不到效果）。
             if (lastScream > 0L && now - lastScream < SCREAMER_COOLDOWN_TICKS) continue;
-            if (!(mob.getTarget() instanceof ServerPlayer)) continue;
+            boolean playerNearby = false;
+            for (ServerPlayer p : level.getPlayers(p -> p.distanceToSqr(mob) <= 32.0 * 32.0)) {
+                playerNearby = true;
+                break;
+            }
+            if (!playerNearby) continue;
             UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
             if (targetId == null) continue;
             if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
@@ -474,6 +492,7 @@ public class HordeSpawner {
             level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
                     px, py, pz, 24, 1.2, 1.0, 1.2, 0.02);
             tag.putLong(SCREAMER_PENDING_KEY, now + SCREAMER_CHARGE_TICKS);
+            notifyCreativeDebug(level, "蓄力开始（" + SCREAMER_CHARGE_TICKS + " tick 后尖叫）@ " + mob.blockPosition());
         }
     }
 
@@ -534,6 +553,7 @@ public class HordeSpawner {
             tag.putBoolean(SCREAMER_KEY, true);
             var scaleAttr = mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.SCALE);
             if (scaleAttr != null) scaleAttr.setBaseValue(SCREAMER_SCALE);
+            notifyCreativeDebug(level, "尖啸者生成 @ " + feetPos + " UUID=" + mob.getUUID());
         }
 
         // 注入尸潮僵尸行为：主目标锁定 Goal + 永不消失（破门功能已移除）
