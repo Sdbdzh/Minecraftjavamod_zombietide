@@ -113,6 +113,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     private static final int SCROLLBAR_WIDTH = 6;
     private static final int SCROLLBAR_GAP = 4;
     /** 生成半径输入上限：防止填出离谱值（实际生效值还会被服务器模拟距离再压一次） */
+    /** 已迁移至 {@code SettingsRegistry.MAX_RADIUS}（滑块上限）；保留常量仅作历史参考 */
     private static final int MAX_RADIUS_INPUT = 512;
 
     // ==================== 背景壁纸 ====================
@@ -151,6 +152,10 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     /** 运行期缓存：mod 版本号只需从 ModList 取一次 */
     private static String cachedModVersion;
 
+    // ==================== 历史控件引用（P1~P3 重构后已无代码读取） ====================
+    // 说明：这些字段是重构前「把控件存起来方便后续读取」的产物。现在控件由 SettingsRegistry
+    // 声明式创建、状态统一走 ZombietideConfig / ClientHudConfig，因此它们全部成了死字段。
+    // 按项目约定「死代码保留并标注」——**保留不删**，仅作历史参考；新代码请勿再依赖。
     private Checkbox playerHordeEnabledCheckbox;
     private EditBox playerIntervalDaysEdit;
     private Checkbox playerIntervalRandomCheckbox;
@@ -857,7 +862,12 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         return (scope == null ? "" : "§l" + scope.color() + "[" + tr(scope.key()) + "] §r§f") + tr(label);
     }
 
-    /** 合并描述与详细提示，作为悬停提示的两行内容 */
+    /**
+     * 合并描述与详细提示为两行文本。
+     * <p><b>当前未被调用</b>：P3 起 tooltip 直接从 {@code OptionEntry.descKey()/tipKey()} 取键
+     * 并追加「右键重置」提示，由 render 内的 renderTooltip 直接拼装。
+     * 按项目约定「死代码保留并标注」保留，未删除。
+     */
     private String tooltipText(String desc, String tip) {
         return "§f" + tr(desc) + "\n§7" + tr(tip);
     }
