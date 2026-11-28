@@ -573,9 +573,9 @@ public class ZombietideSettingsScreen extends Screen {
                         hudConfig.hudBold(), centerX, y,
                         (cb, v) -> hudConfig = hudConfig.withHudBold(v), true);
                 y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.hud.item10.name", null,
-                        "zombietide.settings.hud.item10.desc",
-                        "zombietide.settings.hud.item10.tip",
+                addCheckbox("zombietide.settings.hud.item14.name", null,
+                        "zombietide.settings.hud.item14.desc",
+                        "zombietide.settings.hud.item14.tip",
                         dayGradientRed, centerX, y,
                         (cb, v) -> dayGradientRed = v, true);
                 y += ROW_HEIGHT;
@@ -875,7 +875,7 @@ public class ZombietideSettingsScreen extends Screen {
      * 尺寸随窗口宽度收缩；横向空间不足时继续等比缩小，小到没有意义就整块不画。
      */
     private void renderCoverAndVersion(GuiGraphics g) {
-        String versionText = "版本号：" + modVersion();
+        String versionText = tr("zombietide.settings.version") + " " + modVersion();
         int textW = this.font.width(versionText);
 
         int drawH = this.width / 34;

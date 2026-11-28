@@ -95,9 +95,9 @@
   "zombietide.settings.hud.item1.desc": "左上角显示当前模组天数",
   "zombietide.settings.hud.item1.name": "启用 HUD（DAY X）",
   "zombietide.settings.hud.item1.tip": "关闭后不渲染 DAY X 与村民列表。",
-  "zombietide.settings.hud.item10.desc": "DAY X 随时间逐渐变红，到尸潮预兆期开始时刚好全红",
-  "zombietide.settings.hud.item10.name": "DAY X 渐进红",
-  "zombietide.settings.hud.item10.tip": "从上次尸潮结束后开始渐变。关闭后回退为「尸潮日红 / 其余白」。",
+  "zombietide.settings.hud.item10.desc": "村民列表文字的缩放倍率",
+  "zombietide.settings.hud.item10.name": "村民 HUD 缩放",
+  "zombietide.settings.hud.item10.tip": "仅影响村民 DAY X 列表，不影响玩家自己的 DAY X。",
   "zombietide.settings.hud.item11.desc": "只显示该距离内的村民",
   "zombietide.settings.hud.item11.name": "显示距离（格）",
   "zombietide.settings.hud.item11.tip": "超过该距离的村民不会出现在 HUD 列表中。",
@@ -287,5 +287,9 @@
   "zombietide.warning.title": "尸潮",
   "zombietide.settings.spawn.item12.name": "生成尖啸者",
   "zombietide.settings.spawn.item12.desc": "尸潮僵尸中有 5% 成为尖啸者，锁定目标后尖叫并引来增援",
-  "zombietide.settings.spawn.item12.tip": "关闭后不再生成尖啸者，尸潮回归纯数量压制。存档级设置，所有玩家生效。"
+  "zombietide.settings.spawn.item12.tip": "关闭后不再生成尖啸者，尸潮回归纯数量压制。存档级设置，所有玩家生效。",
+  "zombietide.settings.version": "版本号",
+  "zombietide.settings.hud.item14.name": "DAY X 渐进红",
+  "zombietide.settings.hud.item14.desc": "DAY X 随时间逐渐变红，到尸潮预兆期开始时刚好全红",
+  "zombietide.settings.hud.item14.tip": "从上次尸潮结束后开始渐变。关闭后回退为「尸潮日红 / 其余白」。"
 }

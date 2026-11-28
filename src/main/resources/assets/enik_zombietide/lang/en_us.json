@@ -95,9 +95,9 @@
   "zombietide.settings.hud.item1.desc": "Shows the mod day in the top-left",
   "zombietide.settings.hud.item1.name": "Enable HUD (DAY X)",
   "zombietide.settings.hud.item1.tip": "Off: no DAY X and no villager list.",
-  "zombietide.settings.hud.item10.desc": "DAY X gradually turns red over time, fully red when the omen window begins",
-  "zombietide.settings.hud.item10.name": "Gradient red DAY X",
-  "zombietide.settings.hud.item10.tip": "Gradient starts after the last horde ends. Disable to fall back to \"red on horde day / white otherwise\".",
+  "zombietide.settings.hud.item10.desc": "Scale of the villager list text",
+  "zombietide.settings.hud.item10.name": "Villager HUD Scale",
+  "zombietide.settings.hud.item10.tip": "Only affects the villager DAY X list, not your own DAY X.",
   "zombietide.settings.hud.item11.desc": "Only villagers within this distance",
   "zombietide.settings.hud.item11.name": "Display Range (blocks)",
   "zombietide.settings.hud.item11.tip": "Villagers beyond this range are not listed.",
@@ -287,5 +287,9 @@
   "zombietide.warning.title": "Zombie Tide",
   "zombietide.settings.spawn.item12.name": "Spawn Screamers",
   "zombietide.settings.spawn.item12.desc": "5% of horde zombies become screamers that call reinforcements",
-  "zombietide.settings.spawn.item12.tip": "Disable to remove screamers entirely. World-level setting, applies to all players."
+  "zombietide.settings.spawn.item12.tip": "Disable to remove screamers entirely. World-level setting, applies to all players.",
+  "zombietide.settings.version": "Version",
+  "zombietide.settings.hud.item14.name": "Gradient red DAY X",
+  "zombietide.settings.hud.item14.desc": "DAY X gradually turns red, fully red when the omen window begins",
+  "zombietide.settings.hud.item14.tip": "Gradient starts after the last horde ends. Disable to fall back to red on horde day / white otherwise."
 }
