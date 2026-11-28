@@ -8,7 +8,7 @@ package com.enik.zombietide.client.gui.settings;
 public enum OptionScope {
     PLAYER("zombietide.settings.scope.player", "§9"),
     VILLAGER("zombietide.settings.scope.villager", "§a"),
-    WORLD("zombietide.settings.scope.world", "§6");
+    WORLD("zombietide.settings.scope.world", "§c");
 
     private final String key;
     private final String color;

@@ -434,8 +434,8 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
                     && mouseY >= iy && mouseY < iy + ih;
 
             if (selected) {
-                guiGraphics.fill(ix, iy, ix + iw, iy + ih, 0x4DFFB347);
-                guiGraphics.fill(ix, iy, ix + 3, iy + ih, 0xFFFFB347);
+                guiGraphics.fill(ix, iy, ix + iw, iy + ih, 0x4DFF4D4D);
+                guiGraphics.fill(ix, iy, ix + 3, iy + ih, 0xFFFF4D4D);
             } else if (hovered) {
                 guiGraphics.fill(ix, iy, ix + iw, iy + ih, 0x26FFFFFF);
             }
@@ -472,7 +472,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
                         : e.reader().applyAsInt(this) != e.defaultValue();
                 if (modified) {
                     int dotY = rb.y() + rb.height() / 2;
-                    guiGraphics.fill(this.width - 14, dotY - 2, this.width - 10, dotY + 2, 0xFFFFB347);
+                    guiGraphics.fill(this.width - 14, dotY - 2, this.width - 10, dotY + 2, 0xFFFF4D4D);
                 }
             }
 
@@ -480,7 +480,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
             for (SectionHeader s : this.sectionHeaders) {
                 int screenY = s.y() - this.scrollOffset;
                 if (screenY + 12 >= scissorTop && screenY <= scissorBottom) {
-                    String title = "§6§l" + s.title();
+                    String title = "§c§l" + s.title();
                     int textW = this.font.width(title);
                     // 【v0.2.135】对齐 3.1 的「── 基础 ──────」：左右都带横线
                     guiGraphics.fill(s.x() - 12, s.y() + 9, s.x() - 2, s.y() + 10, 0x33FFFFFF);

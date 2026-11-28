@@ -196,7 +196,7 @@
   "zombietide.settings.tab.warning": "Warnings",
   "zombietide.settings.tab.world": "World Rules",
   "zombietide.settings.title": "Zombietide Settings",
-  "zombietide.settings.toast.config_saved": "§e[Zombie Tide] Config sent to server (no effect without OP)",
+  "zombietide.settings.toast.config_saved": "§c[Zombie Tide] Config sent to server (no effect without OP)",
   "zombietide.settings.toast.hud_saved": "§a[Zombietide] HUD settings saved",
   "zombietide.settings.villager.item1.desc": "Villager hordes will not trigger when off",
   "zombietide.settings.villager.item1.name": "Enable Villager Hordes",

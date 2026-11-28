@@ -44,8 +44,8 @@ public class FlatToggle extends AbstractWidget {
         int w = getWidth();
         int h = getHeight();
 
-        int fill = value ? 0x55FFB347 : 0x55000000;
-        int border = value ? 0xFFFFB347 : 0x55FFFFFF;
+        int fill = value ? 0x55FF4D4D : 0x55000000;
+        int border = value ? 0xFFFF4D4D : 0x55FFFFFF;
         g.fill(x, y, x + w, y + h, fill);
         // 1px 边框（fill 只能画矩形，四边各一条）
         g.fill(x, y, x + w, y + 1, border);
@@ -61,10 +61,10 @@ public class FlatToggle extends AbstractWidget {
         Component label = value ? onText : offText;
         g.drawString(mc.font, label,
                 x + 6, y + (h - 8) / 2 + 1,
-                value ? 0xFFFFE0B2 : 0xFF9A9A9A, false);
+                value ? 0xFFFFB3B3 : 0xFF9A9A9A, false);
 
         // 右侧指示点：4×4 实心方块
-        int dot = value ? 0xFFFFB347 : 0xFF4A4A4A;
+        int dot = value ? 0xFFFF4D4D : 0xFF4A4A4A;
         int cx = x + w - 9;
         int cy = y + h / 2;
         g.fill(cx, cy - 2, cx + 4, cy + 2, dot);

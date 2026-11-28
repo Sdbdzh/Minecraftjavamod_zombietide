@@ -97,7 +97,7 @@ public class IntSliderControl extends AbstractWidget {
         g.fill(getX(), cy - 1, getX() + tw, cy + 1, 0xFF2A2A2E);
         // 已填充部分
         int thumb = thumbX();
-        g.fill(getX(), cy - 1, thumb, cy + 1, 0xFFFFB347);
+        g.fill(getX(), cy - 1, thumb, cy + 1, 0xFFFF4D4D);
         // 滑块手柄
         g.fill(thumb - 1, getY() + 2, thumb + 1, getY() + getHeight() - 2, isHoveredOrFocused() ? 0xFFFFFFFF : 0xFFDDDDDD);
         // 数值文字（右对齐保留区）

@@ -52,10 +52,10 @@ public class FlatButton extends AbstractWidget {
         boolean hover = isHoveredOrFocused();
 
         int fill = accent
-                ? (hover ? 0x66FFB347 : 0x33FFB347)
+                ? (hover ? 0x66FF4D4D : 0x33FF4D4D)
                 : (hover ? 0x44FFFFFF : 0x22000000);
-        int border = accent ? 0xCCFFB347 : (hover ? 0xAAFFFFFF : 0x55FFFFFF);
-        int textColor = accent ? 0xFFFFE0B2 : (hover ? 0xFFFFFFFF : 0xFFDDDDDD);
+        int border = accent ? 0xCCFF4D4D : (hover ? 0xAAFFFFFF : 0x55FFFFFF);
+        int textColor = accent ? 0xFFFFB3B3 : (hover ? 0xFFFFFFFF : 0xFFDDDDDD);
 
         g.fill(x, y, x + w, y + h, fill);
         g.fill(x, y, x + w, y + 1, border);
