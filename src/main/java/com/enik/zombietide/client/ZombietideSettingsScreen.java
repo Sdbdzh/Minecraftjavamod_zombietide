@@ -95,7 +95,8 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     /** 【P2】紧凑单行：一行 = 标签（左）+ 控件（右），描述改为悬停提示 */
     private static final int ROW_HEIGHT = 26;
     private static final int SECTION_HEIGHT = 22;
-    private static final int CONTENT_TOP = 50;
+    /** 【v0.2.135】顶栏高度 56px（与《设置页重构方案》3.1 布局图一致） */
+    private static final int CONTENT_TOP = 56;
     private static final int CONTENT_BOTTOM = 34;
     private static final int FIELD_HEIGHT = 16;
     private static final int FIELD_WIDTH = 150;
@@ -268,10 +269,12 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
         // ===== 固定底部按钮（手动渲染/命中）：重置本页 + 完成 =====
         int btnY = this.height - 28;
-        this.resetPageBtn = new FlatButton(this.width / 2 - 123, btnY, 120, 20,
+        // 【v0.2.135】按 3.1 布局图靠右下角：封面/版本在左，[重置本页] [完成] 在右
+        int rightEdge = this.width - 8;
+        this.resetPageBtn = new FlatButton(rightEdge - 246, btnY, 120, 20,
                 Component.literal(tr("zombietide.settings.button.reset_page")),
                 false, this::resetCurrentPage);
-        this.doneBtn = new FlatButton(this.width / 2 + 3, btnY, 120, 20,
+        this.doneBtn = new FlatButton(rightEdge - 120, btnY, 120, 20,
                 Component.literal(tr("zombietide.settings.button.done")),
                 true, this::onClose);
 
@@ -311,6 +314,15 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
     private boolean isOverContent(double mouseY) {
         return mouseY >= CONTENT_TOP && mouseY <= this.height - CONTENT_BOTTOM;
+    }
+
+    /**
+     * 【v0.2.135】鼠标是否真正在内容区（X + Y 都判）。
+     * <p>此前「行悬停高亮」只判了 Y，导致鼠标停在左侧分类栏时，
+     * 右边内容区同一高度的行仍被高亮，看起来像串区。tooltip 与右键重置统一改用本方法。
+     */
+    private boolean isOverContentArea(double mouseX, double mouseY) {
+        return isOverContent(mouseY) && mouseX >= contentLeft() - 8;
     }
 
     private boolean isOverScrollBar(double mouseX, double mouseY) {
@@ -389,10 +401,13 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         this.renderWallpaper(guiGraphics);
 
-        guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 6, 0xFFFFFF);
+        // 标题垂直居中于 56px 顶栏（原 y=6 在加高后过于靠上）
+        guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, (CONTENT_TOP - 8) / 2, 0xFFFFFF);
 
         // 【P4】搜索框（固定顶栏右侧）
         if (this.searchBox != null) {
+            // 搜索框垂直居中于顶栏
+            this.searchBox.setY((CONTENT_TOP - 16) / 2);
             this.searchBox.render(guiGraphics, mouseX, mouseY, partialTick);
         }
 
@@ -437,10 +452,11 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
             guiGraphics.pose().pushPose();
             guiGraphics.pose().translate(0.0F, -this.scrollOffset, 0.0F);
 
-            // 【P2】悬停高亮：整行淡色底，强化「这一行可点」
+            // 【P2 修】悬停高亮：整行淡色底；必须先确认鼠标在内容区，避免侧栏串区
+            double contentCy = mouseY + this.scrollOffset;
+            boolean overContent = isOverContentArea(mouseX, mouseY);
             for (RowBounds rb : this.rowBounds) {
-                double cy = mouseY + this.scrollOffset;
-                if (cy >= rb.y() && cy < rb.y() + rb.height()) {
+                if (overContent && contentCy >= rb.y() && contentCy < rb.y() + rb.height()) {
                     guiGraphics.fill(contentLeft() - 6, rb.y() - 1,
                             this.width - 16, rb.y() + rb.height() - 1, 0x1FFFFFFF);
                     break;
@@ -464,10 +480,13 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
             for (SectionHeader s : this.sectionHeaders) {
                 int screenY = s.y() - this.scrollOffset;
                 if (screenY + 12 >= scissorTop && screenY <= scissorBottom) {
-                    int textW = this.font.width("§6§l" + s.title());
+                    String title = "§6§l" + s.title();
+                    int textW = this.font.width(title);
+                    // 【v0.2.135】对齐 3.1 的「── 基础 ──────」：左右都带横线
+                    guiGraphics.fill(s.x() - 12, s.y() + 9, s.x() - 2, s.y() + 10, 0x33FFFFFF);
                     guiGraphics.fill(s.x() + textW + 6, s.y() + 9,
                             this.width - 20, s.y() + 10, 0x33FFFFFF);
-                    guiGraphics.drawString(this.font, Component.literal("§6§l" + s.title()),
+                    guiGraphics.drawString(this.font, Component.literal(title),
                             s.x(), s.y(), 0xFFFFFF, false);
                 }
             }
@@ -503,7 +522,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         // 【P2】悬停提示：描述与详细说明都搬到这里。
         // 本屏幕刻意不调用 super.render（会在 scissor+translate 下重复绘制背景），
         // 因此 Screen 自带的 tooltip 渲染不会执行，必须手动绘制。
-        if (this.getFocused() == null && isOverContent(mouseY) && mouseX >= contentLeft() - 8) {
+        if (this.getFocused() == null && isOverContentArea(mouseX, mouseY)) {
             double cy = mouseY + this.scrollOffset;
             for (RowBounds rb : this.rowBounds) {
                 if (cy >= rb.y() && cy < rb.y() + rb.height()) {
@@ -649,7 +668,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         }
 
         // 【P3】右键点某一行 = 该选项恢复默认值
-        if (button == 1 && isOverContent(mouseY) && mouseX >= contentLeft() - 8) {
+        if (button == 1 && isOverContentArea(mouseX, mouseY)) {
             double cy = mouseY + this.scrollOffset;
             for (RowBounds rb : this.rowBounds) {
                 if (cy >= rb.y() && cy < rb.y() + rb.height()) {
