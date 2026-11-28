@@ -51,11 +51,40 @@ public final class HordeBgmScheduler {
     private HordeBgmScheduler() {
     }
 
+    /**
+     * 【v0.2.85】玩家附近是否有**活跃的村民尸潮**（用于决定是否静默原版音乐）。
+     * <p>调度表只存 UUID 不存坐标，因此遍历已加载村民实体、按 UUID 查调度表的 `waveActive`。
+     * 距离用 {@code villagerWarningRange}——与"哪些玩家会收到村民尸潮警报"同口径：
+     * 收到了大字/旁白就说明身处事件，原版音乐该让位。
+     * <p>每 20 tick 才调一次（与静默同频），开销可控。
+     */
+    private static java.util.List<net.minecraft.world.phys.Vec3> collectActiveVillagerHordePositions(ServerLevel overworld) {
+        var schedule = overworld.getDataStorage().get(
+                com.enik.zombietide.config.VillagerScheduleData.FACTORY,
+                com.enik.zombietide.config.VillagerScheduleData.ID);
+        if (schedule == null) return java.util.List.of();
+        java.util.List<net.minecraft.world.phys.Vec3> result = new java.util.ArrayList<>();
+        for (var entity : overworld.getEntities().getAll()) {
+            if (entity == null) continue;
+            if (!(entity instanceof net.minecraft.world.entity.npc.Villager villager)) continue;
+            var entry = schedule.getScheduleOrNull(villager.getUUID());
+            if (entry != null && entry.waveActive()) {
+                result.add(entity.position());
+            }
+        }
+        return result;
+    }
+
     /** 由 ZombietideServerEvents.onServerTick 每 tick 调用。 */
     public static void onServerTick(ServerLevel overworld, ZombietideConfig config) {
         MinecraftServer server = overworld.getServer();
         if (server == null) return;
         long now = server.getTickCount();
+
+        // 每 20 tick 收集一次「活跃村民尸潮位置」，全服只扫一次实体表，
+        // 循环玩家时只做距离比较（避免 N 玩家 × 全实体表扫描）。
+        java.util.List<net.minecraft.world.phys.Vec3> activeVillagerHordes =
+                (now % 20L == 0L) ? collectActiveVillagerHordePositions(overworld) : java.util.List.of();
 
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             UUID id = player.getUUID();
@@ -67,11 +96,22 @@ public final class HordeBgmScheduler {
                     && player.level().dimension() == Level.OVERWORLD
                     && player.serverLevel().getDifficulty() != Difficulty.PEACEFUL;
 
-            // ---- 原版音乐静默（v0.2.84）----
-            // 独立于 warningEnabled 与 hordeBgmSound：只要该玩家处于尸潮波次，世界就该安静。
-            // 原版 MusicManager 在 currentMusic 为 null 时会按 nextSongDelay 自己起播，
-            // 只在进入波次时停一次挡不住（那一刻可能本来就没在播）。每 20 tick 补停一次。
-            boolean silenceVanilla = data.waveActive()
+            // ---- 原版音乐静默（v0.2.84 / v0.2.85 扩展）----
+            // 独立于 warningEnabled 与 hordeBgmSound：只要玩家身处尸潮事件（自己的或附近村民的），
+            // 世界就该安静。原版 MusicManager 会在 currentMusic==null 时按 nextSongDelay 自己起播，
+            // 只在进入波次停一次挡不住——每 20 tick 补停一次。
+            // 附近是否有活跃村民尸潮（只做距离比较，列表每 20 tick 全服收集一次）
+            boolean nearVillagerHorde = false;
+            if (!activeVillagerHordes.isEmpty()) {
+                double rangeSq = config.villagerWarningRange() * (double) config.villagerWarningRange();
+                for (var pos : activeVillagerHordes) {
+                    if (player.distanceToSqr(pos) <= rangeSq) {
+                        nearVillagerHorde = true;
+                        break;
+                    }
+                }
+            }
+            boolean silenceVanilla = (data.waveActive() || nearVillagerHorde)
                     && player.level().dimension() == Level.OVERWORLD
                     && player.serverLevel().getDifficulty() != Difficulty.PEACEFUL;
             if (silenceVanilla && now % 20L == 0L) {
