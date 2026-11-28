@@ -220,9 +220,10 @@ public final class ZombietideAtmosphere {
             // 上/下：边缘暗红 → 中心透明
             g.fillGradient(0, 0, w, edgeH, borderAlpha | red, clear);
             g.fillGradient(0, h - edgeH, w, h, clear, borderAlpha | red);
-            // 【v0.2.119】左右用 VertexConsumer 直接画 4 顶点，GPU 水平插值（无竖条纹）
-            drawHorizontalGradient(g, 0, edgeW, edgeH, h - edgeH, borderAlpha | red, clear);
-            drawHorizontalGradient(g, w - edgeW, w, edgeH, h - edgeH, clear, borderAlpha | red);
+            // 【v0.2.120】左右渐变覆盖整个屏幕高度（0~h），让四角与上下渐变自然衔接。
+            // v0.2.119 只画中间段（edgeH~h-edgeH），导致上下角出现硬分界线。
+            drawHorizontalGradient(g, 0, edgeW, 0, h, borderAlpha | red, clear);
+            drawHorizontalGradient(g, w - edgeW, w, 0, h, clear, borderAlpha | red);
         }
 
         // 触发瞬间的全屏暗红闪烁（短促），叠在边框之上
