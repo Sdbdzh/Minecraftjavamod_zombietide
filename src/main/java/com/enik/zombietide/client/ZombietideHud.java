@@ -194,6 +194,12 @@ public class ZombietideHud {
         villagerPos.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
         villagerWaveActive.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
         villagerHordeDayMap.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
+        // 【v0.2.96】v0.2.91/94 新增的两个 Map 之前漏清理：
+        // 村民离开范围/死亡后 progress 或 hordeDayToday 残留旧值，
+        // 下次同名 UUID 重新出现但本批次尚未收到 payload 时，会用残留值渲染 →
+        // 同一面板里出现「有些村民渐进红、有些像关闭」的不一致。
+        villagerHordeProgress.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
+        villagerHordeDayToday.keySet().removeIf(uuid -> !thisBatchVillagers.contains(uuid));
     }
 
     /**
@@ -311,9 +317,8 @@ public class ZombietideHud {
                     double dx = p[0] - playerX, dy = p[1] - playerY, dz = p[2] - playerZ;
                     dist = (int) Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz));
                 }
-                // 尸潮日时仅 DAY X 变红粗体；距离不变红，职业名保持白色
-                // 判定由服务端算好并随 VillagerModDayPayload 同步，支持随机间隔
-                boolean villagerHordeDay = Boolean.TRUE.equals(villagerHordeDayMap.get(entry.getKey()));
+                // 仅 DAY X 参与颜色渐变；距离与职业名保持白色。
+                // 判定由服务端算好并随 VillagerModDayPayload 同步，支持随机间隔。
                 String professionSegment;
                 if (villagerBold) {
                     professionSegment = "§r§l" + profession + "§r";
@@ -327,7 +332,11 @@ public class ZombietideHud {
                     // 【v0.2.91】每个村民按各自 lastTriggerDay/UUID 算进度，真 RGB 渐进红。
                     // 文字不能带颜色色码（会覆盖 drawString 颜色参数），只留 §l/§r。
                     float pv = villagerHordeProgress.getOrDefault(entry.getKey(), 0.0F);
-                    if (villagerHordeDay) pv = 1.0F;
+                    // 【v0.2.96】与玩家侧对齐：只有「波次中」才强制全红。
+                    // v0.2.94 玩家侧已从 hordeDay 改为 waveActive，村民侧漏改——
+                    // 导致黄昏窗口内的村民被强制全红（看起来像二态关闭状态），
+                    // 窗口外村民才按进度渐变，同一面板里两种表现混在一起。
+                    if (Boolean.TRUE.equals(villagerWaveActive.get(entry.getKey()))) pv = 1.0F;
                     daySegmentColor = argbForProgress(pv);
                     dayPartSegment = "§r" + (villagerBold ? "§l" : "") + "DAY " + villagerModDay + "§r";
                 } else if (Boolean.TRUE.equals(villagerHordeDayToday.get(entry.getKey()))
