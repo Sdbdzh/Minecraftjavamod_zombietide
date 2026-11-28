@@ -221,13 +221,14 @@ public final class ZombietideAtmosphere {
         if (threatStrength <= 0.0F) return;
 
         int debt = ZombietideHud.bloodDebtFor(mc.player.getUUID());
-        // v0.2.72：浓度 0.14 基础 + 0.11 上限（v0.2.86 起再乘威胁强度，实现淡入淡出）
-        float strength = (0.14F + Math.min(0.11F, debt * 0.002F)) * threatStrength;
+        // 【v0.2.114】浓度 0.25 基础 + 0.20 上限（原 0.14+0.11 太淡，用户实测看不到）
+        // 仍乘 threatStrength 实现淡入淡出：只在尸潮中显示，不干扰平时游玩。
+        float strength = (0.25F + Math.min(0.20F, debt * 0.003F)) * threatStrength;
         int alpha = ((int) (strength * 255.0F) & 0xFF) << 24;
 
-        // 只用上下两条水平渐变压暗画面，且把高度从 h*0.18 收到 h*0.12：
-        // 渐变越窄，HUD 背后受影响的行数越少，中段画面保持通透。
-        int edge = Math.max(8, (int) (h * 0.12F));
+        // 上下渐变高度 h*0.18（原 h*0.12 太窄）。中段画面仍保持通透，
+        // 但边缘压暗明显到能一眼看出「今夜不同」。
+        int edge = Math.max(8, (int) (h * 0.18F));
 
         // fillGradient 内部自己管理 blend，这里不需要手动 enableBlend（手动开启后没恢复会污染后续渲染）。
         g.fillGradient(0, 0, w, edge, alpha, 0x00000000);                 // 上
