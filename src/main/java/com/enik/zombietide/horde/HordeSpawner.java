@@ -535,7 +535,7 @@ public class HordeSpawner {
 
         // 【v0.2.97】5% 概率标记为尖啸者：放大体积（原版实体类型不变，兼容僵尸材质包）。
         // SCALE 属性是 1.21.1 原生、可同步的，渲染与碰撞自动跟随，无需 mixin/自定义实体类。
-        if (RANDOM.nextFloat() < SCREAMER_CHANCE) {
+        if (config.screamerEnabled() && RANDOM.nextFloat() < SCREAMER_CHANCE) {
             tag.putBoolean(SCREAMER_KEY, true);
             var scaleAttr = mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.SCALE);
             if (scaleAttr != null) scaleAttr.setBaseValue(SCREAMER_SCALE);

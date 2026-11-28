@@ -284,5 +284,8 @@
   "zombietide.sleep.blocked.8": "You tried counting sheep. You stopped halfway.",
   "zombietide.sleep.blocked.9": "It is too quiet to sleep.",
   "zombietide.warning.subtitle": "The horde is coming",
-  "zombietide.warning.title": "Zombie Tide"
+  "zombietide.warning.title": "Zombie Tide",
+  "zombietide.settings.spawn.item12.name": "Spawn Screamers",
+  "zombietide.settings.spawn.item12.desc": "5% of horde zombies become screamers that call reinforcements",
+  "zombietide.settings.spawn.item12.tip": "Disable to remove screamers entirely. World-level setting, applies to all players."
 }

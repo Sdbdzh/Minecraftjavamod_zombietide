@@ -417,6 +417,12 @@ public class ZombietideSettingsScreen extends Screen {
                 y += ROW_HEIGHT;
 
                 y = addSection("zombietide.settings.common.text9", centerX, y);
+                addCheckbox("zombietide.settings.spawn.item12.name", Scope.WORLD,
+                        "zombietide.settings.spawn.item12.desc",
+                        "zombietide.settings.spawn.item12.tip",
+                        config.screamerEnabled(), centerX, y,
+                        (cb, v) -> config = config.withScreamerEnabled(v), false);
+                y += ROW_HEIGHT;
                 addCheckbox("zombietide.settings.spawn.item8.name", Scope.WORLD,
                         "zombietide.settings.spawn.item8.desc",
                         "zombietide.settings.spawn.item8.tip",

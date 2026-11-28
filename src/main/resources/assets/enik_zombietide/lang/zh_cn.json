@@ -284,5 +284,8 @@
   "zombietide.sleep.blocked.8": "你试着数羊，数到一半就停了。",
   "zombietide.sleep.blocked.9": "安静得让你睡不着。",
   "zombietide.warning.subtitle": "尸潮来袭",
-  "zombietide.warning.title": "尸潮"
+  "zombietide.warning.title": "尸潮",
+  "zombietide.settings.spawn.item12.name": "生成尖啸者",
+  "zombietide.settings.spawn.item12.desc": "尸潮僵尸中有 5% 成为尖啸者，锁定目标后尖叫并引来增援",
+  "zombietide.settings.spawn.item12.tip": "关闭后不再生成尖啸者，尸潮回归纯数量压制。存档级设置，所有玩家生效。"
 }
