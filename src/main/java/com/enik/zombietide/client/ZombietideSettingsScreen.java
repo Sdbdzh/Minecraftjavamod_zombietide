@@ -1,6 +1,12 @@
 package com.enik.zombietide.client;
 
 import com.enik.zombietide.EnikZombietide;
+import com.enik.zombietide.client.gui.settings.OptionEntry;
+import com.enik.zombietide.client.gui.settings.OptionScope;
+import com.enik.zombietide.client.gui.settings.SettingRow;
+import com.enik.zombietide.client.gui.settings.SettingsCategory;
+import com.enik.zombietide.client.gui.settings.SettingsHost;
+import com.enik.zombietide.client.gui.settings.SettingsRegistry;
 import com.enik.zombietide.config.ClientHudConfig;
 import com.enik.zombietide.config.ZombietideConfig;
 import com.enik.zombietide.network.ModMessages;
@@ -44,7 +50,7 @@ import java.util.function.IntConsumer;
  *   <li><b>壁纸随分页左右滑动</b>：按 currentTab 计算目标水平偏移并平滑插值（类似安卓桌面壁纸）。</li>
  * </ul>
  */
-public class ZombietideSettingsScreen extends Screen {
+public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
     private final Screen parent;
     private ZombietideConfig config;
@@ -52,30 +58,7 @@ public class ZombietideSettingsScreen extends Screen {
     private boolean worldLoaded = false;
 
     /** 分页：按作用对象/主题划分 */
-    private enum Tab {
-        PLAYER("zombietide.settings.tab.player"),
-        VILLAGER("zombietide.settings.tab.villager"),
-        SPAWN("zombietide.settings.tab.spawn"),
-        WORLD("zombietide.settings.tab.world"),
-        WARNING("zombietide.settings.tab.warning"),
-        HUD("zombietide.settings.tab.hud");
-
-        final String key;
-        Tab(String key) { this.key = key; }
-    }
-
-    /** 作用域：告诉玩家这项设置具体改谁 */
-    private enum Scope {
-        PLAYER("zombietide.settings.scope.player", "§9"),
-        VILLAGER("zombietide.settings.scope.villager", "§a"),
-        WORLD("zombietide.settings.scope.world", "§6");
-
-        final String key;
-        final String color;
-        Scope(String key, String color) { this.key = key; this.color = color; }
-    }
-
-    private Tab currentTab = Tab.PLAYER;
+    private SettingsCategory currentTab = SettingsCategory.PLAYER;
     /** 固定顶部标签页（不加入 renderable 列表，手动渲染/命中） */
     private final List<Button> tabButtons = new ArrayList<>();
     /** 普通文本行（设置名 + 说明） */
@@ -229,12 +212,12 @@ public class ZombietideSettingsScreen extends Screen {
         this.doneBtn = null;
 
         // ===== 固定顶部标签页（手动渲染/命中，不进入滚动容器） =====
-        int tabCount = Tab.values().length;
+        int tabCount = SettingsCategory.values().length;
         int tabWidth = Math.max(40, Math.min(96, (this.width - 16) / tabCount));
         int tabStartX = (this.width - tabWidth * tabCount) / 2;
         for (int i = 0; i < tabCount; i++) {
-            Tab tab = Tab.values()[i];
-            Button btn = Button.builder(Component.literal(tr(tab.key)), b -> {
+            SettingsCategory tab = SettingsCategory.values()[i];
+            Button btn = Button.builder(Component.literal(tr(tab.key())), b -> {
                 this.currentTab = tab;
                 this.scrollOffset = 0;
                 this.rebuildWidgets();
@@ -246,462 +229,27 @@ public class ZombietideSettingsScreen extends Screen {
         int centerX = this.width / 2;
         int y = CONTENT_TOP + 8;
 
-        switch (currentTab) {
-            case PLAYER -> {
-                y = addSection("zombietide.settings.common.text1", centerX, y);
-                addCheckbox("zombietide.settings.player.item1.name", Scope.PLAYER,
-                        "zombietide.settings.player.item1.desc",
-                        "zombietide.settings.player.item1.tip",
-                        config.playerHordeEnabled(), centerX, y,
-                        (cb, v) -> config = config.withPlayerHordeEnabled(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text2", centerX, y);
-                addIntField("zombietide.settings.player.item2.name", Scope.PLAYER,
-                        "zombietide.settings.player.item2.desc",
-                        "zombietide.settings.player.item2.tip",
-                        config.playerIntervalDays(), centerX, y, 1,
-                        v -> config = config.withPlayerIntervalDays(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.player.item3.name", Scope.PLAYER,
-                        "zombietide.settings.player.item3.desc",
-                        "zombietide.settings.player.item3.tip",
-                        config.playerIntervalRandom(), centerX, y,
-                        (cb, v) -> config = config.withPlayerIntervalRandom(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.player.item4.name", Scope.PLAYER,
-                        "zombietide.settings.player.item4.desc",
-                        "zombietide.settings.player.item4.tip",
-                        config.playerIntervalMin(), centerX, y, 1,
-                        v -> config = config.withPlayerIntervalMin(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.player.item5.name", Scope.PLAYER,
-                        "zombietide.settings.player.item5.desc",
-                        "zombietide.settings.player.item5.tip",
-                        config.playerIntervalMax(), centerX, y, 1,
-                        v -> config = config.withPlayerIntervalMax(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text3", centerX, y);
-                addIntField("zombietide.settings.player.item6.name", Scope.PLAYER,
-                        "zombietide.settings.player.item6.desc",
-                        "zombietide.settings.player.item6.tip",
-                        config.playerCount(), centerX, y, 1,
-                        v -> config = config.withPlayerCount(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.player.item7.name", Scope.PLAYER,
-                        "zombietide.settings.player.item7.desc",
-                        "zombietide.settings.player.item7.tip",
-                        config.playerCountRandom(), centerX, y,
-                        (cb, v) -> config = config.withPlayerCountRandom(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.player.item8.name", Scope.PLAYER,
-                        "zombietide.settings.player.item8.desc",
-                        "zombietide.settings.player.item8.tip",
-                        config.playerCountMin(), centerX, y, 1,
-                        v -> config = config.withPlayerCountMin(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.player.item9.name", Scope.PLAYER,
-                        "zombietide.settings.player.item9.desc",
-                        "zombietide.settings.player.item9.tip",
-                        config.playerCountMax(), centerX, y, 1,
-                        v -> config = config.withPlayerCountMax(v), false);
-                y += ROW_HEIGHT;
-            }
-            case VILLAGER -> {
-                y = addSection("zombietide.settings.common.text4", centerX, y);
-                addCheckbox("zombietide.settings.villager.item1.name", Scope.VILLAGER,
-                        "zombietide.settings.villager.item1.desc",
-                        "zombietide.settings.villager.item1.tip",
-                        config.villagerHordeEnabled(), centerX, y,
-                        (cb, v) -> config = config.withVillagerHordeEnabled(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text5", centerX, y);
-                addIntField("zombietide.settings.villager.item2.name", Scope.VILLAGER,
-                        "zombietide.settings.villager.item2.desc",
-                        "zombietide.settings.villager.item2.tip",
-                        config.villagerIntervalDays(), centerX, y, 1,
-                        v -> config = config.withVillagerIntervalDays(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.villager.item3.name", Scope.VILLAGER,
-                        "zombietide.settings.villager.item3.desc",
-                        "zombietide.settings.villager.item3.tip",
-                        config.villagerIntervalRandom(), centerX, y,
-                        (cb, v) -> config = config.withVillagerIntervalRandom(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.villager.item4.name", Scope.VILLAGER,
-                        "zombietide.settings.villager.item4.desc",
-                        "zombietide.settings.villager.item4.tip",
-                        config.villagerIntervalMin(), centerX, y, 1,
-                        v -> config = config.withVillagerIntervalMin(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.villager.item5.name", Scope.VILLAGER,
-                        "zombietide.settings.villager.item5.desc",
-                        "zombietide.settings.villager.item5.tip",
-                        config.villagerIntervalMax(), centerX, y, 1,
-                        v -> config = config.withVillagerIntervalMax(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text6", centerX, y);
-                addIntField("zombietide.settings.villager.item6.name", Scope.VILLAGER,
-                        "zombietide.settings.villager.item6.desc",
-                        "zombietide.settings.villager.item6.tip",
-                        config.villagerCount(), centerX, y, 1,
-                        v -> config = config.withVillagerCount(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.villager.item7.name", Scope.VILLAGER,
-                        "zombietide.settings.villager.item7.desc",
-                        "zombietide.settings.villager.item7.tip",
-                        config.villagerCountRandom(), centerX, y,
-                        (cb, v) -> config = config.withVillagerCountRandom(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.villager.item8.name", Scope.VILLAGER,
-                        "zombietide.settings.villager.item8.desc",
-                        "zombietide.settings.villager.item8.tip",
-                        config.villagerCountMin(), centerX, y, 1,
-                        v -> config = config.withVillagerCountMin(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.villager.item9.name", Scope.VILLAGER,
-                        "zombietide.settings.villager.item9.desc",
-                        "zombietide.settings.villager.item9.tip",
-                        config.villagerCountMax(), centerX, y, 1,
-                        v -> config = config.withVillagerCountMax(v), false);
-                y += ROW_HEIGHT;
-            }
-            case SPAWN -> {
-                y = addSection("zombietide.settings.common.text7", centerX, y);
-                addIntField("zombietide.settings.spawn.item1.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item1.desc",
-                        "zombietide.settings.spawn.item1.tip",
-                        config.batchTick(), centerX, y, 1,
-                        v -> config = config.withBatchTick(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.spawn.item2.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item2.desc",
-                        "zombietide.settings.spawn.item2.tip",
-                        config.batchSize(), centerX, y, 1,
-                        v -> config = config.withBatchSize(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.spawn.item3.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item3.desc",
-                        "zombietide.settings.spawn.item3.tip",
-                        config.villagerBatchSize(), centerX, y, 1,
-                        v -> config = config.withVillagerBatchSize(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text8", centerX, y);
-                addIntField("zombietide.settings.spawn.item4.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item4.desc",
-                        "zombietide.settings.spawn.item4.tip",
-                        config.playerRadius(), centerX, y, 1, MAX_RADIUS_INPUT,
-                        v -> config = config.withPlayerRadius(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.spawn.item5.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item5.desc",
-                        "zombietide.settings.spawn.item5.tip",
-                        config.villagerRadius(), centerX, y, 1, MAX_RADIUS_INPUT,
-                        v -> config = config.withVillagerRadius(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.spawn.item6.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item6.desc",
-                        "zombietide.settings.spawn.item6.tip",
-                        config.minSpawnDist(), centerX, y, 1,
-                        v -> config = config.withMinSpawnDist(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.spawn.item7.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item7.desc",
-                        "zombietide.settings.spawn.item7.tip",
-                        config.spawnAttempts(), centerX, y, 1,
-                        v -> config = config.withSpawnAttempts(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text9", centerX, y);
-                addCheckbox("zombietide.settings.spawn.item12.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item12.desc",
-                        "zombietide.settings.spawn.item12.tip",
-                        config.screamerEnabled(), centerX, y,
-                        (cb, v) -> config = config.withScreamerEnabled(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.spawn.item13.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item13.desc",
-                        "zombietide.settings.spawn.item13.tip",
-                        config.screamerCooldownMin(), centerX, y, 10, 600,
-                        v -> config = config.withScreamerCooldownMin(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.spawn.item14.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item14.desc",
-                        "zombietide.settings.spawn.item14.tip",
-                        config.screamerCooldownMax(), centerX, y, 10, 600,
-                        v -> config = config.withScreamerCooldownMax(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.spawn.item8.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item8.desc",
-                        "zombietide.settings.spawn.item8.tip",
-                        config.spawnByBiome(), centerX, y,
-                        (cb, v) -> config = config.withSpawnByBiome(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.spawn.item9.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item9.desc",
-                        "zombietide.settings.spawn.item9.tip",
-                        Math.round(config.distanceWeight() * 100), centerX, y, 0,
-                        v -> config = config.withDistanceWeight(v / 100.0f), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.spawn.item10.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item10.desc",
-                        "zombietide.settings.spawn.item10.tip",
-                        Math.round(config.darkWeight() * 100), centerX, y, 0,
-                        v -> config = config.withDarkWeight(v / 100.0f), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text10", centerX, y);
-                addIntField("zombietide.settings.spawn.item11.name", Scope.WORLD,
-                        "zombietide.settings.spawn.item11.desc",
-                        "zombietide.settings.spawn.item11.tip",
-                        config.globalCap(), centerX, y, 1,
-                        v -> config = config.withGlobalCap(v), false);
-                y += ROW_HEIGHT;
-            }
-            case WORLD -> {
-                y = addSection("zombietide.settings.common.text11", centerX, y);
-                addCheckbox("zombietide.settings.world.item1.name", Scope.WORLD,
-                        "zombietide.settings.world.item1.desc",
-                        "zombietide.settings.world.item1.tip",
-                        config.daylightBurn(), centerX, y,
-                        (cb, v) -> config = config.withDaylightBurn(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.world.item2.name", Scope.WORLD,
-                        "zombietide.settings.world.item2.desc",
-                        "zombietide.settings.world.item2.tip",
-                        config.blockSleep(), centerX, y,
-                        (cb, v) -> config = config.withBlockSleep(v), false);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.world.item3.name", Scope.VILLAGER,
-                        "zombietide.settings.world.item3.desc",
-                        "zombietide.settings.world.item3.tip",
-                        config.villagerSleepBlockRange(), centerX, y, 1,
-                        v -> config = config.withVillagerSleepBlockRange(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text12", centerX, y);
-                addCycleButton("zombietide.settings.world.item4.name", Scope.PLAYER,
-                        "zombietide.settings.world.item4.desc",
-                        "zombietide.settings.world.item4.tip",
-                        () -> tr("zombietide.settings.debt.prefix") + debtModeLabel(config.debtMode()), centerX, y,
-                        () -> config = config.withDebtMode(nextDebtMode(config.debtMode())));
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.world.item5.name", Scope.PLAYER,
-                        "zombietide.settings.world.item5.desc",
-                        "zombietide.settings.world.item5.tip",
-                        config.debtCap(), centerX, y, 0,
-                        v -> config = config.withDebtCap(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text13", centerX, y);
-                addIntField("zombietide.settings.world.item6.name", Scope.WORLD,
-                        "zombietide.settings.world.item6.desc",
-                        "zombietide.settings.world.item6.tip",
-                        config.despawnSeconds(), centerX, y, 1,
-                        v -> config = config.withDespawnSeconds(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text14", centerX, y);
-                addCheckbox("zombietide.settings.world.item7.name", Scope.WORLD,
-                        "zombietide.settings.world.item7.desc",
-                        "zombietide.settings.world.item7.tip",
-                        config.blockNaturalSpawn(), centerX, y,
-                        (cb, v) -> config = config.withBlockNaturalSpawn(v), false);
-                y += ROW_HEIGHT;
-            }
-            case WARNING -> {
-                y = addSection("zombietide.settings.common.text15", centerX, y);
-                addCheckbox("zombietide.settings.warning.item1.name", Scope.WORLD,
-                        "zombietide.settings.warning.item1.desc",
-                        "zombietide.settings.warning.item1.tip",
-                        config.warningEnabled(), centerX, y,
-                        (cb, v) -> config = config.withWarningEnabled(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.warning.item2.name", Scope.WORLD,
-                        "zombietide.settings.warning.item2.desc",
-                        "zombietide.settings.warning.item2.tip",
-                        config.warningTitle(), centerX, y,
-                        (cb, v) -> config = config.withWarningTitle(v), false);
-                y += ROW_HEIGHT;
-
-                // 定制音频：4 个音效开关统一放在这一区，不再和「警告开关」混在一起
-                y = addSection("zombietide.settings.common.text16", centerX, y);
-                addCheckbox("zombietide.settings.warning.item3.name", Scope.WORLD,
-                        "zombietide.settings.warning.item3.desc",
-                        "zombietide.settings.warning.item3.tip",
-                        config.warningSound(), centerX, y,
-                        (cb, v) -> config = config.withWarningSound(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.warning.item4.name", Scope.WORLD,
-                        "zombietide.settings.warning.item4.desc",
-                        "zombietide.settings.warning.item4.tip",
-                        config.morningWarningSound(), centerX, y,
-                        (cb, v) -> config = config.withMorningWarningSound(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.warning.item5.name", Scope.WORLD,
-                        "zombietide.settings.warning.item5.desc",
-                        "zombietide.settings.warning.item5.tip",
-                        config.scatterSound(), centerX, y,
-                        (cb, v) -> config = config.withScatterSound(v), false);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.warning.item6.name", Scope.WORLD,
-                        "zombietide.settings.warning.item6.desc",
-                        "zombietide.settings.warning.item6.tip",
-                        config.hordeBgmSound(), centerX, y,
-                        (cb, v) -> config = config.withHordeBgmSound(v), false);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text17", centerX, y);
-                addIntField("zombietide.settings.warning.item7.name", Scope.VILLAGER,
-                        "zombietide.settings.warning.item7.desc",
-                        "zombietide.settings.warning.item7.tip",
-                        config.villagerWarningRange(), centerX, y, 1,
-                        v -> config = config.withVillagerWarningRange(v), false);
-                y += ROW_HEIGHT;
-            }
-            case HUD -> {
-                y = addNote("zombietide.settings.common.text18", centerX, y);
-
-                y = addSection("zombietide.settings.common.text19", centerX, y);
-                addCheckbox("zombietide.settings.hud.item1.name", null,
-                        "zombietide.settings.hud.item1.desc",
-                        "zombietide.settings.hud.item1.tip",
-                        hudConfig.hudEnabled(), centerX, y,
-                        (cb, v) -> hudConfig = hudConfig.withHudEnabled(v), true);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.hud.item2.name", null,
-                        "zombietide.settings.hud.item2.desc",
-                        "zombietide.settings.hud.item2.tip",
-                        hudConfig.showVillagerHorde(), centerX, y,
-                        (cb, v) -> hudConfig = hudConfig.withShowVillagerHorde(v), true);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.hud.item3.name", null,
-                        "zombietide.settings.hud.item3.desc",
-                        "zombietide.settings.hud.item3.tip",
-                        hudConfig.hudBold(), centerX, y,
-                        (cb, v) -> hudConfig = hudConfig.withHudBold(v), true);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.hud.item14.name", null,
-                        "zombietide.settings.hud.item14.desc",
-                        "zombietide.settings.hud.item14.tip",
-                        dayGradientRed, centerX, y,
-                        (cb, v) -> dayGradientRed = v, true);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.hud.item4.name", null,
-                        "zombietide.settings.hud.item4.desc",
-                        "zombietide.settings.hud.item4.tip",
-                        hudConfig.villagerHordeBold(), centerX, y,
-                        (cb, v) -> hudConfig = hudConfig.withVillagerHordeBold(v), true);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text20", centerX, y);
-                addIntField("zombietide.settings.hud.item5.name", null,
-                        "zombietide.settings.hud.item5.desc",
-                        "zombietide.settings.hud.item5.tip",
-                        hudConfig.hudX(), centerX, y, 0,
-                        v -> hudConfig = hudConfig.withHudX(v), true);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.hud.item6.name", null,
-                        "zombietide.settings.hud.item6.desc",
-                        "zombietide.settings.hud.item6.tip",
-                        hudConfig.hudY(), centerX, y, 0,
-                        v -> hudConfig = hudConfig.withHudY(v), true);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.hud.item7.name", null,
-                        "zombietide.settings.hud.item7.desc",
-                        "zombietide.settings.hud.item7.tip",
-                        Math.round(hudConfig.hudScale() * 10), centerX, y, 1,
-                        v -> hudConfig = hudConfig.withHudScale(v / 10.0f), true);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.hud.item8.name", null,
-                        "zombietide.settings.hud.item8.desc",
-                        "zombietide.settings.hud.item8.tip",
-                        hudConfig.villagerHordeX(), centerX, y, 0,
-                        v -> hudConfig = hudConfig.withVillagerHordeX(v), true);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.hud.item9.name", null,
-                        "zombietide.settings.hud.item9.desc",
-                        "zombietide.settings.hud.item9.tip",
-                        hudConfig.villagerHordeY(), centerX, y, 0,
-                        v -> hudConfig = hudConfig.withVillagerHordeY(v), true);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.hud.item10.name", null,
-                        "zombietide.settings.hud.item10.desc",
-                        "zombietide.settings.hud.item10.tip",
-                        Math.round(hudConfig.villagerHordeScale() * 10), centerX, y, 1,
-                        v -> hudConfig = hudConfig.withVillagerHordeScale(v / 10.0f), true);
-                y += ROW_HEIGHT;
-
-                y = addSection("zombietide.settings.common.text21", centerX, y);
-                addIntField("zombietide.settings.hud.item11.name", null,
-                        "zombietide.settings.hud.item11.desc",
-                        "zombietide.settings.hud.item11.tip",
-                        hudConfig.villagerHordeDisplayRange(), centerX, y, 1,
-                        v -> hudConfig = hudConfig.withVillagerHordeDisplayRange(v), true);
-                y += ROW_HEIGHT;
-                addIntField("zombietide.settings.hud.item12.name", null,
-                        "zombietide.settings.hud.item12.desc",
-                        "zombietide.settings.hud.item12.tip",
-                        hudConfig.villagerHordeMaxEntries(), centerX, y, 1,
-                        v -> hudConfig = hudConfig.withVillagerHordeMaxEntries(v), true);
-                y += ROW_HEIGHT;
-
-                // ===== 氛围效果（v0.2.70）：纯客户端视觉，独立于 HUD 配置与网络协议 =====
-                y = addSection("zombietide.settings.common.text22", centerX, y);
-                addCheckbox("zombietide.settings.atmo.item1.name", null,
-                        "zombietide.settings.atmo.item1.desc",
-                        "zombietide.settings.atmo.item1.tip",
-                        com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(), centerX, y,
-                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(v,
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFlashEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawBorderEnabled()), true);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.atmo.item2.name", null,
-                        "zombietide.settings.atmo.item2.desc",
-                        "zombietide.settings.atmo.item2.tip",
-                        com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(), centerX, y,
-                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
-                                com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(), v,
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFlashEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawBorderEnabled()), true);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.atmo.item4.name", null,
-                        "zombietide.settings.atmo.item4.desc",
-                        "zombietide.settings.atmo.item4.tip",
-                        com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled(), centerX, y,
-                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
-                                com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(), v,
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFlashEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawBorderEnabled()), true);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.atmo.item5.name", null,
-                        "zombietide.settings.atmo.item5.desc",
-                        "zombietide.settings.atmo.item5.tip",
-                        com.enik.zombietide.config.ClientAtmosphereConfig.rawFlashEnabled(), centerX, y,
-                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
-                                com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled(), v,
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawBorderEnabled()), true);
-                y += ROW_HEIGHT;
-                addCheckbox("zombietide.settings.atmo.item6.name", null,
-                        "zombietide.settings.atmo.item6.desc",
-                        "zombietide.settings.atmo.item6.tip",
-                        com.enik.zombietide.config.ClientAtmosphereConfig.rawBorderEnabled(), centerX, y,
-                        (cb, v) -> com.enik.zombietide.config.ClientAtmosphereConfig.set(
-                                com.enik.zombietide.config.ClientAtmosphereConfig.atmosphereEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFogEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawCameraShakeEnabled(),
-                                com.enik.zombietide.config.ClientAtmosphereConfig.rawFlashEnabled(), v), true);
-                y += ROW_HEIGHT;
+        // 【P1 重构】选项定义全部收敛到 SettingsRegistry，这里只负责把「行」翻译成控件。
+        // 顺序、分区标题、注释由 registry 保证与旧实现一致（纯重构，外观不变）。
+        for (SettingRow row : SettingsRegistry.rowsFor(this.currentTab)) {
+            switch (row) {
+                case SettingRow.SectionRow sec -> y = addSection(sec.titleKey(), centerX, y);
+                case SettingRow.NoteRow note -> y = addNote(note.textKey(), centerX, y);
+                case SettingRow.OptionRow optRow -> {
+                    OptionEntry e = optRow.entry();
+                    switch (e.type()) {
+                        case TOGGLE -> addCheckbox(e.nameKey(), e.scope(), e.descKey(), e.tipKey(),
+                                e.reader().applyAsInt(this) != 0, centerX, y,
+                                (cb, v) -> applyOption(e, v ? 1 : 0), e.clientOnly());
+                        case INT -> addIntField(e.nameKey(), e.scope(), e.descKey(), e.tipKey(),
+                                e.reader().applyAsInt(this), centerX, y, e.min(), e.max(),
+                                v -> applyOption(e, v), e.clientOnly());
+                        case CYCLE -> addCycleButton(e.nameKey(), e.scope(), e.descKey(), e.tipKey(),
+                                () -> e.cycleLabel().apply(this), centerX, y,
+                                () -> e.cycleAction().accept(this));
+                    }
+                    y += ROW_HEIGHT;
+                }
             }
         }
 
@@ -788,7 +336,7 @@ public class ZombietideSettingsScreen extends Screen {
         // 滑动范围完全由「图片绘制宽度 - 屏幕宽度」决定
         float maxScroll = Math.max(0.0F, drawW - w);
 
-        int tabCount = Tab.values().length;
+        int tabCount = SettingsCategory.values().length;
         // 进度 0 = 第一个分页（图片左边缘）；1 = 最后一个分页（图片右边缘）；中间按比例
         float progress = tabCount <= 1 ? 0.0F
                 : this.currentTab.ordinal() / (float) (tabCount - 1);
@@ -1060,10 +608,10 @@ public class ZombietideSettingsScreen extends Screen {
         return y + 16;
     }
 
-    private Checkbox addCheckbox(String label, Scope scope, String desc, String tooltip,
+    private Checkbox addCheckbox(String label, OptionScope scope, String desc, String tooltip,
                                  boolean checked, int centerX, int y,
                                  Checkbox.OnValueChange onChange, boolean clientOnly) {
-        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color + "[" + tr(scope.key) + "] §r§f") + tr(label), centerX, y));
+        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color() + "[" + tr(scope.key()) + "] §r§f") + tr(label), centerX, y));
         this.tabLabels.add(new LabelData("§7" + tr(desc), centerX, y + 10));
         Checkbox cb = Checkbox.builder(Component.empty(), this.font)
                 .pos(centerX - 100, y + 22)
@@ -1084,17 +632,17 @@ public class ZombietideSettingsScreen extends Screen {
         return cb;
     }
 
-    private EditBox addIntField(String label, Scope scope, String desc, String tooltip,
+    private EditBox addIntField(String label, OptionScope scope, String desc, String tooltip,
                                 int value, int centerX, int y, int minValue,
                                 IntConsumer onChange, boolean clientOnly) {
         return addIntField(label, scope, desc, tooltip, value, centerX, y, minValue,
                 Integer.MAX_VALUE, onChange, clientOnly);
     }
 
-    private EditBox addIntField(String label, Scope scope, String desc, String tooltip,
+    private EditBox addIntField(String label, OptionScope scope, String desc, String tooltip,
                                 int value, int centerX, int y, int minValue, int maxValue,
                                 IntConsumer onChange, boolean clientOnly) {
-        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color + "[" + tr(scope.key) + "] §r§f") + tr(label), centerX, y));
+        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color() + "[" + tr(scope.key()) + "] §r§f") + tr(label), centerX, y));
         this.tabLabels.add(new LabelData("§7" + tr(desc), centerX, y + 10));
         EditBox field = new EditBox(this.font, centerX - 100, y + 22, FIELD_WIDTH, FIELD_HEIGHT, Component.literal(tr(label)));
         field.setValue(String.valueOf(value));
@@ -1133,9 +681,9 @@ public class ZombietideSettingsScreen extends Screen {
         return field;
     }
 
-    private Button addCycleButton(String label, Scope scope, String desc, String tooltip,
+    private Button addCycleButton(String label, OptionScope scope, String desc, String tooltip,
                                   java.util.function.Supplier<String> valueText, int centerX, int y, Runnable onPress) {
-        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color + "[" + tr(scope.key) + "] §r§f") + tr(label), centerX, y));
+        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color() + "[" + tr(scope.key()) + "] §r§f") + tr(label), centerX, y));
         this.tabLabels.add(new LabelData("§7" + tr(desc), centerX, y + 10));
         Button btn = Button.builder(Component.literal(valueText.get()), b -> {
             onPress.run();
@@ -1146,6 +694,49 @@ public class ZombietideSettingsScreen extends Screen {
         btn.setTooltip(Tooltip.create(Component.literal(tr(tooltip))));
         this.addRenderableWidget(btn);
         return btn;
+    }
+
+    /** 把选项值写回编辑状态，并按它属于本机配置还是存档级配置选择提交路径 */
+    private void applyOption(OptionEntry entry, int value) {
+        entry.writer().accept(this, value);
+        if (entry.clientOnly()) {
+            commitClientHud();
+        } else {
+            pushConfig();
+        }
+    }
+
+    // ==================== SettingsHost（P1） ====================
+    // 给 SettingsRegistry 里的声明式选项提供最小读写面。
+
+    @Override
+    public ZombietideConfig config() {
+        return this.config;
+    }
+
+    @Override
+    public void setConfig(ZombietideConfig config) {
+        this.config = config;
+    }
+
+    @Override
+    public ZombietideConfig.HudConfig hud() {
+        return this.hudConfig;
+    }
+
+    @Override
+    public void setHud(ZombietideConfig.HudConfig hud) {
+        this.hudConfig = hud;
+    }
+
+    @Override
+    public boolean dayGradientRed() {
+        return this.dayGradientRed;
+    }
+
+    @Override
+    public void setDayGradientRed(boolean value) {
+        this.dayGradientRed = value;
     }
 
     /** 服务端存档级配置：立即同步并提示 */
@@ -1177,22 +768,6 @@ public class ZombietideSettingsScreen extends Screen {
     /** 从客户端语言文件取文字；缺键时 I18n.get 原样返回键，便于发现遗漏 */
     private static String tr(String key) {
         return I18n.get(key);
-    }
-
-    private static String debtModeLabel(String mode) {
-        return switch (mode == null ? "" : mode) {
-            case "last_only" -> tr("zombietide.settings.debt.last_only");
-            case "none" -> tr("zombietide.settings.debt.none");
-            default -> tr("zombietide.settings.debt.cumulative");
-        };
-    }
-
-    private static String nextDebtMode(String mode) {
-        return switch (mode == null ? "" : mode) {
-            case "cumulative" -> "last_only";
-            case "last_only" -> "none";
-            default -> "cumulative";
-        };
     }
 
     private record LabelData(String text, int x, int y) {}
