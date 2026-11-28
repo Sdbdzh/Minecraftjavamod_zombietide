@@ -35,7 +35,7 @@ public final class ZombietideAtmosphere {
     /** 触发瞬间镜头下沉持续时长（tick） */
     private static final int TRIGGER_SHAKE_TICKS = 20;
     /** 镜头下沉幅度（度），刻意做得极轻，避免晕动 */
-    private static final float TRIGGER_SHAKE_DEGREES = 1.5F;
+    private static final float TRIGGER_SHAKE_DEGREES = 4.0F;   // 【v0.2.117】1.5°→4°（原来几乎感觉不到）
 
     private static int clientTicks = 0;
     private static int waveStartTick = -10000;
@@ -59,6 +59,9 @@ public final class ZombietideAtmosphere {
     /** 收到服务端的尸潮触发闪光包：记录一个短促闪烁窗口。 */
     public static void onHordeFlash() {
         flashUntilTick = clientTicks + FLASH_TICKS;
+        // 【v0.2.117】镜头下沉改用触发包作为触发源（原来用 threatTarget 上升沿，
+        // 但触发时僵尸还在 150 格外、威胁强度=0，导致下沉永不触发）
+        waveStartTick = clientTicks;
     }
 
     /** 当前预兆强度（0~1），供 HUD 决定 DAY X 的暗红渐变（v0.2.80）。 */
@@ -206,11 +209,27 @@ public final class ZombietideAtmosphere {
 
         // 触发瞬间的暗红闪烁：画在 HUD 之下（Pre），不会遮住文字。
         // 用 alpha 从强到弱线性衰减，0.6 秒内结束；这是"火光抖一下"的视觉替代（不改 gamma/shader）。
+        // 【v0.2.117】常驻红色边框：强度随威胁强度（= 周围尸潮僵尸数量）实时变化。
+        // 波次中一直有，黎明僵尸散去后 threatStrength 归零 → 边框自然消失。
+        if (ClientAtmosphereConfig.atmosphereEnabled() && threatStrength > 0.0F && !mc.options.hideGui) {
+            int edgeW = Math.max(8, (int) (w * 0.18F));
+            int edgeH = Math.max(8, (int) (h * 0.18F));
+            int borderAlpha = ((int) (threatStrength * 130.0F) & 0xFF) << 24;  // 0~130（约 51%）
+            int red = 0x5A0000;   // 暗红 RGB(90,0,0)
+            int clear = 0x00000000;
+            // 上/下：边缘暗红 → 中心透明
+            g.fillGradient(0, 0, w, edgeH, borderAlpha | red, clear);
+            g.fillGradient(0, h - edgeH, w, h, clear, borderAlpha | red);
+            // 左/右：边缘暗红 → 中心透明
+            g.fillGradient(0, edgeH, edgeW, h - edgeH, borderAlpha | red, clear);
+            g.fillGradient(w - edgeW, edgeH, w, h - edgeH, clear, borderAlpha | red);
+        }
+
+        // 触发瞬间的全屏暗红闪烁（短促），叠在边框之上
         if (flashUntilTick > clientTicks && ClientAtmosphereConfig.atmosphereEnabled()) {
             int remain = flashUntilTick - clientTicks;
             float progress = remain / (float) FLASH_TICKS;   // 1 → 0
-            int flashAlpha = ((int) (progress * 170.0F) & 0xFF) << 24;  // 【v0.2.116】峰值 46→170（18%→67%），真正看得见
-            // 暗红色 RGB(60,0,0)=0x3C0000 与高位 alpha 按位或 → ARGB 0xAARRGGBB
+            int flashAlpha = ((int) (progress * 170.0F) & 0xFF) << 24;  // 峰值 67%
             g.fill(0, 0, w, h, flashAlpha | 0x3C0000);
         }
 
