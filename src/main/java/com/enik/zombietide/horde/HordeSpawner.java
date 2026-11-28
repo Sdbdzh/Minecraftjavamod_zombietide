@@ -446,9 +446,10 @@ public class HordeSpawner {
                 }
 
                 // 增援：追加 8~12 只到现有波次
-                // 【v0.2.102】恢复 AI 锁定判定：只有真正锁定玩家的尖啸者才尖叫。
-                // 创造/旁观玩家不会被僵尸锁定是正常的——测试时切生存即可。
-                if (!(mob.getTarget() instanceof ServerPlayer player)) continue;
+                // 【v0.2.103】接受 AI 锁定的任意活物（玩家或村民）：
+                // 村民尸潮的僵尸锁定的是村民，写死 instanceof ServerPlayer 会让它们永远不叫。
+                // 仍然坚持 AI 锁定判定（不放宽成"附近有谁就叫"），只放宽"目标类型"。
+                if (mob.getTarget() == null || !mob.getTarget().isAlive()) continue;
                 UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
                 if (targetId == null) continue;
                 if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
@@ -464,19 +465,23 @@ public class HordeSpawner {
                 com.enik.zombietide.config.HordeProgressData.get(level)
                         .setRemaining(targetId, activeHordes.get(targetId), isVillager);
 
-                EnikZombietide.LOGGER.info("[尖啸者] 僵尸 {} 尖叫（增援 {} 只，剩余 {}）",
-                        mob.getUUID(), reinforce, activeHordes.get(targetId));
-                notifyCreativeDebug(level, "尖叫！增援 " + reinforce + " 只 @ " + mob.blockPosition());
+                EnikZombietide.LOGGER.info("[尖啸者] 僵尸 {} 尖叫（增援 {} 只，剩余 {}，目标 {}）",
+                        mob.getUUID(), reinforce, activeHordes.get(targetId),
+                        mob.getTarget().getType().getDescriptionId());
+                notifyCreativeDebug(level, "尖叫！增援 " + reinforce + " 只 @ " + mob.blockPosition()
+                        + " 目标=" + mob.getTarget().getType().getDescriptionId());
                 continue;
             }
 
             // ===== 已在蓄力中：等 pending 到点 =====
             if (pending > 0L) continue;
 
-            // ===== 发起蓄力：锁定玩家 + 冷却结束 =====
-            // 【v0.2.102】恢复 AI 锁定判定。创造/旁观玩家不被锁定是设计如此，不为此放宽逻辑。
+            // ===== 发起蓄力：AI 锁定活物 + 冷却结束 =====
+            // 【v0.2.103】接受玩家或村民（村民尸潮的僵尸锁定村民）。
+            // 仍要求 AI 真正锁定目标，不放宽成"距离判定"。
             if (lastScream > 0L && now - lastScream < SCREAMER_COOLDOWN_TICKS) continue;
-            if (!(mob.getTarget() instanceof ServerPlayer)) continue;
+            var lockedTarget = mob.getTarget();
+            if (lockedTarget == null || !lockedTarget.isAlive()) continue;
             UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
             if (targetId == null) continue;
             if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
@@ -487,7 +492,8 @@ public class HordeSpawner {
             level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
                     px, py, pz, 24, 1.2, 1.0, 1.2, 0.02);
             tag.putLong(SCREAMER_PENDING_KEY, now + SCREAMER_CHARGE_TICKS);
-            notifyCreativeDebug(level, "蓄力开始（" + SCREAMER_CHARGE_TICKS + " tick 后尖叫）@ " + mob.blockPosition());
+            notifyCreativeDebug(level, "蓄力开始（" + SCREAMER_CHARGE_TICKS + " tick 后尖叫）@ " + mob.blockPosition()
+                    + " 目标=" + lockedTarget.getType().getDescriptionId());
         }
     }
 
