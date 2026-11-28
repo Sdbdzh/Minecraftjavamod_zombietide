@@ -24,14 +24,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * <p>
  * 用 MixinExtras 的 {@code @Local} **精确捕获** {@code convertToZombieType} 内部
  * {@code Zombie zombie = this.convertTo(...)} 的返回值——不靠位置猜实体。
- * 注入点选在 {@code handleAttributes} 调用处，此时 zombie 局部变量（index=2：0=this, 1=参数type, 2=返回值）已赋值。按 index 捕获，不依赖 SRG 变量名。
+ * 注入点用 @At(RETURN)（避开 SRG 方法名混淆），@Local(index=2) 按槽位捕获 convertTo 返回值（0=this, 1=参数type, 2=返回值），不依赖变量名。
  */
 @Mixin(Zombie.class)
 public abstract class ZombieConversionMixin {
 
     @Inject(
         method = "convertToZombieType",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/monster/Zombie;handleAttributes(D)V")
+        at = @At("RETURN")
     )
     private void zombietide$preserveHordeIdentity(
             EntityType<? extends Zombie> type, CallbackInfo ci,
