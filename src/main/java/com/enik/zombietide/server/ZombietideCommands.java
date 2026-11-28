@@ -274,6 +274,9 @@ public class ZombietideCommands {
         final int finalSuccessCount = successCount;
         if (finalSuccessCount > 0) {
             source.sendSuccess(() -> Component.literal("§a【手动触发】成功触发 " + finalSuccessCount + " 个尸潮").withStyle(ChatFormatting.GREEN), false);
+            // 【v0.2.95】立即广播一次村民面板状态：村民手动触发只写了调度表，
+            // 否则村民的 DAY X（二态整天红 / 渐进进度）要等 20 tick 周期广播才更新。
+            ModMessages.broadcastAllVillagerModDays();
         } else {
             source.sendSuccess(() -> Component.literal("目标中无有效玩家或村民（村民需在主世界且非和平）").withStyle(ChatFormatting.GRAY), false);
         }
