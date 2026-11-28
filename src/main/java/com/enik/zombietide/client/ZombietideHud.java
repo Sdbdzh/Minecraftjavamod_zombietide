@@ -43,6 +43,8 @@ public class ZombietideHud {
     private static final Map<UUID, Integer> syncedActivePlayerHordes = new HashMap<>();
     private static final Map<UUID, Integer> syncedActiveVillagerHordes = new HashMap<>();
     private static final Map<UUID, Integer> syncedAliveHordeZombies = new HashMap<>();
+    /** 【v0.2.141】当前玩家自己的存活尸潮僵尸数（DAY X 次行用；与全局统计区分） */
+    private static final Map<UUID, Integer> syncedOwnAliveZombies = new HashMap<>();
     /** 服务端算好的「今天是否为该玩家的尸潮日」（支持固定/随机间隔） */
     private static final Map<UUID, Boolean> syncedHordeDay = new HashMap<>();
     /** 服务端同步的村民模组天数（UUID -> modDay；用于 HUD 附近村民显示） */
@@ -80,7 +82,8 @@ public class ZombietideHud {
     /** 接收服务端同步的玩家模组天数（PlayerModDayPayload） */
     public static void onModDayReceived(UUID playerUuid, int modDay, boolean hordeDay, boolean waveActive, int bloodDebt,
                                         int activePlayerHordes, int activeVillagerHordes, int aliveHordeZombies,
-                                        float hordeProgress, boolean hordeDayToday) {
+                                        float hordeProgress, boolean hordeDayToday, int ownAliveZombies) {
+        syncedOwnAliveZombies.put(playerUuid, ownAliveZombies);
         syncedModDays.put(playerUuid, modDay);
         syncedHordeDay.put(playerUuid, hordeDay);
         syncedHordeProgress.put(playerUuid, hordeProgress);
@@ -107,9 +110,9 @@ public class ZombietideHud {
         return syncedDebt.getOrDefault(playerUuid, 0);
     }
 
-    /** 【v0.2.138】客户端视角：该玩家附近存活的尸潮僵尸数（DAY X 次行用）。 */
+    /** 【v0.2.141】客户端视角：该玩家**自己**的存活尸潮僵尸数（DAY X 次行用）。 */
     public static int aliveHordeZombiesFor(UUID playerUuid) {
-        return syncedAliveHordeZombies.getOrDefault(playerUuid, 0);
+        return syncedOwnAliveZombies.getOrDefault(playerUuid, 0);
     }
 
     /** 【v0.2.91】该玩家距下次尸潮预兆期开始的进度（0~1）。 */
@@ -168,6 +171,7 @@ public class ZombietideHud {
         syncedActivePlayerHordes.clear();
         syncedActiveVillagerHordes.clear();
         syncedAliveHordeZombies.clear();
+        syncedOwnAliveZombies.clear();
         villagerModDays.clear();
         villagerProfessions.clear();
         villagerPos.clear();

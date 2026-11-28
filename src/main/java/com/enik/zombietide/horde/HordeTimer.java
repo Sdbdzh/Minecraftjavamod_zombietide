@@ -259,11 +259,15 @@ public class HordeTimer {
         // DAY X 二态模式必须用它——「尸潮日红」是整天红，不是只在黄昏窗口红。
         boolean playerHordeDayToday = isHordeDay(player.getUUID(), data.modDay(), data.lastTriggerDay(),
                 config, false) || data.waveActive();
+        // 【v0.2.141】DAY X 次行的僵尸数必须是「当前玩家自己的」，不是全局统计。
+        // 全局数仍保留给 debug overlay 的「全局统计」区。
+        int ownAliveZombies = HordeSpawner.countAliveHordeZombiesFor(
+                player.serverLevel(), player.getUUID());
         ModMessages.sendModDay(player, data.modDay(),
                 playerHordeDay,
                 data.waveActive(), debt,
                 activePlayerHordes, activeVillagerHordes, aliveHordeZombies,
-                progress, playerHordeDayToday);
+                progress, playerHordeDayToday, ownAliveZombies);
     }
 
     /** 推进所有在线玩家和所有村民的模组天数（modDay 直接等于主世界游戏日）

@@ -1478,6 +1478,24 @@ public class HordeSpawner {
     }
 
     /**
+     * 【v0.2.141】统计**指定目标**已生成且仍存活的尸潮僵尸数（与全局版同源 NBT 口径）。
+     * <p>DAY X 次行的「僵尸数」必须显示当前玩家自己的，不是全世界的。
+     */
+    public static int countAliveHordeZombiesFor(ServerLevel level, UUID targetId) {
+        if (targetId == null) return 0;
+        int count = 0;
+        for (net.minecraft.world.entity.Entity entity : level.getEntities().getAll()) {
+            if (entity == null) continue;
+            if (!(entity instanceof net.minecraft.world.entity.monster.Zombie
+                    || entity instanceof net.minecraft.world.entity.monster.Stray)) continue;
+            CompoundTag tag = entity.getPersistentData();
+            if (!tag.hasUUID(HORDE_TARGET_UUID_KEY)) continue;
+            if (targetId.equals(tag.getUUID(HORDE_TARGET_UUID_KEY))) count++;
+        }
+        return count;
+    }
+
+    /**
      * 【v0.2.77】找该尸潮目标**已生成且仍存活**的一只僵尸，用于把叫声绑定到实体上播放。
      * <p>不依赖可能不完整的 {@code hordeZombieUuids} 集合，直接扫实体表按 NBT 目标 UUID 匹配
      * （与 {@link #countAliveHordeZombies} 同源口径）。叫声每 30 秒~2 分钟才播一次，开销可忽略。

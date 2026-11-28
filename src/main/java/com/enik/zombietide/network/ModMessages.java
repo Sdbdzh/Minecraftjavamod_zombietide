@@ -103,7 +103,7 @@ public class ModMessages {
                                       boolean waveActive, int bloodDebt,
                                       int activePlayerHordes, int activeVillagerHordes,
                                       int aliveHordeZombies, float hordeProgress,
-                                      boolean hordeDayToday) implements CustomPacketPayload {
+                                      boolean hordeDayToday, int ownAliveHordeZombies) implements CustomPacketPayload {
         public static final Type<PlayerModDayPayload> TYPE = new Type<>(PLAYER_MOD_DAY_ID);
 
         public static final StreamCodec<FriendlyByteBuf, PlayerModDayPayload> STREAM_CODEC = new StreamCodec<>() {
@@ -119,6 +119,7 @@ public class ModMessages {
                 buf.writeInt(payload.aliveHordeZombies);
                 buf.writeFloat(payload.hordeProgress);
                 buf.writeBoolean(payload.hordeDayToday());
+                buf.writeInt(payload.ownAliveHordeZombies);
             }
 
             @Override
@@ -133,8 +134,10 @@ public class ModMessages {
                 int aliveHordeZombies = buf.readInt();
                 float hordeProgress = buf.readFloat();
                 boolean hordeDayToday = buf.readBoolean();
+                int ownAliveHordeZombies = buf.readInt();
                 return new PlayerModDayPayload(uuid, modDay, hordeDay, waveActive, bloodDebt,
-                        activePlayerHordes, activeVillagerHordes, aliveHordeZombies, hordeProgress, hordeDayToday);
+                        activePlayerHordes, activeVillagerHordes, aliveHordeZombies, hordeProgress,
+                        hordeDayToday, ownAliveHordeZombies);
             }
         };
 
@@ -574,7 +577,7 @@ public class ModMessages {
                 .playToClient(PlayerModDayPayload.TYPE, PlayerModDayPayload.STREAM_CODEC,
                         (payload, context) -> {
                             context.enqueueWork(() -> {
-                                ZombietideHud.onModDayReceived(payload.playerUuid(), payload.modDay(), payload.hordeDay(), payload.waveActive(), payload.bloodDebt(), payload.activePlayerHordes(), payload.activeVillagerHordes(), payload.aliveHordeZombies(), payload.hordeProgress(), payload.hordeDayToday());
+                                ZombietideHud.onModDayReceived(payload.playerUuid(), payload.modDay(), payload.hordeDay(), payload.waveActive(), payload.bloodDebt(), payload.activePlayerHordes(), payload.activeVillagerHordes(), payload.aliveHordeZombies(), payload.hordeProgress(), payload.hordeDayToday(), payload.ownAliveHordeZombies());
                             });
                         })
                 // 服务端 -> 客户端：村民模组天数同步
@@ -691,10 +694,10 @@ public class ModMessages {
     /** 发送玩家模组天数给特定玩家 */
     public static void sendModDay(ServerPlayer player, int modDay, boolean hordeDay, boolean waveActive, int bloodDebt,
                                   int activePlayerHordes, int activeVillagerHordes, int aliveHordeZombies,
-                                  float hordeProgress, boolean hordeDayToday) {
+                                  float hordeProgress, boolean hordeDayToday, int ownAliveHordeZombies) {
         PacketDistributor.sendToPlayer(player, new PlayerModDayPayload(player.getUUID(), modDay, hordeDay,
                 waveActive, bloodDebt, activePlayerHordes, activeVillagerHordes, aliveHordeZombies,
-                hordeProgress, hordeDayToday));
+                hordeProgress, hordeDayToday, ownAliveHordeZombies));
     }
 
     /** 发送村民模组天数给特定玩家（用于 HUD 显示附近村民） */
