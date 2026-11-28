@@ -21,7 +21,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Renderable;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.fml.ModList;
@@ -65,6 +64,8 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     private final List<LabelData> tabLabels = new ArrayList<>();
     /** 分区标题（带分隔线） */
     private final List<SectionHeader> sectionHeaders = new ArrayList<>();
+    /** 【P2】每行的纵向范围 + 悬停提示内容（本屏幕不调用 super.render，tooltip 必须手绘） */
+    private final List<RowBounds> rowBounds = new ArrayList<>();
 
     // 底部完成按钮（固定，不加入 renderable 列表）
     private Button doneBtn;
@@ -78,14 +79,25 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
     private long lastToastMs = 0L;
 
-    private static final int ROW_HEIGHT = 58;
-    private static final int SECTION_HEIGHT = 34;
-    private static final int TAB_HEIGHT = 22;
-    private static final int TAB_TOP = 20;
+    /** 【P2】紧凑单行：一行 = 标签（左）+ 控件（右），描述改为悬停提示 */
+    private static final int ROW_HEIGHT = 26;
+    private static final int SECTION_HEIGHT = 22;
     private static final int CONTENT_TOP = 50;
     private static final int CONTENT_BOTTOM = 34;
-    private static final int FIELD_HEIGHT = 20;
-    private static final int FIELD_WIDTH = 200;
+    private static final int FIELD_HEIGHT = 16;
+    private static final int FIELD_WIDTH = 150;
+    /** 左侧分类栏 */
+    private static final int SIDEBAR_X = 8;
+    private static final int SIDEBAR_WIDTH = 130;
+    private static final int SIDEBAR_ITEM_H = 22;
+    private static final int SIDEBAR_ITEM_GAP = 2;
+    private static final int SIDEBAR_TOP_PAD = 4;
+    /** 内容区与分类栏之间的间距 */
+    private static final int CONTENT_PAD = 14;
+    /** 标签距内容面板左边的内边距 */
+    private static final int LABEL_PAD = 10;
+    /** 控件距内容面板右边的内边距 */
+    private static final int CONTROL_PAD = 8;
     private static final int SCROLLBAR_WIDTH = 6;
     private static final int SCROLLBAR_GAP = 4;
     /** 生成半径输入上限：防止填出离谱值（实际生效值还会被服务器模拟距离再压一次） */
@@ -207,45 +219,44 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         if (this.hudConfig == null) this.hudConfig = ClientHudConfig.get();
         this.tabLabels.clear();
         this.sectionHeaders.clear();
+        this.rowBounds.clear();
         this.tabButtons.clear();
         this.clearWidgets();
         this.doneBtn = null;
 
-        // ===== 固定顶部标签页（手动渲染/命中，不进入滚动容器） =====
-        int tabCount = SettingsCategory.values().length;
-        int tabWidth = Math.max(40, Math.min(96, (this.width - 16) / tabCount));
-        int tabStartX = (this.width - tabWidth * tabCount) / 2;
-        for (int i = 0; i < tabCount; i++) {
-            SettingsCategory tab = SettingsCategory.values()[i];
+        // ===== 【P2】左侧竖排分类栏（固定，不进入滚动容器） =====
+        SettingsCategory[] categories = SettingsCategory.values();
+        for (int i = 0; i < categories.length; i++) {
+            SettingsCategory tab = categories[i];
+            int itemY = CONTENT_TOP + SIDEBAR_TOP_PAD + i * (SIDEBAR_ITEM_H + SIDEBAR_ITEM_GAP);
             Button btn = Button.builder(Component.literal(tr(tab.key())), b -> {
                 this.currentTab = tab;
                 this.scrollOffset = 0;
                 this.rebuildWidgets();
-            }).bounds(tabStartX + i * tabWidth, TAB_TOP, tabWidth, TAB_HEIGHT).build();
+            }).bounds(SIDEBAR_X, itemY, SIDEBAR_WIDTH, SIDEBAR_ITEM_H).build();
             this.tabButtons.add(btn);
         }
 
         // ===== 内容控件（进入 renderable 列表，随 pose 平移） =====
-        int centerX = this.width / 2;
         int y = CONTENT_TOP + 8;
 
         // 【P1 重构】选项定义全部收敛到 SettingsRegistry，这里只负责把「行」翻译成控件。
         // 顺序、分区标题、注释由 registry 保证与旧实现一致（纯重构，外观不变）。
         for (SettingRow row : SettingsRegistry.rowsFor(this.currentTab)) {
             switch (row) {
-                case SettingRow.SectionRow sec -> y = addSection(sec.titleKey(), centerX, y);
-                case SettingRow.NoteRow note -> y = addNote(note.textKey(), centerX, y);
+                case SettingRow.SectionRow sec -> y = addSection(sec.titleKey(), y);
+                case SettingRow.NoteRow note -> y = addNote(note.textKey(), y);
                 case SettingRow.OptionRow optRow -> {
                     OptionEntry e = optRow.entry();
                     switch (e.type()) {
                         case TOGGLE -> addCheckbox(e.nameKey(), e.scope(), e.descKey(), e.tipKey(),
-                                e.reader().applyAsInt(this) != 0, centerX, y,
+                                e.reader().applyAsInt(this) != 0, y,
                                 (cb, v) -> applyOption(e, v ? 1 : 0), e.clientOnly());
                         case INT -> addIntField(e.nameKey(), e.scope(), e.descKey(), e.tipKey(),
-                                e.reader().applyAsInt(this), centerX, y, e.min(), e.max(),
+                                e.reader().applyAsInt(this), y, e.min(), e.max(),
                                 v -> applyOption(e, v), e.clientOnly());
                         case CYCLE -> addCycleButton(e.nameKey(), e.scope(), e.descKey(), e.tipKey(),
-                                () -> e.cycleLabel().apply(this), centerX, y,
+                                () -> e.cycleLabel().apply(this), y,
                                 () -> e.cycleAction().accept(this));
                     }
                     y += ROW_HEIGHT;
@@ -257,9 +268,8 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         this.doneBtn = Button.builder(Component.literal(tr("zombietide.settings.button.done")), b -> this.onClose())
                 .bounds(this.width / 2 - 60, this.height - 28, 120, 20).build();
 
-        // 内容高度：以最后一个控件底边为准 + 底部留白
-        int lastControlBottom = y - ROW_HEIGHT + 22 + FIELD_HEIGHT;
-        this.contentHeight = Math.max(FIELD_HEIGHT, lastControlBottom - CONTENT_TOP + 16);
+        // 内容高度：以最后一行底边为准 + 底部留白（P2 行高变小，公式同步简化）
+        this.contentHeight = Math.max(ROW_HEIGHT, (y - CONTENT_TOP) + 16);
         this.scrollOffset = Math.max(0, Math.min(maxScroll(), this.scrollOffset));
     }
 
@@ -368,31 +378,51 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
         guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 6, 0xFFFFFF);
 
-        // 标签页（固定顶部，手动渲染，只画一次）
+        int scissorTop = CONTENT_TOP;
+        int scissorBottom = this.height - CONTENT_BOTTOM;
+
+        // 【P2】半透明深色面板：紧凑行叠在壁纸上仍然可读（壁纸本身不删不改）
+        guiGraphics.fill(SIDEBAR_X - 4, scissorTop, SIDEBAR_X + SIDEBAR_WIDTH + 4,
+                scissorBottom, 0x8C101014);
+        guiGraphics.fill(contentLeft() - 8, scissorTop, this.width - 8,
+                scissorBottom, 0x8C101014);
+
+        // 左侧分类栏（固定，不随内容滚动）；选中项用橙色竖条 + 淡底标记
         for (int i = 0; i < this.tabButtons.size(); i++) {
             Button btn = this.tabButtons.get(i);
             if (i == this.currentTab.ordinal()) {
-                guiGraphics.fill(btn.getX(), btn.getY(),
-                        btn.getX() + btn.getWidth(), btn.getY() + btn.getHeight(), 0x66FFFFFF);
+                guiGraphics.fill(btn.getX() - 3, btn.getY() - 1,
+                        btn.getX() + btn.getWidth() + 3, btn.getY() + btn.getHeight() + 1, 0x4DFFB347);
+                guiGraphics.fill(btn.getX() - 3, btn.getY() - 1,
+                        btn.getX() - 1, btn.getY() + btn.getHeight() + 1, 0xFFFFB347);
             }
             btn.render(guiGraphics, mouseX, mouseY, partialTick);
         }
-        guiGraphics.fill(0, CONTENT_TOP - 2, this.width, CONTENT_TOP - 1, 0x40FFFFFF);
 
-        int scissorTop = CONTENT_TOP;
-        int scissorBottom = this.height - CONTENT_BOTTOM;
         if (scissorBottom > scissorTop) {
-            guiGraphics.enableScissor(0, scissorTop, this.width, scissorBottom);
+            guiGraphics.enableScissor(contentLeft() - 8, scissorTop, this.width - 8, scissorBottom);
             guiGraphics.pose().pushPose();
             guiGraphics.pose().translate(0.0F, -this.scrollOffset, 0.0F);
 
-            // 分区标题（分隔线 + 标题），随内容滚动
+            // 【P2】悬停高亮：整行淡色底，强化「这一行可点」
+            for (RowBounds rb : this.rowBounds) {
+                double cy = mouseY + this.scrollOffset;
+                if (cy >= rb.y() && cy < rb.y() + rb.height()) {
+                    guiGraphics.fill(contentLeft() - 6, rb.y() - 1,
+                            this.width - 16, rb.y() + rb.height() - 1, 0x1FFFFFFF);
+                    break;
+                }
+            }
+
+            // 分区标题（左对齐 + 右侧延伸分隔线），随内容滚动
             for (SectionHeader s : this.sectionHeaders) {
                 int screenY = s.y() - this.scrollOffset;
                 if (screenY + 12 >= scissorTop && screenY <= scissorBottom) {
-                    guiGraphics.fill(s.x() - 110, s.y() - 5, s.x() + 110, s.y() - 4, 0x40FFFFFF);
-                    guiGraphics.drawCenteredString(this.font, Component.literal("§6§l" + s.title()),
-                            s.x(), s.y() + 1, 0xFFFFFF);
+                    int textW = this.font.width("§6§l" + s.title());
+                    guiGraphics.fill(s.x() + textW + 6, s.y() + 9,
+                            this.width - 20, s.y() + 10, 0x33FFFFFF);
+                    guiGraphics.drawString(this.font, Component.literal("§6§l" + s.title()),
+                            s.x(), s.y(), 0xFFFFFF, false);
                 }
             }
 
@@ -402,12 +432,12 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
                 renderable.render(guiGraphics, mouseX, mouseY + this.scrollOffset, partialTick);
             }
 
-            // 设置名与说明（只偏移一次）
+            // 设置名（左对齐，只偏移一次）
             for (LabelData label : this.tabLabels) {
                 int screenY = label.y() - this.scrollOffset;
                 if (screenY + 9 >= scissorTop && screenY <= scissorBottom) {
-                    guiGraphics.drawCenteredString(this.font, Component.literal(label.text()),
-                            label.x(), label.y(), 0xFFFFFF);
+                    guiGraphics.drawString(this.font, Component.literal(label.text()),
+                            label.x(), label.y(), 0xFFFFFF, false);
                 }
             }
 
@@ -419,6 +449,22 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
         if (this.doneBtn != null) {
             this.doneBtn.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
+
+        // 【P2】悬停提示：描述与详细说明都搬到这里。
+        // 本屏幕刻意不调用 super.render（会在 scissor+translate 下重复绘制背景），
+        // 因此 Screen 自带的 tooltip 渲染不会执行，必须手动绘制。
+        if (this.getFocused() == null && isOverContent(mouseY) && mouseX >= contentLeft() - 8) {
+            double cy = mouseY + this.scrollOffset;
+            for (RowBounds rb : this.rowBounds) {
+                if (cy >= rb.y() && cy < rb.y() + rb.height()) {
+                    guiGraphics.renderTooltip(this.font,
+                            List.of(Component.literal("§f" + tr(rb.desc())),
+                                    Component.literal("§7" + tr(rb.tip()))),
+                            java.util.Optional.empty(), mouseX, mouseY);
+                    break;
+                }
+            }
         }
 
         // 左下角：3D 标题封面 + 运行期版本号（固定，不随内容滚动）
@@ -596,27 +642,68 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
+    // ==================== 布局几何（P2） ====================
+
+    /** 内容区左边界（分类栏右侧 + 间距） */
+    private int contentLeft() {
+        return SIDEBAR_X + SIDEBAR_WIDTH + CONTENT_PAD;
+    }
+
+    /** 内容区右边界 */
+    private int contentRight() {
+        return this.width - 16;
+    }
+
+    /** 控件宽度：窗口很窄时收缩，保证标签至少留 140px */
+    private int controlWidth() {
+        return Math.min(FIELD_WIDTH, Math.max(70, contentRight() - contentLeft() - 140));
+    }
+
+    /** 控件左边界：右对齐 */
+    private int controlX() {
+        return contentRight() - controlWidth() - CONTROL_PAD;
+    }
+
+    /** 开关的状态文字（开启绿 / 关闭灰） */
+    private Component checkLabel(boolean on) {
+        return Component.literal(on ? "§a" + tr("zombietide.settings.value.on")
+                : "§8" + tr("zombietide.settings.value.off"));
+    }
+
+    /** 拼装「作用域徽标 + 名称」 */
+    private String labelText(OptionScope scope, String label) {
+        return (scope == null ? "" : "§l" + scope.color() + "[" + tr(scope.key()) + "] §r§f") + tr(label);
+    }
+
+    /** 合并描述与详细提示，作为悬停提示的两行内容 */
+    private String tooltipText(String desc, String tip) {
+        return "§f" + tr(desc) + "\n§7" + tr(tip);
+    }
+
     // ==================== 控件工厂 ====================
 
-    private int addSection(String title, int centerX, int y) {
-        this.sectionHeaders.add(new SectionHeader(tr(title), centerX, y));
+    private int addSection(String title, int y) {
+        this.sectionHeaders.add(new SectionHeader(tr(title), contentLeft() + LABEL_PAD, y));
         return y + SECTION_HEIGHT;
     }
 
-    private int addNote(String text, int centerX, int y) {
-        this.tabLabels.add(new LabelData("§7" + tr(text), centerX, y));
-        return y + 16;
+    private int addNote(String text, int y) {
+        this.tabLabels.add(new LabelData("§8" + tr(text), contentLeft() + LABEL_PAD, y + 4));
+        return y + 18;
     }
 
-    private Checkbox addCheckbox(String label, OptionScope scope, String desc, String tooltip,
-                                 boolean checked, int centerX, int y,
+    private Checkbox addCheckbox(String label, OptionScope scope, String desc, String tip,
+                                 boolean checked, int y,
                                  Checkbox.OnValueChange onChange, boolean clientOnly) {
-        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color() + "[" + tr(scope.key()) + "] §r§f") + tr(label), centerX, y));
-        this.tabLabels.add(new LabelData("§7" + tr(desc), centerX, y + 10));
-        Checkbox cb = Checkbox.builder(Component.empty(), this.font)
-                .pos(centerX - 100, y + 22)
+        this.tabLabels.add(new LabelData(labelText(scope, label),
+                contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
+        this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, desc, tip));
+        // 【P2】开关带「开启/关闭」文字，填满右对齐的控件区，视觉上与输入框同宽
+        Checkbox cb = Checkbox.builder(checkLabel(checked), this.font)
+                .pos(controlX(), y + (ROW_HEIGHT - FIELD_HEIGHT) / 2)
                 .selected(checked)
                 .onValueChange((cbx, checkedVal) -> {
+                    cbx.setMessage(checkLabel(checkedVal));
                     onChange.onValueChange(cbx, checkedVal);
                     if (clientOnly) {
                         commitClientHud();
@@ -625,28 +712,28 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
                     }
                 })
                 .build();
-        cb.setWidth(FIELD_WIDTH);
+        cb.setWidth(controlWidth());
         cb.setHeight(FIELD_HEIGHT);
-        cb.setTooltip(Tooltip.create(Component.literal(tr(tooltip))));
         this.addRenderableWidget(cb);
         return cb;
     }
 
-    private EditBox addIntField(String label, OptionScope scope, String desc, String tooltip,
-                                int value, int centerX, int y, int minValue,
+    private EditBox addIntField(String label, OptionScope scope, String desc, String tip,
+                                int value, int y, int minValue,
                                 IntConsumer onChange, boolean clientOnly) {
-        return addIntField(label, scope, desc, tooltip, value, centerX, y, minValue,
+        return addIntField(label, scope, desc, tip, value, y, minValue,
                 Integer.MAX_VALUE, onChange, clientOnly);
     }
 
-    private EditBox addIntField(String label, OptionScope scope, String desc, String tooltip,
-                                int value, int centerX, int y, int minValue, int maxValue,
+    private EditBox addIntField(String label, OptionScope scope, String desc, String tip,
+                                int value, int y, int minValue, int maxValue,
                                 IntConsumer onChange, boolean clientOnly) {
-        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color() + "[" + tr(scope.key()) + "] §r§f") + tr(label), centerX, y));
-        this.tabLabels.add(new LabelData("§7" + tr(desc), centerX, y + 10));
-        EditBox field = new EditBox(this.font, centerX - 100, y + 22, FIELD_WIDTH, FIELD_HEIGHT, Component.literal(tr(label)));
+        this.tabLabels.add(new LabelData(labelText(scope, label),
+                contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
+        this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, desc, tip));
+        EditBox field = new EditBox(this.font, controlX(), y + (ROW_HEIGHT - FIELD_HEIGHT) / 2,
+                controlWidth(), FIELD_HEIGHT, Component.literal(tr(label)));
         field.setValue(String.valueOf(value));
-        field.setTooltip(Tooltip.create(Component.literal(tr(tooltip))));
         final boolean[] isSetting = { false };
         final int[] lastSentValue = { value };
         field.setResponder((s) -> {
@@ -681,17 +768,18 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         return field;
     }
 
-    private Button addCycleButton(String label, OptionScope scope, String desc, String tooltip,
-                                  java.util.function.Supplier<String> valueText, int centerX, int y, Runnable onPress) {
-        this.tabLabels.add(new LabelData((scope == null ? "" : "§l" + scope.color() + "[" + tr(scope.key()) + "] §r§f") + tr(label), centerX, y));
-        this.tabLabels.add(new LabelData("§7" + tr(desc), centerX, y + 10));
+    private Button addCycleButton(String label, OptionScope scope, String desc, String tip,
+                                  java.util.function.Supplier<String> valueText, int y, Runnable onPress) {
+        this.tabLabels.add(new LabelData(labelText(scope, label),
+                contentLeft() + LABEL_PAD, y + (ROW_HEIGHT - 8) / 2));
+        this.rowBounds.add(new RowBounds(y, ROW_HEIGHT, desc, tip));
         Button btn = Button.builder(Component.literal(valueText.get()), b -> {
             onPress.run();
             pushConfig();
             // 直接刷新按钮文字，避免重建整页（重建会打断当前点击事件）
             b.setMessage(Component.literal(valueText.get()));
-        }).bounds(centerX - 100, y + 22, FIELD_WIDTH, FIELD_HEIGHT).build();
-        btn.setTooltip(Tooltip.create(Component.literal(tr(tooltip))));
+        }).bounds(controlX(), y + (ROW_HEIGHT - FIELD_HEIGHT) / 2,
+                controlWidth(), FIELD_HEIGHT).build();
         this.addRenderableWidget(btn);
         return btn;
     }
@@ -771,6 +859,9 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     }
 
     private record LabelData(String text, int x, int y) {}
+
+    /** 【P2】一行的纵向范围 + 悬停提示用的描述/详细说明语言键 */
+    private record RowBounds(int y, int height, String desc, String tip) {}
 
     private record SectionHeader(String title, int x, int y) {}
 }

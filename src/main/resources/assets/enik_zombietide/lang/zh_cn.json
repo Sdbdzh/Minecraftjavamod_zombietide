@@ -300,5 +300,7 @@
   "zombietide.settings.spawn.item13.tip": "默认 80 秒。范围 10~600。实际冷却在「最小~最大」之间随机。存档级设置。",
   "zombietide.settings.spawn.item14.name": "尖啸冷却最大时间（秒）",
   "zombietide.settings.spawn.item14.desc": "两次尖叫之间的最长冷却秒数",
-  "zombietide.settings.spawn.item14.tip": "默认 120 秒。范围 10~600，小于最小值时自动取最小值。存档级设置。"
+  "zombietide.settings.spawn.item14.tip": "默认 120 秒。范围 10~600，小于最小值时自动取最小值。存档级设置。",
+  "zombietide.settings.value.on": "开启",
+  "zombietide.settings.value.off": "关闭"
 }
