@@ -61,14 +61,9 @@
   "screamer_call": {
     "sounds": [
       {
-        "name": "enik_zombietide:screamer_1",
+        "name": "enik_zombietide:screamer_new",
         "stream": true,
-        "attenuation_distance": 128
-      },
-      {
-        "name": "enik_zombietide:screamer_2",
-        "stream": true,
-        "attenuation_distance": 128
+        "attenuation_distance": 192
       }
     ]
   }

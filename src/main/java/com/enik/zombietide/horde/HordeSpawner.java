@@ -67,6 +67,12 @@ public class HordeSpawner {
     private static final double SCREAMER_SCALE = 1.4D;
     /** 尖啸者上次尖叫的游戏 tick（NBT，0 = 从未叫过） */
     public static final String SCREAMER_LAST_TICK_KEY = "zombietide_screamer_last_tick";
+    /** 尖啸者蓄力完成的计划时刻（NBT，0 = 无蓄力）。蓄力阶段发聚集粒子，到点才真正尖叫。 */
+    public static final String SCREAMER_PENDING_KEY = "zombietide_screamer_pending";
+    /** 蓄力时长：8 tick（0.4 秒） */
+    private static final long SCREAMER_CHARGE_TICKS = 8L;
+    /** 余波持续：40 tick（2 秒） */
+    private static final long SCREAMER_AFTERMATH_TICKS = 40L;
     /** 同一只尖啸者的尖叫冷却：120 秒 = 2400 tick。
      *  <p><b>为什么不是 30 秒</b>：84 只僵尸 × 5% ≈ 4 只尖啸者，30 秒冷却 + 每次 8~12 只
      *  → 增援约 1.0 只/秒，而刷怪引擎只有 0.4 只/秒 → 剩余数无限增长（实测 68→154），
@@ -228,8 +234,8 @@ public class HordeSpawner {
 
     /** 每 tick 更新尸潮刷怪状态（分批生成）+ 更新四散僵尸计时器 */
     public static void update(ServerLevel level, ZombietideConfig config) {
-        // 【v0.2.97】尖啸者检查：每 20 tick 扫一次，发现玩家后尖叫并追加增援
-        if (level.getGameTime() % 20L == 0L) {
+        // 【v0.3.00】尖啸者检查：每 5 tick 扫一次（三段式粒子需要更细的时间粒度）
+        if (level.getGameTime() % 5L == 0L) {
             checkScreamers(level, config);
         }
 
@@ -391,61 +397,83 @@ public class HordeSpawner {
             if (!tag.getBoolean(SCREAMER_KEY)) continue;
             if (tag.getInt(HORDE_STATE_KEY) != 0) continue;   // 四散中的不叫
 
-            // 【v0.2.98】持续标识：头顶一颗 SOUL 缓慢上升，让尖啸者在僵尸群里能被认出来。
-            // 本方法每 20 tick 调一次，SOUL 存活约 1 秒，正好衔接。
-            level.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL,
-                    mob.getX(), mob.getY() + mob.getBbHeight() + 0.15, mob.getZ(),
-                    1, 0.08, 0.05, 0.08, 0.005);
-
-            long lastScream = tag.getLong(SCREAMER_LAST_TICK_KEY);
-            if (lastScream > 0L && now - lastScream < SCREAMER_COOLDOWN_TICKS) continue;
-
-            // 只有锁定到玩家才尖叫（村民尸潮的尖啸者不叫，避免无人区乱刷）
-            if (!(mob.getTarget() instanceof ServerPlayer player)) continue;
-
-            UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
-            if (targetId == null) continue;
-            // 【v0.2.97】即使原波次已刷完（activeHordes 被移除），只要目标仍在波次中，
-            // 尖啸者仍能叫来增援——直接新建一条 activeHordes 由刷怪引擎自然产出。
-            // 判断"仍在波次中"用 totalCount 是否残留（波次结束才会清掉）。
-            if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
-
-            tag.putLong(SCREAMER_LAST_TICK_KEY, now);
-
-            // 空间化尖叫：从僵尸位置发给附近玩家（64 格可闻）
-            for (ServerPlayer p : level.getPlayers(p -> p.distanceToSqr(mob) <= 64.0 * 64.0)) {
-                ModSounds.playAtPosition(p, ModSounds.SCREAMER_CALL,
-                        mob.getX(), mob.getY(), mob.getZ(),
-                        net.minecraft.sounds.SoundSource.HOSTILE, 1.0F, 1.0F);
-            }
-
-            // 【v0.2.98】尖叫粒子（方案 A + 少量 C）：
-            // 主体 SHRIEK（幽匿尖啸）从身体向上撕裂，暗红尘埃向四周扩散作"血气"点缀。
-            // sendParticles 默认广播 32 格内的玩家，足够看清。
             double px = mob.getX();
             double py = mob.getY() + mob.getBbHeight() * 0.5;
             double pz = mob.getZ();
-            level.sendParticles(new net.minecraft.core.particles.ShriekParticleOption(0),
-                    px, py, pz, 28, 1.5, 0.5, 1.5, 0.02);
-            level.sendParticles(new net.minecraft.core.particles.DustParticleOptions(
-                            new org.joml.Vector3f(0.55F, 0.05F, 0.05F), 0.8F),
-                    px, py, pz, 10, 1.0, 0.4, 1.0, 0.02);
+            long lastScream = tag.getLong(SCREAMER_LAST_TICK_KEY);
+            long pending = tag.getLong(SCREAMER_PENDING_KEY);
 
-            // 追加 8~12 只到现有波次（含该玩家的血债波次）
-            int reinforce = 8 + RANDOM.nextInt(5);
-            boolean isVillager = villagerHordeRadii.containsKey(targetId);
-            if (!activeHordes.containsKey(targetId)) {
-                // 原波次已刷完但仍在波次中：新建一条增援波次，补齐配套字段
-                spawnedCount.put(targetId, 0);
-                totalCount.put(targetId, reinforce);
-                batchTimer.put(targetId, Math.max(1, config.batchTick()));
+            // ===== 常驻标识：头顶灵魂火 + 身体周围幽匿粒子（每 5 tick）=====
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL_FIRE_FLAME,
+                    mob.getX(), mob.getY() + mob.getBbHeight() + 0.25, mob.getZ(),
+                    2, 0.12, 0.08, 0.12, 0.005);
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
+                    px, py, pz, 2, 0.55, 0.7, 0.55, 0.01);
+
+            // ===== 余波阶段：尖叫后 2 秒内，幽匿粒子持续从体内溢出 =====
+            if (lastScream > 0L && now - lastScream < SCREAMER_AFTERMATH_TICKS) {
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
+                        px, py, pz, 6, 0.9, 1.1, 0.9, 0.015);
             }
-            activeHordes.merge(targetId, reinforce, Integer::sum);
-            com.enik.zombietide.config.HordeProgressData.get(level)
-                    .setRemaining(targetId, activeHordes.get(targetId), isVillager);
 
-            EnikZombietide.LOGGER.info("[尖啸者] 僵尸 {} 尖叫，为玩家 {} 追加 {} 只增援（剩余 {}）",
-                    mob.getUUID(), player.getScoreboardName(), reinforce, activeHordes.get(targetId));
+            // ===== 蓄力完成 → 正式尖叫（爆发）=====
+            if (pending > 0L && now >= pending) {
+                tag.putLong(SCREAMER_PENDING_KEY, 0L);
+                tag.putLong(SCREAMER_LAST_TICK_KEY, now);
+
+                // 爆发：SHRIEK 向外炸开 + 三层 SONIC_BOOM 同心波 + 暗红尘雾
+                level.sendParticles(new net.minecraft.core.particles.ShriekParticleOption(0),
+                        px, py, pz, 90, 3.0, 1.2, 3.0, 0.16);
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.SONIC_BOOM,
+                        px, py, pz, 3, 2.0, 0.5, 2.0, 0.01);
+                level.sendParticles(new net.minecraft.core.particles.DustParticleOptions(
+                                new org.joml.Vector3f(0.45F, 0.03F, 0.03F), 1.2F),
+                        px, py, pz, 40, 2.5, 1.0, 2.5, 0.06);
+
+                // 空间化音效（192 格可闻，由 sounds.json 的 attenuation_distance 控制）
+                for (ServerPlayer p : level.getPlayers(p -> p.distanceToSqr(mob) <= 192.0 * 192.0)) {
+                    ModSounds.playAtPosition(p, ModSounds.SCREAMER_CALL,
+                            px, py, pz, net.minecraft.sounds.SoundSource.HOSTILE, 1.0F, 1.0F);
+                }
+
+                // 增援：追加 8~12 只到现有波次
+                if (!(mob.getTarget() instanceof ServerPlayer player)) continue;
+                UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
+                if (targetId == null) continue;
+                if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
+
+                int reinforce = 8 + RANDOM.nextInt(5);
+                boolean isVillager = villagerHordeRadii.containsKey(targetId);
+                if (!activeHordes.containsKey(targetId)) {
+                    spawnedCount.put(targetId, 0);
+                    totalCount.put(targetId, reinforce);
+                    batchTimer.put(targetId, Math.max(1, config.batchTick()));
+                }
+                activeHordes.merge(targetId, reinforce, Integer::sum);
+                com.enik.zombietide.config.HordeProgressData.get(level)
+                        .setRemaining(targetId, activeHordes.get(targetId), isVillager);
+
+                EnikZombietide.LOGGER.info("[尖啸者] 僵尸 {} 尖叫（增援 {} 只，剩余 {}）",
+                        mob.getUUID(), reinforce, activeHordes.get(targetId));
+                continue;
+            }
+
+            // ===== 已在蓄力中：等 pending 到点 =====
+            if (pending > 0L) continue;
+
+            // ===== 发起蓄力：锁定玩家 + 冷却结束 =====
+            if (lastScream > 0L && now - lastScream < SCREAMER_COOLDOWN_TICKS) continue;
+            if (!(mob.getTarget() instanceof ServerPlayer)) continue;
+            UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
+            if (targetId == null) continue;
+            if (!activeHordes.containsKey(targetId) && !totalCount.containsKey(targetId)) continue;
+
+            // 蓄力粒子：SCULK_SOUL 延迟 8 tick 出现，形成"向内聚集"的预备感
+            level.sendParticles(new net.minecraft.core.particles.ShriekParticleOption((int) SCREAMER_CHARGE_TICKS),
+                    px, py, pz, 40, 1.8, 0.8, 1.8, 0.03);
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
+                    px, py, pz, 24, 1.2, 1.0, 1.2, 0.02);
+            tag.putLong(SCREAMER_PENDING_KEY, now + SCREAMER_CHARGE_TICKS);
         }
     }
 
