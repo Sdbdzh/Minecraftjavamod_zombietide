@@ -57,6 +57,9 @@ public class ZombietideHud {
     private static final Map<UUID, Boolean> villagerWaveActive = new HashMap<>();
     /** 服务端算好的「今天是否为该村民的尸潮日」 */
     private static final Map<UUID, Boolean> villagerHordeDayMap = new HashMap<>();
+    /** 【v0.2.91】距下次尸潮预兆期开始的进度（0~1），驱动 DAY X 渐进红 */
+    private static final Map<UUID, Float> syncedHordeProgress = new HashMap<>();
+    private static final Map<UUID, Float> villagerHordeProgress = new HashMap<>();
 
     /** 客户端缓存的 mod info 常驻显示开关（由服务端通过 InfoOverlayPayload 同步） */
     private static boolean infoOverlayEnabled = false;
@@ -73,9 +76,11 @@ public class ZombietideHud {
 
     /** 接收服务端同步的玩家模组天数（PlayerModDayPayload） */
     public static void onModDayReceived(UUID playerUuid, int modDay, boolean hordeDay, boolean waveActive, int bloodDebt,
-                                        int activePlayerHordes, int activeVillagerHordes, int aliveHordeZombies) {
+                                        int activePlayerHordes, int activeVillagerHordes, int aliveHordeZombies,
+                                        float hordeProgress) {
         syncedModDays.put(playerUuid, modDay);
         syncedHordeDay.put(playerUuid, hordeDay);
+        syncedHordeProgress.put(playerUuid, hordeProgress);
         syncedWaveActive.put(playerUuid, waveActive);
         syncedDebt.put(playerUuid, bloodDebt);
         syncedActivePlayerHordes.put(playerUuid, activePlayerHordes);
@@ -98,11 +103,30 @@ public class ZombietideHud {
         return syncedDebt.getOrDefault(playerUuid, 0);
     }
 
+    /** 【v0.2.91】该玩家距下次尸潮预兆期开始的进度（0~1）。 */
+    public static float hordeProgressFor(UUID playerUuid) {
+        return syncedHordeProgress.getOrDefault(playerUuid, 0.0F);
+    }
+
+    /**
+     * 【v0.2.91】DAY X 渐进红颜色：白 0xFFFFFF → 深红 0xFF3333 线性插值。
+     * <p>返回 ARGB。注意：绘制时文字里**不能带颜色色码**（§c/§6/§e 会覆盖该参数），
+     * 只能保留 §l（粗体）与 §r（重置）。
+     */
+    public static int argbForProgress(float p) {
+        float t = Math.max(0.0F, Math.min(1.0F, p));
+        int r = 255;
+        int g = Math.round(255.0F + (0x33 - 255.0F) * t);
+        int b = Math.round(255.0F + (0x33 - 255.0F) * t);
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
+    }
+
     /** 接收服务端同步的村民模组天数（VillagerModDayPayload） */
-    public static void onVillagerModDayReceived(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay) {
+    public static void onVillagerModDayReceived(UUID villagerUuid, String registryKey, int modDay, double x, double y, double z, boolean waveActive, boolean hordeDay, float hordeProgress) {
         villagerModDays.put(villagerUuid, modDay);
         villagerWaveActive.put(villagerUuid, waveActive);
         villagerHordeDayMap.put(villagerUuid, hordeDay);
+        villagerHordeProgress.put(villagerUuid, hordeProgress);
         thisBatchVillagers.add(villagerUuid); // 记录本批次收到的村民
         // 客户端本地化：直接使用 Minecraft Java 原版标准译名（entity.minecraft.villager.*）
         String localizedProfession = ModMessages.localizeProfession(registryKey);
@@ -139,6 +163,8 @@ public class ZombietideHud {
         villagerPos.clear();
         villagerWaveActive.clear();
         villagerHordeDayMap.clear();
+        syncedHordeProgress.clear();
+        villagerHordeProgress.clear();
         thisBatchVillagers.clear();
         // 【v0.1.62 修复 #145】断线时也要清掉这两个静态字段，否则进入
         // 未安装本模组的服务器时，配置缓存与右上角面板开关仍残留上一局的值。
@@ -191,28 +217,27 @@ public class ZombietideHud {
         UUID playerUuid = minecraft.player.getUUID();
         Integer modDay = syncedModDays.get(playerUuid);
         boolean hordeDay = Boolean.TRUE.equals(syncedHordeDay.get(playerUuid));
-        // v0.2.80：尸潮日白天用预兆强度渲染暗红渐变（今天有尸潮的提示），
-        // 黄昏窗口/波次中 hordeDay=true 用亮红。非尸潮日保持白色。
         float omen = ZombietideAtmosphere.omenStrength();
         String dayText;
+        int dayColor = 0xFFFFFF;
         if (modDay != null) {
-            if (hordeDay) {
-                // 亮红粗体（触发/黄昏窗口）
-                if (dayBold) {
-                    dayText = "§r§c§lDAY " + modDay + "§r";
-                } else {
-                    dayText = "§r§cDAY " + modDay + "§r";
-                }
+            if (ClientHudConfig.dayGradientRed()) {
+                // 【v0.2.91】真 RGB 渐进红：白 → 深红(0xFF3333)，到预兆期开始刚好全红。
+                // 尸潮日/波次中强制 1.0（保持深红）。
+                // 注意：文字里绝不能带颜色色码（§c/§6/§e 会覆盖 drawString 的颜色参数），只留 §l/§r。
+                float p = hordeProgressFor(playerUuid);
+                if (hordeDay) p = 1.0F;
+                dayColor = argbForProgress(p);
+                dayText = "§r" + (dayBold ? "§l" : "") + "DAY " + modDay + "§r";
+            } else if (hordeDay) {
+                // 旧二态（开关关闭时）：亮红粗体
+                dayText = dayBold ? "§r§c§lDAY " + modDay + "§r" : "§r§cDAY " + modDay + "§r";
             } else if (omen > 0.0F) {
-                // 三档近似渐变（MC 聊天色码只有 16 色）：白天 0.3 黄 → 黄昏 0.7+ 金 → 触发亮红
+                // 旧预兆色码（开关关闭时保留原行为）
                 String prefix = omen >= 0.7F ? "§r§6§l" : omen >= 0.4F ? "§r§e§l" : "§r§e";
                 dayText = prefix + "DAY " + modDay + "§r";
             } else {
-                if (dayBold) {
-                    dayText = "§r§lDAY " + modDay + "§r";
-                } else {
-                    dayText = "§r§lDAY " + modDay + "§r";
-                }
+                dayText = "§r" + (dayBold ? "§l" : "") + "DAY " + modDay + "§r";
             }
         } else {
             dayText = "DAY --";
@@ -220,7 +245,7 @@ public class ZombietideHud {
         guiGraphics.pose().pushPose();
         guiGraphics.pose().scale(dayScale, dayScale, 1.0f);
         guiGraphics.drawString(minecraft.font, dayText,
-                (int)(x / dayScale), (int)(y / dayScale), 0xFFFFFF);
+                (int)(x / dayScale), (int)(y / dayScale), dayColor);
         guiGraphics.pose().popPose();
 
         // HUD 最多同时显示配置数量的村民条目：按距离从近到远排序
@@ -281,7 +306,6 @@ public class ZombietideHud {
                 // 尸潮日时仅 DAY X 变红粗体；距离不变红，职业名保持白色
                 // 判定由服务端算好并随 VillagerModDayPayload 同步，支持随机间隔
                 boolean villagerHordeDay = Boolean.TRUE.equals(villagerHordeDayMap.get(entry.getKey()));
-                // 分段组装：各段独立闭合，移除对 drawString 第4参数颜色的依赖
                 String professionSegment;
                 if (villagerBold) {
                     professionSegment = "§r§l" + profession + "§r";
@@ -290,42 +314,47 @@ public class ZombietideHud {
                 }
 
                 String dayPartSegment;
-                if (villagerHordeDay) {
-                    if (villagerBold) {
-                        dayPartSegment = "§r§c§lDAY " + villagerModDay + "§r";
-                    } else {
-                        dayPartSegment = "§r§cDAY " + villagerModDay + "§r";
-                    }
+                int daySegmentColor = 0xFFFFFF;
+                if (ClientHudConfig.dayGradientRed()) {
+                    // 【v0.2.91】每个村民按各自 lastTriggerDay/UUID 算进度，真 RGB 渐进红。
+                    // 文字不能带颜色色码（会覆盖 drawString 颜色参数），只留 §l/§r。
+                    float pv = villagerHordeProgress.getOrDefault(entry.getKey(), 0.0F);
+                    if (villagerHordeDay) pv = 1.0F;
+                    daySegmentColor = argbForProgress(pv);
+                    dayPartSegment = "§r" + (villagerBold ? "§l" : "") + "DAY " + villagerModDay + "§r";
+                } else if (villagerHordeDay) {
+                    dayPartSegment = villagerBold
+                            ? "§r§c§lDAY " + villagerModDay + "§r"
+                            : "§r§cDAY " + villagerModDay + "§r";
                 } else if (omen > 0.0F) {
-                    // v0.2.80：黄昏临近时未到窗口的村民 DAY X 也用暗红提示。
-                    // 预兆是世界级时间氛围（同一时刻所有村民一致），用玩家收到的 omen 强度即可；
-                    // 只有 hordeDay（窗口/触发）才按每个村民独立判定。
+                    // 开关关闭时保留旧预兆色码行为
                     String prefix = omen >= 0.7F ? "§r§6§l" : omen >= 0.4F ? "§r§e§l" : "§r§e";
                     dayPartSegment = prefix + "DAY " + villagerModDay + "§r";
                 } else {
-                    if (villagerBold) {
-                        dayPartSegment = "§r§lDAY " + villagerModDay + "§r";
-                    } else {
-                        dayPartSegment = "DAY " + villagerModDay + "§r";
-                    }
+                    dayPartSegment = villagerBold
+                            ? "§r§lDAY " + villagerModDay + "§r"
+                            : "DAY " + villagerModDay + "§r";
                 }
 
                 String distSegment;
-                // 距离永远不变红，只有 DAY X 在尸潮日才变红
+                // 距离永远不变红
                 if (villagerBold) {
                     distSegment = "§r§l距离" + dist + "格§r";
                 } else {
                     distSegment = "距离" + dist + "格";
                 }
 
-                String villagerText = professionSegment + " " + dayPartSegment + " " + distSegment;
-                // 应用缩放：drawString 不直接支持 scale，需 pushPose + scale + popPose
+                // 【v0.2.91】三段独立绘制（颜色不同），用 font.width 推进光标。
+                // 空格计入前一段宽度，避免相邻段重叠。
                 guiGraphics.pose().pushPose();
                 guiGraphics.pose().scale(villagerScale, villagerScale, 1.0f);
-                guiGraphics.drawString(minecraft.font, villagerText,
-                        (int)(villagerX / villagerScale),
-                        (int)((villagerY + rowOffset * (rowCount + 1)) / villagerScale),
-                        0xFFFFFF);
+                int cursorX = (int) (villagerX / villagerScale);
+                int rowY = (int) ((villagerY + rowOffset * (rowCount + 1)) / villagerScale);
+                guiGraphics.drawString(minecraft.font, professionSegment, cursorX, rowY, 0xFFFFFF);
+                cursorX += minecraft.font.width(professionSegment + " ");
+                guiGraphics.drawString(minecraft.font, dayPartSegment, cursorX, rowY, daySegmentColor);
+                cursorX += minecraft.font.width(dayPartSegment + " ");
+                guiGraphics.drawString(minecraft.font, distSegment, cursorX, rowY, 0xFFFFFF);
                 guiGraphics.pose().popPose();
                 rowCount++;
             }

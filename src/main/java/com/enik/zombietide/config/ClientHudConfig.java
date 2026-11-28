@@ -23,7 +23,24 @@ public final class ClientHudConfig {
 
     private static ZombietideConfig.HudConfig cached = null;
 
+    /** 【v0.2.91】DAY X 是否按「距下次尸潮预兆期」渐进变红。默认开；关闭回退旧的二态（尸潮日红/其余白）。
+     *  <p>独立于 {@link ZombietideConfig.HudConfig}：纯本机显示偏好，不进网络协议、不动 Codec。 */
+    private static boolean dayGradientRed = true;
+
     private ClientHudConfig() {
+    }
+
+    /** DAY X 渐进红开关（默认 true）。 */
+    public static synchronized boolean dayGradientRed() {
+        get();   // 确保已从磁盘加载
+        return dayGradientRed;
+    }
+
+    /** 设置并持久化 DAY X 渐进红开关。 */
+    public static synchronized void setDayGradientRed(boolean v) {
+        get();               // 先确保已从磁盘加载，否则 load() 会把刚设的值冲掉
+        dayGradientRed = v;
+        save(cached);
     }
 
     /** 获取本机 HUD 配置（首次访问时从磁盘加载，之后走内存缓存）。 */
@@ -54,6 +71,7 @@ public final class ClientHudConfig {
             EnikZombietide.LOGGER.warn("[Zombietide] 读取本机 HUD 配置失败，使用默认值: {}", e.toString());
             return d;
         }
+        dayGradientRed = bool(p, "dayGradientRed", true);
         return new ZombietideConfig.HudConfig(
                 bool(p, "hudEnabled", d.hudEnabled()),
                 bool(p, "showVillagerHorde", d.showVillagerHorde()),
@@ -86,6 +104,7 @@ public final class ClientHudConfig {
         p.setProperty("villagerHordeBold", String.valueOf(hud.villagerHordeBold()));
         p.setProperty("villagerHordeDisplayRange", String.valueOf(hud.villagerHordeDisplayRange()));
         p.setProperty("villagerHordeMaxEntries", String.valueOf(hud.villagerHordeMaxEntries()));
+        p.setProperty("dayGradientRed", String.valueOf(dayGradientRed));
         try {
             Files.createDirectories(FILE.getParent());
             try (OutputStream out = Files.newOutputStream(FILE)) {

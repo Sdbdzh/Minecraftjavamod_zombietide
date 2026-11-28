@@ -551,7 +551,8 @@ public class HordeSpawner {
                             ModMessages.extractVillagerRegistryKey(villager),
                             vData.modDay(),
                             villager.getX(), villager.getY(), villager.getZ(), false,
-                            HordeTimer.isHordeDay(villager.getUUID(), vData.modDay(), vData.lastTriggerDay(), config, true, level.getDayTime()));
+                            HordeTimer.isHordeDay(villager.getUUID(), vData.modDay(), vData.lastTriggerDay(), config, true, level.getDayTime()),
+                            HordeTimer.hordeProgress(villager.getUUID(), vData.modDay(), vData.lastTriggerDay(), config, true, level.getDayTime()));
                 }
             }
         }

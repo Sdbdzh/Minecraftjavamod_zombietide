@@ -237,12 +237,16 @@ public class HordeTimer {
         // 手动触发（/zombietide trigger，可在任意时刻）靠 waveActive 补充——
         // 否则窗口外手动触发时 isHordeDay 恒 false，HUD 不红（村民侧尤其明显）。
         // 波次结束后 waveActive=false，红字自然熄灭，不影响 v0.1.66 的窗口判定。
-        boolean playerHordeDay = isHordeDay(player.getUUID(), data.modDay(), data.lastTriggerDay(), config, false, overworld.getDayTime())
+        long dayTime = overworld.getDayTime();
+        boolean playerHordeDay = isHordeDay(player.getUUID(), data.modDay(), data.lastTriggerDay(), config, false, dayTime)
                 || data.waveActive();
+        float progress = hordeProgress(player.getUUID(), data.modDay(), data.lastTriggerDay(),
+                config, false, dayTime);
         ModMessages.sendModDay(player, data.modDay(),
                 playerHordeDay,
                 data.waveActive(), debt,
-                activePlayerHordes, activeVillagerHordes, aliveHordeZombies);
+                activePlayerHordes, activeVillagerHordes, aliveHordeZombies,
+                progress);
     }
 
     /** 推进所有在线玩家和所有村民的模组天数（modDay 直接等于主世界游戏日）
@@ -378,6 +382,46 @@ public class HordeTimer {
         return min + (int) Math.floorMod(h, (long) (max - min + 1));
     }
 
+    /**
+     * 【v0.2.91】DAY X 渐进红进度（0~1）：从上次尸潮清场时刻到下次尸潮预兆期开始。
+     * <p>起点 = {@code lastTriggerDay*24000 + 23460}（起火清场）；
+     * 终点 = {@code nextHordeDay*24000 + 12000}（预兆期开始，此时 DAY X 刚好全红）。
+     * <p>每 20 tick 由服务端权威数据重算、绝不增量累加——天然容忍 {@code /time} 跳变。
+     * 随机间隔下 need 哈希含 lastTriggerDay，但周期内它不变，故进度单调不倒退；
+     * 触发后 lastTriggerDay 更新 → 进入新周期，进度由新锚点重新起算。
+     */
+    public static float hordeProgress(UUID targetId, int modDay, int lastTriggerDay,
+                                      ZombietideConfig config, boolean isVillager, long dayTime) {
+        boolean enabled = isVillager ? config.villagerHordeEnabled() : config.playerHordeEnabled();
+        if (!enabled) return 0.0F;
+
+        int interval = isVillager ? config.villagerIntervalDays() : config.playerIntervalDays();
+        boolean random = isVillager ? config.villagerIntervalRandom() : config.playerIntervalRandom();
+        int min = isVillager ? config.villagerIntervalMin() : config.playerIntervalMin();
+        int max = isVillager ? config.villagerIntervalMax() : config.playerIntervalMax();
+        if (interval < 1) interval = 1;
+        if (min < 1) min = 1;
+        if (max < min) max = min;
+
+        int base = lastTriggerDay < 0 ? -1 : lastTriggerDay;
+        int nextHordeDay;
+        if (random) {
+            int need = randomIntervalDays(targetId, lastTriggerDay, min, max);
+            nextHordeDay = Math.max(modDay, base + need);
+        } else {
+            nextHordeDay = modDay + Math.floorMod(interval - 1 - Math.floorMod(modDay, interval), interval);
+        }
+
+        long start = base * 24000L + 23460L;
+        long target = nextHordeDay * 24000L + 12000L;
+        long span = target - start;
+        if (span <= 0) return 1.0F;
+        double p = (double) (dayTime - start) / (double) span;
+        if (p <= 0.0) return 0.0F;
+        if (p >= 1.0) return 1.0F;
+        return (float) p;
+    }
+
     /** 检查玩家尸潮触发（仅主世界、非和平、黄昏窗口） */
     private static void checkPlayerHordes(ServerLevel overworld, ZombietideConfig config) {
         if (!config.playerHordeEnabled()) return;
@@ -500,7 +544,8 @@ public class HordeTimer {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), modDay,
                             villager.getX(), villager.getY(), villager.getZ(), true,
-                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
+                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()),
+                            hordeProgress(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
                 }
             }
         }
@@ -626,7 +671,8 @@ public class HordeTimer {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), targetModDay,
                             villager.getX(), villager.getY(), villager.getZ(), true,
-                            isHordeDay(villager.getUUID(), targetModDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
+                            isHordeDay(villager.getUUID(), targetModDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()),
+                            hordeProgress(villager.getUUID(), targetModDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
                 }
             }
         }
@@ -712,7 +758,8 @@ public class HordeTimer {
                     ModMessages.sendVillagerModDay(p, villager.getUUID(),
                             ModMessages.extractVillagerRegistryKey(villager), modDay,
                             villager.getX(), villager.getY(), villager.getZ(), true,
-                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
+                            isHordeDay(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()),
+                            hordeProgress(villager.getUUID(), modDay, sched.lastTriggerDay(), config, true, overworld.getDayTime()));
                 }
             }
         }

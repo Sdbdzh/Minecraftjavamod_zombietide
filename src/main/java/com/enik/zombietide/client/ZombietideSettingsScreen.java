@@ -200,6 +200,8 @@ public class ZombietideSettingsScreen extends Screen {
     private EditBox villagerHordeScaleEdit;
     private Checkbox hudBoldCheckbox;
     private Checkbox villagerHordeBoldCheckbox;
+    /** 【v0.2.91】DAY X 渐进红（本机显示偏好，随 commitClientHud 落盘） */
+    private boolean dayGradientRed;
 
     public ZombietideSettingsScreen(Screen parent, ZombietideConfig config) {
         super(Component.literal(tr("zombietide.settings.title")));
@@ -212,6 +214,7 @@ public class ZombietideSettingsScreen extends Screen {
         super.init();
         this.worldLoaded = this.minecraft != null && this.minecraft.level != null && this.minecraft.player != null;
         this.hudConfig = ClientHudConfig.get();
+        this.dayGradientRed = ClientHudConfig.dayGradientRed();
         this.scrollOffset = 0;
         this.rebuildWidgets();
     }
@@ -563,6 +566,12 @@ public class ZombietideSettingsScreen extends Screen {
                         "zombietide.settings.hud.item3.tip",
                         hudConfig.hudBold(), centerX, y,
                         (cb, v) -> hudConfig = hudConfig.withHudBold(v), true);
+                y += ROW_HEIGHT;
+                addCheckbox("zombietide.settings.hud.item10.name", null,
+                        "zombietide.settings.hud.item10.desc",
+                        "zombietide.settings.hud.item10.tip",
+                        dayGradientRed, centerX, y,
+                        (cb, v) -> dayGradientRed = v, true);
                 y += ROW_HEIGHT;
                 addCheckbox("zombietide.settings.hud.item4.name", null,
                         "zombietide.settings.hud.item4.desc",
@@ -1118,6 +1127,7 @@ public class ZombietideSettingsScreen extends Screen {
 
     /** 本机全局 HUD 配置：只写本地文件，不发服务端 */
     private void commitClientHud() {
+        ClientHudConfig.setDayGradientRed(this.dayGradientRed);
         ClientHudConfig.set(this.hudConfig);
         this.config = this.config.withHud(this.hudConfig);
         toast(tr("zombietide.settings.toast.hud_saved"));
