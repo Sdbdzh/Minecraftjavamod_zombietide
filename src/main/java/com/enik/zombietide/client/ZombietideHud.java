@@ -217,7 +217,6 @@ public class ZombietideHud {
         UUID playerUuid = minecraft.player.getUUID();
         Integer modDay = syncedModDays.get(playerUuid);
         boolean hordeDay = Boolean.TRUE.equals(syncedHordeDay.get(playerUuid));
-        float omen = ZombietideAtmosphere.omenStrength();
         String dayText;
         int dayColor = 0xFFFFFF;
         if (modDay != null) {
@@ -230,13 +229,10 @@ public class ZombietideHud {
                 dayColor = argbForProgress(p);
                 dayText = "§r" + (dayBold ? "§l" : "") + "DAY " + modDay + "§r";
             } else if (hordeDay) {
-                // 旧二态（开关关闭时）：亮红粗体
+                // 【v0.2.93】开关关闭 = 严格二态：尸潮日（或波次中）亮红
                 dayText = dayBold ? "§r§c§lDAY " + modDay + "§r" : "§r§cDAY " + modDay + "§r";
-            } else if (omen > 0.0F) {
-                // 旧预兆色码（开关关闭时保留原行为）
-                String prefix = omen >= 0.7F ? "§r§6§l" : omen >= 0.4F ? "§r§e§l" : "§r§e";
-                dayText = prefix + "DAY " + modDay + "§r";
             } else {
+                // 非尸潮日：纯白（不再保留旧的预兆期黄/金渐变——与设置描述「尸潮日红/其余白」一致）
                 dayText = "§r" + (dayBold ? "§l" : "") + "DAY " + modDay + "§r";
             }
         } else {
@@ -323,14 +319,12 @@ public class ZombietideHud {
                     daySegmentColor = argbForProgress(pv);
                     dayPartSegment = "§r" + (villagerBold ? "§l" : "") + "DAY " + villagerModDay + "§r";
                 } else if (villagerHordeDay) {
+                    // 【v0.2.93】开关关闭 = 严格二态：该村民的尸潮日亮红
                     dayPartSegment = villagerBold
                             ? "§r§c§lDAY " + villagerModDay + "§r"
                             : "§r§cDAY " + villagerModDay + "§r";
-                } else if (omen > 0.0F) {
-                    // 开关关闭时保留旧预兆色码行为
-                    String prefix = omen >= 0.7F ? "§r§6§l" : omen >= 0.4F ? "§r§e§l" : "§r§e";
-                    dayPartSegment = prefix + "DAY " + villagerModDay + "§r";
                 } else {
+                    // 非尸潮日：纯白（不再保留旧预兆黄/金渐变）
                     dayPartSegment = villagerBold
                             ? "§r§lDAY " + villagerModDay + "§r"
                             : "DAY " + villagerModDay + "§r";
