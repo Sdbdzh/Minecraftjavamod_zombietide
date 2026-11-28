@@ -56,6 +56,11 @@ public final class ZombietideAtmosphere {
         flashUntilTick = clientTicks + FLASH_TICKS;
     }
 
+    /** 当前预兆强度（0~1），供 HUD 决定 DAY X 的暗红渐变（v0.2.80）。 */
+    public static float omenStrength() {
+        return omenStrength;
+    }
+
     /** 收到服务端的预兆强度（0~1）。 */
     public static void onOmenReceived(float strength) {
         omenStrength = Math.max(0.0F, Math.min(1.0F, strength));

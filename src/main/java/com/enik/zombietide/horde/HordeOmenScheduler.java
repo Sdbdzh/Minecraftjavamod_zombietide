@@ -33,6 +33,8 @@ import java.util.UUID;
  */
 public final class HordeOmenScheduler {
 
+    /** 尸潮日白天的基础预兆强度（DAY X 暗红提示，但不播 drone） */
+    private static final float DAYTIME_BASE_STRENGTH = 0.30F;
     /** 预兆窗口起点：黄昏前约 1 小时（12000 = 日落开始） */
     private static final long OMEN_START_PHASE = 12000L;
     /** 预兆窗口终点：黄昏触发窗口起点 */
@@ -55,10 +57,13 @@ public final class HordeOmenScheduler {
 
         long phase = Math.floorMod(overworld.getDayTime(), 24000L);
         boolean inWindow = phase >= OMEN_START_PHASE && phase < OMEN_END_PHASE;
+        // v0.2.80：尸潮日白天给基础强度 0.3（DAY X 暗红提示"今天有尸潮"），
+        // 黄昏前 1 小时从 0.3 线性升到 1.0（暗红→亮红 + 雾色渐变 + drone 铺垫）。
         float rawStrength = inWindow
-                ? (float) (phase - OMEN_START_PHASE) / (float) (OMEN_END_PHASE - OMEN_START_PHASE)
-                : 0.0F;
+                ? 0.30F + 0.70F * (float) (phase - OMEN_START_PHASE) / (float) (OMEN_END_PHASE - OMEN_START_PHASE)
+                : DAYTIME_BASE_STRENGTH;
         int step = Math.round(rawStrength * STRENGTH_STEPS);
+        boolean inDuskWindow = inWindow;
 
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             UUID id = player.getUUID();
@@ -81,18 +86,19 @@ public final class HordeOmenScheduler {
             LAST_STRENGTH_STEP.put(id, effectiveStep);
             ModMessages.sendOmen(player, effectiveStep / (float) STRENGTH_STEPS);
 
-            // 只在「曾经处于预兆态」时处理退出，避免波次期每 tick 误停刚起播的波次 drone。
-            boolean wasInOmen = last != null && last > 0;
-            if (effectiveStep >= 1) {
+            // 只在「曾经处于黄昏预兆态」时处理退出，避免波次期每 tick 误停刚起播的波次 drone。
+            // 白天基础强度 0.3 只给 HUD 暗红提示，不播 drone（否则白天就响 3 分钟太吵）。
+            boolean wasInDuskOmen = last != null && last > Math.round(DAYTIME_BASE_STRENGTH * STRENGTH_STEPS);
+            if (hordeDayToday && inDuskWindow) {
                 Integer played = DRONE_PLAYED_STEP.get(id);
                 if (played == null) {
                     ModSounds.playToPlayer(player, ModSounds.HORDE_DRONE,
                             SoundSource.AMBIENT, OMEN_DRONE_VOLUME, 1.0F);
                     DRONE_PLAYED_STEP.put(id, effectiveStep);
                 }
-            } else if (wasInOmen) {
+            } else if (wasInDuskOmen) {
                 DRONE_PLAYED_STEP.remove(id);
-                // 离开预兆窗口：掐掉可能仍在播的极低音量 drone，避免残留到波次期
+                // 离开黄昏窗口：掐掉可能仍在播的极低音量 drone，避免残留到波次期
                 ModSounds.stopDroneForPlayer(player);
             }
         }

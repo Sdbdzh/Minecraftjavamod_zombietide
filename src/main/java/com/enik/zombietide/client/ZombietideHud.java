@@ -191,21 +191,27 @@ public class ZombietideHud {
         UUID playerUuid = minecraft.player.getUUID();
         Integer modDay = syncedModDays.get(playerUuid);
         boolean hordeDay = Boolean.TRUE.equals(syncedHordeDay.get(playerUuid));
+        // v0.2.80：尸潮日白天用预兆强度渲染暗红渐变（今天有尸潮的提示），
+        // 黄昏窗口/波次中 hordeDay=true 用亮红。非尸潮日保持白色。
+        float omen = ZombietideAtmosphere.omenStrength();
         String dayText;
         if (modDay != null) {
             if (hordeDay) {
-                // 显式重置后再应用红色粗体，避免 §c 吞噬 §l
+                // 亮红粗体（触发/黄昏窗口）
                 if (dayBold) {
-                    // 先颜色后粗体：§c 不会重置后面的 §l
                     dayText = "§r§c§lDAY " + modDay + "§r";
                 } else {
                     dayText = "§r§cDAY " + modDay + "§r";
                 }
+            } else if (omen > 0.0F) {
+                // 三档近似渐变（MC 聊天色码只有 16 色）：白天 0.3 黄 → 黄昏 0.7+ 金 → 触发亮红
+                String prefix = omen >= 0.7F ? "§r§6§l" : omen >= 0.4F ? "§r§e§l" : "§r§e";
+                dayText = prefix + "DAY " + modDay + "§r";
             } else {
                 if (dayBold) {
                     dayText = "§r§lDAY " + modDay + "§r";
                 } else {
-                    dayText = "DAY " + modDay + "§r";
+                    dayText = "§r§lDAY " + modDay + "§r";
                 }
             }
         } else {
@@ -286,11 +292,16 @@ public class ZombietideHud {
                 String dayPartSegment;
                 if (villagerHordeDay) {
                     if (villagerBold) {
-                        // 先颜色后粗体：§c 不会重置后面的 §l
                         dayPartSegment = "§r§c§lDAY " + villagerModDay + "§r";
                     } else {
                         dayPartSegment = "§r§cDAY " + villagerModDay + "§r";
                     }
+                } else if (omen > 0.0F) {
+                    // v0.2.80：黄昏临近时未到窗口的村民 DAY X 也用暗红提示。
+                    // 预兆是世界级时间氛围（同一时刻所有村民一致），用玩家收到的 omen 强度即可；
+                    // 只有 hordeDay（窗口/触发）才按每个村民独立判定。
+                    String prefix = omen >= 0.7F ? "§r§6§l" : omen >= 0.4F ? "§r§e§l" : "§r§e";
+                    dayPartSegment = prefix + "DAY " + villagerModDay + "§r";
                 } else {
                     if (villagerBold) {
                         dayPartSegment = "§r§lDAY " + villagerModDay + "§r";
