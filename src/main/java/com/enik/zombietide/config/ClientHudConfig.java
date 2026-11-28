@@ -27,6 +27,11 @@ public final class ClientHudConfig {
      *  <p>独立于 {@link ZombietideConfig.HudConfig}：纯本机显示偏好，不进网络协议、不动 Codec。 */
     private static boolean dayGradientRed = true;
 
+    /** 【v0.2.138】DAY X 次行是否显示血债（默认开；纯本机，不进协议） */
+    private static boolean showDebt = true;
+    /** 【v0.2.138】DAY X 次行是否显示存活尸潮僵尸数（默认开；纯本机，不进协议） */
+    private static boolean showAliveCount = true;
+
     private ClientHudConfig() {
     }
 
@@ -40,6 +45,30 @@ public final class ClientHudConfig {
     public static synchronized void setDayGradientRed(boolean v) {
         get();               // 先确保已从磁盘加载，否则 load() 会把刚设的值冲掉
         dayGradientRed = v;
+        save(cached);
+    }
+
+    /** DAY X 次行：显示血债（默认 true）。 */
+    public static synchronized boolean showDebt() {
+        get();
+        return showDebt;
+    }
+
+    public static synchronized void setShowDebt(boolean v) {
+        get();
+        showDebt = v;
+        save(cached);
+    }
+
+    /** DAY X 次行：显示存活尸潮僵尸数（默认 true）。 */
+    public static synchronized boolean showAliveCount() {
+        get();
+        return showAliveCount;
+    }
+
+    public static synchronized void setShowAliveCount(boolean v) {
+        get();
+        showAliveCount = v;
         save(cached);
     }
 
@@ -72,6 +101,8 @@ public final class ClientHudConfig {
             return d;
         }
         dayGradientRed = bool(p, "dayGradientRed", true);
+        showDebt = bool(p, "showDebt", true);
+        showAliveCount = bool(p, "showAliveCount", true);
         return new ZombietideConfig.HudConfig(
                 bool(p, "hudEnabled", d.hudEnabled()),
                 bool(p, "showVillagerHorde", d.showVillagerHorde()),
@@ -105,6 +136,8 @@ public final class ClientHudConfig {
         p.setProperty("villagerHordeDisplayRange", String.valueOf(hud.villagerHordeDisplayRange()));
         p.setProperty("villagerHordeMaxEntries", String.valueOf(hud.villagerHordeMaxEntries()));
         p.setProperty("dayGradientRed", String.valueOf(dayGradientRed));
+        p.setProperty("showDebt", String.valueOf(showDebt));
+        p.setProperty("showAliveCount", String.valueOf(showAliveCount));
         try {
             Files.createDirectories(FILE.getParent());
             try (OutputStream out = Files.newOutputStream(FILE)) {

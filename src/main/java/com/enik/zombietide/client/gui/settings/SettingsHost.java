@@ -23,4 +23,14 @@ public interface SettingsHost {
     boolean dayGradientRed();
 
     void setDayGradientRed(boolean value);
+
+    /** 【v0.2.138】DAY X 次行：血债显示（本机偏好，不在 record 里） */
+    boolean showDebt();
+
+    void setShowDebt(boolean value);
+
+    /** 【v0.2.138】DAY X 次行：存活尸潮僵尸数显示（本机偏好，不在 record 里） */
+    boolean showAliveCount();
+
+    void setShowAliveCount(boolean value);
 }

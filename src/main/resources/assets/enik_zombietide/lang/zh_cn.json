@@ -307,5 +307,11 @@
   "zombietide.settings.tooltip.reset_hint": "右键恢复默认值",
   "zombietide.settings.search.hint": "搜索设置…",
   "zombietide.settings.search.none": "没有匹配的设置项",
-  "zombietide.settings.tab.atmo": "氛围"
+  "zombietide.settings.tab.atmo": "氛围",
+  "zombietide.settings.hud.item15.name": "DAY X 显示血债",
+  "zombietide.settings.hud.item15.desc": "在天数下方显示当前血债",
+  "zombietide.settings.hud.item15.tip": "仅本机显示偏好。血债为 0 时该行自动隐藏。",
+  "zombietide.settings.hud.item16.name": "DAY X 显示僵尸数",
+  "zombietide.settings.hud.item16.desc": "波次中在天数下方显示存活的尸潮僵尸数",
+  "zombietide.settings.hud.item16.tip": "仅本机显示偏好。非波次时该行自动隐藏。"
 }

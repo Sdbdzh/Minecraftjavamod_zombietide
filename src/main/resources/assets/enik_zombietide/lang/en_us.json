@@ -307,5 +307,11 @@
   "zombietide.settings.tooltip.reset_hint": "Right-click to restore default",
   "zombietide.settings.search.hint": "Search settings…",
   "zombietide.settings.search.none": "No matching settings",
-  "zombietide.settings.tab.atmo": "Atmosphere"
+  "zombietide.settings.tab.atmo": "Atmosphere",
+  "zombietide.settings.hud.item15.name": "Show Debt on DAY X",
+  "zombietide.settings.hud.item15.desc": "Show current blood debt below the day counter",
+  "zombietide.settings.hud.item15.tip": "Client-side only. The line hides itself when debt is 0.",
+  "zombietide.settings.hud.item16.name": "Show Zombie Count on DAY X",
+  "zombietide.settings.hud.item16.desc": "Show alive horde zombies below the day counter during waves",
+  "zombietide.settings.hud.item16.tip": "Client-side only. The line hides itself outside waves."
 }

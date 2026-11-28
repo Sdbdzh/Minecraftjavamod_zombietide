@@ -1088,6 +1088,26 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         this.dayGradientRed = value;
     }
 
+    @Override
+    public boolean showDebt() {
+        return com.enik.zombietide.config.ClientHudConfig.showDebt();
+    }
+
+    @Override
+    public void setShowDebt(boolean value) {
+        com.enik.zombietide.config.ClientHudConfig.setShowDebt(value);
+    }
+
+    @Override
+    public boolean showAliveCount() {
+        return com.enik.zombietide.config.ClientHudConfig.showAliveCount();
+    }
+
+    @Override
+    public void setShowAliveCount(boolean value) {
+        com.enik.zombietide.config.ClientHudConfig.setShowAliveCount(value);
+    }
+
     /** 服务端存档级配置：立即同步并提示 */
     private void pushConfig() {
         if (!this.worldLoaded || this.minecraft == null || this.minecraft.player == null) return;

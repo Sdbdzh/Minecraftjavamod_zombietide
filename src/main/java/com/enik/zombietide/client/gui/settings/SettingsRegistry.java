@@ -201,6 +201,8 @@ public final class SettingsRegistry {
             opt(hBool("zombietide.settings.hud.item2.name", HudConfig::showVillagerHorde, HudConfig::withShowVillagerHorde)),
             opt(hBool("zombietide.settings.hud.item3.name", HudConfig::hudBold, HudConfig::withHudBold)),
             opt(dayGradientRedEntry()),
+            opt(showDebtEntry()),
+            opt(showAliveCountEntry()),
             opt(hBool("zombietide.settings.hud.item4.name", HudConfig::villagerHordeBold, HudConfig::withVillagerHordeBold)),
 
             section("zombietide.settings.common.text20"),
@@ -284,6 +286,24 @@ public final class SettingsRegistry {
                 1, true,   // ClientHudConfig 默认开启
                 h -> h.dayGradientRed() ? 1 : 0,
                 (h, v) -> h.setDayGradientRed(v != 0),
+                null, null);
+    }
+
+    /** 【v0.2.138】DAY X 次行：血债显示开关 */
+    private static OptionEntry showDebtEntry() {
+        return new OptionEntry("zombietide.settings.hud.item15.name", null, ControlType.TOGGLE, 0, 0,
+                1, true,
+                h -> h.showDebt() ? 1 : 0,
+                (h, v) -> h.setShowDebt(v != 0),
+                null, null);
+    }
+
+    /** 【v0.2.138】DAY X 次行：存活僵尸数显示开关 */
+    private static OptionEntry showAliveCountEntry() {
+        return new OptionEntry("zombietide.settings.hud.item16.name", null, ControlType.TOGGLE, 0, 0,
+                1, true,
+                h -> h.showAliveCount() ? 1 : 0,
+                (h, v) -> h.setShowAliveCount(v != 0),
                 null, null);
     }
 

@@ -107,6 +107,11 @@ public class ZombietideHud {
         return syncedDebt.getOrDefault(playerUuid, 0);
     }
 
+    /** 【v0.2.138】客户端视角：该玩家附近存活的尸潮僵尸数（DAY X 次行用）。 */
+    public static int aliveHordeZombiesFor(UUID playerUuid) {
+        return syncedAliveHordeZombies.getOrDefault(playerUuid, 0);
+    }
+
     /** 【v0.2.91】该玩家距下次尸潮预兆期开始的进度（0~1）。 */
     public static float hordeProgressFor(UUID playerUuid) {
         return syncedHordeProgress.getOrDefault(playerUuid, 0.0F);
@@ -263,6 +268,26 @@ public class ZombietideHud {
         guiGraphics.drawString(minecraft.font, dayText,
                 (int)(x / dayScale), (int)(y / dayScale), dayColor);
         guiGraphics.pose().popPose();
+
+        // 【v0.2.138】DAY X 次行：血债 / 存活尸潮僵尸数。
+        // 只在有意义时显示：血债>0 或 波次中；都为 0/非波次时保持极简（只有 DAY X）。
+        int debt = bloodDebtFor(playerUuid);
+        int alive = aliveHordeZombiesFor(playerUuid);
+        boolean waveActive = Boolean.TRUE.equals(syncedWaveActive.get(playerUuid));
+        boolean showDebt = ClientHudConfig.showDebt() && debt > 0;
+        boolean showAlive = ClientHudConfig.showAliveCount() && waveActive && alive > 0;
+        if (showDebt || showAlive) {
+            StringBuilder sub = new StringBuilder();
+            if (showDebt) {
+                sub.append("§c血债 ").append(debt);
+            }
+            if (showAlive) {
+                if (sub.length() > 0) sub.append("§7 · ");
+                sub.append("§c僵尸 ").append(alive);
+            }
+            int subY = y + Math.round(10 * dayScale);
+            guiGraphics.drawString(minecraft.font, sub.toString(), x, subY, 0xFFFFFF, false);
+        }
 
         // HUD 最多同时显示配置数量的村民条目：按距离从近到远排序
         int villagerX = hud.villagerHordeX();
