@@ -3,7 +3,8 @@
   "minVersion": "0.8",
   "package": "com.enik.zombietide.mixin",
   "mixins": [
-    "DaylightBurnMixin"
+    "DaylightBurnMixin",
+    "ZombieConversionMixin"
   ],
   "injectors": {
     "defaultRequire": 1

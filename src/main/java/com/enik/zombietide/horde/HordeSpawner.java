@@ -388,15 +388,6 @@ public class HordeSpawner {
      * <p>增援走方案 A：直接往 {@code activeHordes} 剩余数追加，由刷怪引擎自然产出——
      * 不另开独立刷怪路径，黎明清理/血债结算/进度持久化全部复用现有逻辑。
      */
-    /** 只给创造/旁观玩家发尖啸者调试消息（生存玩家不打扰），同时写日志。 */
-    private static void notifyCreativeDebug(ServerLevel level, String msg) {
-        var text = net.minecraft.network.chat.Component.literal("§8[尖啸者调试] §7" + msg);
-        for (ServerPlayer p : level.getPlayers(p -> p.isCreative() || p.isSpectator())) {
-            p.sendSystemMessage(text);
-        }
-        EnikZombietide.LOGGER.info("[尖啸者调试] {}", msg);
-    }
-
     private static void checkScreamers(ServerLevel level, ZombietideConfig config) {
         long now = level.getGameTime();
         for (UUID zombieUuid : hordeZombieUuids) {
@@ -452,14 +443,15 @@ public class HordeSpawner {
                 if (!(mob.getTarget() instanceof ServerPlayer player)) continue;
                 UUID reinforceTarget = player.getUUID();
                 int reinforce = 8 + RANDOM.nextInt(5);
+                // 【v0.2.110】遵守全局上限：增援不能突破 config.globalCap()
+                int available = Math.max(0, config.globalCap() - countHordeZombies(level));
                 int spawned = 0;
-                for (int i = 0; i < reinforce; i++) {
+                for (int i = 0; i < reinforce && spawned < available; i++) {
                     if (spawnZombie(level, reinforceTarget, config, false)) spawned++;
                 }
 
                 EnikZombietide.LOGGER.info("[尖啸者] 僵尸 {} 尖叫，为玩家 {} 增援生成 {} 只",
                         mob.getUUID(), player.getScoreboardName(), spawned);
-                notifyCreativeDebug(level, "尖叫！增援生成 " + spawned + " 只 @ " + mob.blockPosition());
                 continue;
             }
 
@@ -479,8 +471,26 @@ public class HordeSpawner {
             level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
                     px, py, pz, 24, 1.2, 1.0, 1.2, 0.02);
             tag.putLong(SCREAMER_PENDING_KEY, now + SCREAMER_CHARGE_TICKS);
-            notifyCreativeDebug(level, "蓄力开始（" + SCREAMER_CHARGE_TICKS + " tick 后尖叫）@ " + mob.blockPosition());
         }
+    }
+
+    // ============ 【v0.2.110】供 ZombieConversionMixin 使用的辅助方法 ============
+
+    /** 尸潮目标 UUID 的 NBT 键（mixin 需要读取） */
+    public static String targetKeyForMixin() { return HORDE_TARGET_UUID_KEY; }
+
+    /** 需要复制的尸潮 NBT 键列表 */
+    public static String[] hordeKeysForMixin() {
+        return new String[]{HORDE_TARGET_UUID_KEY, HORDE_WAVE_ID_KEY, HORDE_STATE_KEY,
+                HORDE_SPAWN_POS_KEY, SCREAMER_KEY, SCREAMER_LAST_TICK_KEY, SCREAMER_PENDING_KEY};
+    }
+
+    /** 转化后的新僵尸重新纳入追踪（旧 UUID 移除） */
+    public static void retrackConvertedZombie(ServerLevel level, UUID newUuid, UUID oldUuid) {
+        hordeZombieUuids.remove(oldUuid);
+        hordeZombieUuids.add(newUuid);
+        scatteringZombies.remove(oldUuid);
+        pendingDespawnZombies.remove(oldUuid);
     }
 
     /** 在目标背后/视线外刷出一只僵尸，返回是否成功。绝不因找不到刷点而放弃。 */
@@ -540,7 +550,6 @@ public class HordeSpawner {
             tag.putBoolean(SCREAMER_KEY, true);
             var scaleAttr = mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.SCALE);
             if (scaleAttr != null) scaleAttr.setBaseValue(SCREAMER_SCALE);
-            notifyCreativeDebug(level, "尖啸者生成 @ " + feetPos + " UUID=" + mob.getUUID());
         }
 
         // 注入尸潮僵尸行为：主目标锁定 Goal + 永不消失（破门功能已移除）
