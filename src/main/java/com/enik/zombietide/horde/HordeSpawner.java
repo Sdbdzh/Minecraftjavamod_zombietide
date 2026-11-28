@@ -56,6 +56,8 @@ public class HordeSpawner {
     private static final String HORDE_TARGET_UUID_KEY = "zombietide_horde_target";
     private static final String HORDE_WAVE_ID_KEY = "zombietide_wave_id";
     private static final String HORDE_STATE_KEY = "zombietide_state"; // 0=active, 1=scattering, 2=despawned（预留，当前无任何写入点，分支不可达）
+    /** 【v0.2.90】僵尸出生点（BlockPos.asLong），四散时直接走回这里，取代 Marker 诱饵 */
+    public static final String HORDE_SPAWN_POS_KEY = "zombietide_spawn_pos";
 
     // 正在进行的尸潮：target UUID -> 剩余需刷怪数量
     private static final Map<UUID, Integer> activeHordes = new HashMap<>();
@@ -84,7 +86,7 @@ public class HordeSpawner {
 
     // 【v0.1.63 修复 #179】zombieUuid -> targetId 旁路索引：转入四散 / 重启重注册时写入。
     // 用途：23460 清除时即使实体未加载，也能补全 clearedTargets，保证 clearPending /
-    // resetTargetWaveActive / HordeFleeMarker.discardFor 三个收尾动作一个不漏。
+    // 相关收尾动作一个不漏。
     private static final Map<UUID, UUID> scatterZombieTarget = new ConcurrentHashMap<>();
 
     // 本次 JVM 进程内已触发/恢复过的尸潮目标。进程重启即清空，因此可用于判断
@@ -397,6 +399,8 @@ public class HordeSpawner {
         tag.putInt(HORDE_WAVE_ID_KEY, totalCount.getOrDefault(targetId, 0));
         // 状态：0 = 活跃尸潮中
         tag.putInt(HORDE_STATE_KEY, 0);
+        // 【v0.2.90】记录出生点：四散时直接走回这里（不用 Marker 诱饵，性能更好）
+        tag.putLong(HORDE_SPAWN_POS_KEY, feetPos.asLong());
 
         // 注入尸潮僵尸行为：主目标锁定 Goal + 永不消失（破门功能已移除）
         HordeZombieBehavior.apply(mob, targetId, config);
@@ -645,19 +649,9 @@ public class HordeSpawner {
 
             UUID targetId = tag.getUUID(HORDE_TARGET_UUID_KEY);
 
-            // 【v0.1.61 修复 #131】marker 的 ensure/bind 必须在「state==1 跳过」之前。
-            // marker 是纯运行时实体、不持久化；服务器重启后僵尸恢复为 state==1
-            // 但 marker 已丢失。旧的 continue 在前 → 每 20 tick 的重扫把它们全跳过
-            // → marker 永不重建 → 僵尸原地站着直到 23460 被清。
-            // v0.1.55：为该尸潮创建/复用一个不可见 Marker 诱饵，并把它的 UUID 绑到僵尸身上。
-            net.minecraft.world.entity.Entity fleeMarker = markerCache.computeIfAbsent(targetId,
-                    id -> HordeFleeMarker.ensure(level, id, entity.getX(), entity.getY(), entity.getZ()));
-            if (fleeMarker != null && entity instanceof net.minecraft.world.entity.Mob mob) {
-                HordeFleeMarker.bind(mob, fleeMarker);
-            }
-
-            // 已经进入四散状态的僵尸：只跳过「转入四散」的动作（通知/状态/scatteringZombies），
-            // 但上面的 marker 补建已经完成。newlyScattered 仍只统计新转入的，防止通知刷屏。
+            // v0.2.90：四散改走各自出生点（NBT），不再需要 Marker 诱饵。
+            // 已经进入四散状态的僵尸：只需跳过「转入四散」的动作（通知/状态/scatteringZombies）。
+            // newlyScattered 仍只统计新转入的，防止通知刷屏。
             if (tag.getInt(HORDE_STATE_KEY) == 1) continue;
 
             scatterTargets.add(targetId);
@@ -909,7 +903,6 @@ public class HordeSpawner {
             for (UUID targetId : clearedTargets) {
                 if (level != null) com.enik.zombietide.config.PlayerDebtData.get(level).clearPending(targetId);
                 resetTargetWaveActive(level, targetId);
-                HordeFleeMarker.discardFor(level, targetId);
             }
         }
     }
@@ -1033,8 +1026,6 @@ public class HordeSpawner {
             batchTimer.remove(targetId);
             villagerHordeRadii.remove(targetId);
             progressData.remove(targetId);
-            // 同步移除四散锚点（时间跳变时可能还有 marker 挂在世界上）
-            HordeFleeMarker.discardFor(level, targetId);
 
             if (target instanceof ServerPlayer p) {
                 Integer settled = settledDebt.get(targetId);

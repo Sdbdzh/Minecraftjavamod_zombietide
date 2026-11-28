@@ -16,6 +16,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.LightLayer;
 
 import java.util.UUID;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * 尸潮僵尸目标锁定 Goal。
@@ -29,9 +31,9 @@ import java.util.UUID;
  *       一个都没有时交给原版索敌（玩家 / 村民 / 铁傀儡）</li>
  *   <li>被攻击：优先反击至少 20 tick（不覆盖 HurtByTargetGoal 设的目标）</li>
  *   <li>进入四散状态（state==1）：清空攻击目标并禁用 MOVE 控制位（阻止原版漫游 Goal 抢导航）；
- *       追一个不可见的 {@link HordeFleeMarker} 诱饵——路径走完的当 tick 立刻重发，
- *       行进中每 20 tick 补发；7 个候选点让同波僵尸扇开。最终在 23460 起火时刻统一清除。
- *       <b>本类是四散导航的唯一实现</b>（v0.1.54 删除了 FleeGoal）</li>
+ *       v0.2.90 起直接走回**自己的出生点**（生成时写入 NBT），7 个候选点让同波僵尸扇开——
+ *       不再依赖 Marker 诱饵；路径走完的当 tick 立刻重发，行进中每 20 tick 补发。
+ *       最终在 23460 起火时刻统一清除。<b>本类是四散导航的唯一实现</b>（v0.1.54 删除了 FleeGoal）</li>
  * </ul>
  */
 public class HordeZombieGoal extends Goal {
@@ -120,37 +122,19 @@ public class HordeZombieGoal extends Goal {
             // 永久饿死，导致 state==0 的仇恨刷新失效。
             mob.goalSelector.disableControlFlag(Goal.Flag.MOVE);
 
-            // v0.1.55：四散导航改为「追一个不可见 Marker 诱饵」。
-            // marker 由 scatterZombies 创建，每 tick 沿背离主目标方向移动 0.30 格（略快于僵尸）。
-            // 关键：用 createPath + moveTo(Path) 而不是坐标版 moveTo(x,y,z,speed)——
-            // 后者在 createPath 失败时把 path 置 null，会把僵尸钉住（这正是旧的「走一段停一下」）。
-            net.minecraft.world.entity.Entity marker = HordeFleeMarker.getFor(mob);
-            if (marker == null || !marker.isAlive()) {
-                // marker 未就绪（重启后丢失/尚未创建）：本 tick 不动，
-                // HordeTimer 的四散重扫会在 ≤20 tick 内 ensure 重建。
-                // 【v0.2.75】marker 取不到是「重启后尚未重建」的预期瞬态，
-                // 原「临时日志」用 WARN 每 2 秒刷一次太吵，降级为 debug（诊断能力保留）。
-                // 真正异常（长时间重建失败）由 HordeFleeMarker.sweepOrphans 的兜底处理。
-                if (markerMissingLogTimer++ >= 100) {   // 每 5 秒一次
-                    markerMissingLogTimer = 0;
-                    CompoundTag nbt = mob.getPersistentData();
-                    boolean hasKey = nbt.hasUUID(HordeFleeMarker.NBT_MARKER);
-                    com.enik.zombietide.EnikZombietide.LOGGER.debug(
-                            "僵尸 {} 四散但暂未取到 marker（将在 ≤20 tick 内重建）：NBT 有 key={}, marker UUID={}",
-                            mob.getUUID(), hasKey,
-                            hasKey ? nbt.getUUID(HordeFleeMarker.NBT_MARKER) : "无");
-                }
-                return;
-            }
-            markerMissingLogTimer = 0;
-
+            // v0.2.90：直接走回**自己的出生点**——不再依赖 Marker 诱饵。
+            // 出生点是每只僵尸各自的，天然分散、不用共享锚点、不用每 5 tick 移动诱饵、
+            // 不用重启后重建，性能与可靠性都更好。
+            // 候选点（中心 + 一圈 6 个）让同波僵尸从不同点到达，不会挤成一列。
             var navigation = mob.getNavigation();
-            // 路径走完的当 tick 立刻重发（无空档）；行进中每 20 tick 补发一次（自限流）
             if (navigation.isDone() || ++repathTimer >= REPATH_INTERVAL_TICKS) {
                 repathTimer = 0;
-                Path path = navigation.createPath(HordeFleeMarker.candidates(marker), 1);
-                if (path != null) {
-                    navigation.moveTo(path, 1.1);
+                Set<BlockPos> candidates = spawnCandidates(mob);
+                if (candidates != null) {
+                    Path path = navigation.createPath(candidates, 1);
+                    if (path != null) {
+                        navigation.moveTo(path, 1.1);
+                    }
                 }
             }
             return;
@@ -269,12 +253,31 @@ public class HordeZombieGoal extends Goal {
 
     // ==================== 四散逃跑逻辑 ====================
 
+    /**
+     * 【v0.2.90】出生点周围的候选地面点（中心 + 一圈 6 个），供四散时 createPath 使用。
+     * <p>用候选集合而非单点：A* 会挑离僵尸最近的点，同波僵尸从不同点到达，不会挤成一列。
+     * <p>出生点从 NBT 读（僵尸生成时写入）；老存档僵尸没有该字段 → 返回 null，
+     * 调用方跳过本次导航（它们到 23460 会被直接清除，不会永久卡住）。
+     */
+    private static Set<BlockPos> spawnCandidates(Mob mob) {
+        CompoundTag tag = mob.getPersistentData();
+        if (!tag.contains(HordeSpawner.HORDE_SPAWN_POS_KEY)) return null;
+        BlockPos base = BlockPos.of(tag.getLong(HordeSpawner.HORDE_SPAWN_POS_KEY));
+        Set<BlockPos> set = new HashSet<>();
+        set.add(base);
+        for (int i = 0; i < 6; i++) {
+            double angle = (Math.PI * 2 * i) / 6;
+            int x = base.getX() + (int) Math.round(Math.cos(angle) * 3);
+            int z = base.getZ() + (int) Math.round(Math.sin(angle) * 3);
+            set.add(new BlockPos(x, base.getY(), z));
+        }
+        return set;
+    }
+
     /** 路径行进中的补发间隔（tick）：走完当 tick 会立刻重发，这里只做兜底 */
     private static final int REPATH_INTERVAL_TICKS = 20;
     /** 距上次重发的计时器 */
     private int repathTimer = 0;
-    /** marker 取不到时的日志节流计时器 */
-    private int markerMissingLogTimer = 0;
     /** 「换打其它尸潮触发者」的最大距离（格）：v0.1.66 由 64 增大到 128（约 8 区块） */
     private static final double OTHER_TARGET_MAX_DISTANCE = 128.0;
     /** v0.1.67：所有尸潮目标都没有时，就近强索敌的半径（格），与其它触发者范围保持一致 */

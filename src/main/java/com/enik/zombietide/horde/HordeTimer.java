@@ -54,7 +54,6 @@ public class HordeTimer {
     private static int hudSyncTick = 0;
 
     /** 四散锚点移动计时器（每 5 tick 推进一次，避免每 tick 扫全实体表） */
-    private static int markerTick = 0;
 
     /**
      * 重置所有静态计时器（服务器启动时调用）。
@@ -70,7 +69,6 @@ public class HordeTimer {
         lastDayTime = -1L;
         reconcileTick = 0;
         hudSyncTick = 0;
-        markerTick = 0;
         loggedPlayerDuskCheckThisWindow = false;
         loggedVillagerDuskCheckThisWindow = false;
     }
@@ -197,14 +195,6 @@ public class HordeTimer {
         if (reconcileTick >= 40) {
             reconcileTick = 0;
             HordeSpawner.reconcileStaleWaves(overworld, config);
-            HordeFleeMarker.sweepOrphans(overworld);
-        }
-
-        // ⑧ 四散锚点移动：每 5 tick 推进一次（marker 沿背离目标方向走 0.30 格/tick）
-        markerTick++;
-        if (markerTick >= 5) {
-            markerTick = 0;
-            HordeFleeMarker.tickAll(overworld);
         }
 
         // ⑨ HUD 玩家状态定期同步：waveActive 与血债会随触发/结算实时变化，
