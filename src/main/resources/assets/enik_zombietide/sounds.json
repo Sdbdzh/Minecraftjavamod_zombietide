@@ -14,15 +14,6 @@
       { "name": "enik_zombietide:horde_scatter" }
     ]
   },
-  "horde_bgm": {
-    "sounds": [
-      { "name": "enik_zombietide:bgm_p1", "stream": true },
-      { "name": "enik_zombietide:bgm_p4_1", "stream": true },
-      { "name": "enik_zombietide:bgm_p4_2", "stream": true },
-      { "name": "enik_zombietide:bgm_p4_3", "stream": true },
-      { "name": "enik_zombietide:bgm_p4_4", "stream": true }
-    ]
-  },
   "horde_drone": {
     "sounds": [
       { "name": "enik_zombietide:horde_drone", "stream": true }
