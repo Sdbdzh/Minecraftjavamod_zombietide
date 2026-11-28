@@ -412,6 +412,12 @@ public class HordeTimer {
         boolean enabled = isVillager ? config.villagerHordeEnabled() : config.playerHordeEnabled();
         if (!enabled) return 0.0F;
 
+        // 【v0.2.140】今天已经清场（手动触发或跳变强清）→ 进度归零，DAY X 白色。
+        // 下一次尸潮从明天起算，不能让「今天的日历尸潮日」把进度钉在 1.0。
+        // 这是用户场景的根因补丁：手动触发 DAY5 → 跳变 DAY6 清场 → last=6=modDay →
+        // 旧算法 span<=0 直接返回 1.0 → DAY X 一直全红。
+        if (lastTriggerDay >= 0 && lastTriggerDay == modDay) return 0.0F;
+
         int interval = isVillager ? config.villagerIntervalDays() : config.playerIntervalDays();
         boolean random = isVillager ? config.villagerIntervalRandom() : config.playerIntervalRandom();
         int min = isVillager ? config.villagerIntervalMin() : config.playerIntervalMin();

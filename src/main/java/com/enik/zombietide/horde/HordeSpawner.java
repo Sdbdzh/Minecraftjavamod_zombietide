@@ -1165,19 +1165,25 @@ public class HordeSpawner {
             if (target instanceof ServerPlayer player) {
                 var data = com.enik.zombietide.attachments.ModAttachments.getPlayerHordeData(player);
                 if (data.waveActive()) {
-                    // lastTriggerDay 用 -1（从未触发）而不是 0：
-                    // /time set day 会让 modDay=0，若同时写 0，isHordeDay 的
-                    // `lastTriggerDay == modDay` 会成立 → HUD 的 DAY X 继续显示红色
+                    // 【v0.2.140】跳变清场 = 这天的尸潮已处理完，lastTriggerDay 记为清场当天，
+                    // 让「下一次尸潮」顺延一个周期，DAY X 进度从清场时刻重新起算。
+                    // 旧写法写 -1（从未触发）会让 hordeProgress 的 overdue=true，
+                    // nextHordeDay 钳到当天 → 跳变后进度必为 1.0 → DAY X 一直全红。
+                    // 边界：modDay=0（/time set day）时改回 -1，避免 lastTriggerDay==modDay
+                    // 让 isHordeDay 一直返回 true。
+                    int clearedDay = data.modDay() > 0 ? data.modDay() : -1;
                     player.setData(com.enik.zombietide.attachments.ModAttachments.PLAYER_HORDE.get(),
                             new com.enik.zombietide.attachments.PlayerHordeData(
-                                    data.modDay(), -1, data.waveCount(), false));
+                                    data.modDay(), clearedDay, data.waveCount(), false));
                 }
             } else if (target instanceof net.minecraft.world.entity.npc.Villager villager) {
                 var vData = com.enik.zombietide.attachments.ModAttachments.getVillagerHordeData(villager);
                 if (vData.waveActive()) {
+                    // 【v0.2.140】与玩家侧一致：跳变清场记为当天已处理，顺延下一周期
+                    int clearedVDay = vData.modDay() > 0 ? vData.modDay() : -1;
                     villager.setData(com.enik.zombietide.attachments.ModAttachments.VILLAGER_HORDE.get(),
                             new com.enik.zombietide.attachments.VillagerHordeData(
-                                    vData.modDay(), -1, vData.waveCount(), false));
+                                    vData.modDay(), clearedVDay, vData.waveCount(), false));
                 }
             }
             // 血债已在上方「提前结算」里处理；这里只负责取消待结算标记，
