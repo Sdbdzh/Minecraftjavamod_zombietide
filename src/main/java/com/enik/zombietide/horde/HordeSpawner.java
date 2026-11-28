@@ -62,12 +62,16 @@ public class HordeSpawner {
     public static final String SCREAMER_KEY = "zombietide_screamer";
     /** 尖啸者生成概率 */
     private static final float SCREAMER_CHANCE = 0.05F;
-    /** 尖啸者体积倍率（Attributes.SCALE，原版模型/材质包自动跟随） */
-    private static final double SCREAMER_SCALE = 1.4D;
+    /** 尖啸者体积倍率（Attributes.SCALE，原版模型/材质包自动跟随）
+     *  <p>v0.2.98：1.4 → 1.7。用户反馈 1.4 在僵尸群里"不明显"，1.7 约高出普通僵尸半头到一头。 */
+    private static final double SCREAMER_SCALE = 1.7D;
     /** 尖啸者上次尖叫的游戏 tick（NBT，0 = 从未叫过） */
     public static final String SCREAMER_LAST_TICK_KEY = "zombietide_screamer_last_tick";
-    /** 同一只尖啸者的尖叫冷却：30 秒 = 600 tick */
-    private static final long SCREAMER_COOLDOWN_TICKS = 600L;
+    /** 同一只尖啸者的尖叫冷却：120 秒 = 2400 tick。
+     *  <p><b>为什么不是 30 秒</b>：84 只僵尸 × 5% ≈ 4 只尖啸者，30 秒冷却 + 每次 8~12 只
+     *  → 增援约 1.0 只/秒，而刷怪引擎只有 0.4 只/秒 → 剩余数无限增长（实测 68→154），
+     *  尸潮永远刷不完。120 秒后增援约 0.35 只/秒 < 0.4，才能保证波次会结束。 */
+    private static final long SCREAMER_COOLDOWN_TICKS = 2400L;
 
     /** 供重启/区块重载时恢复尖啸者体积（SCALE 属性不持久化） */
     public static double screamerScale() {
@@ -387,6 +391,12 @@ public class HordeSpawner {
             if (!tag.getBoolean(SCREAMER_KEY)) continue;
             if (tag.getInt(HORDE_STATE_KEY) != 0) continue;   // 四散中的不叫
 
+            // 【v0.2.98】持续标识：头顶一颗 SOUL 缓慢上升，让尖啸者在僵尸群里能被认出来。
+            // 本方法每 20 tick 调一次，SOUL 存活约 1 秒，正好衔接。
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL,
+                    mob.getX(), mob.getY() + mob.getBbHeight() + 0.15, mob.getZ(),
+                    1, 0.08, 0.05, 0.08, 0.005);
+
             long lastScream = tag.getLong(SCREAMER_LAST_TICK_KEY);
             if (lastScream > 0L && now - lastScream < SCREAMER_COOLDOWN_TICKS) continue;
 
@@ -408,6 +418,18 @@ public class HordeSpawner {
                         mob.getX(), mob.getY(), mob.getZ(),
                         net.minecraft.sounds.SoundSource.HOSTILE, 1.0F, 1.0F);
             }
+
+            // 【v0.2.98】尖叫粒子（方案 A + 少量 C）：
+            // 主体 SHRIEK（幽匿尖啸）从身体向上撕裂，暗红尘埃向四周扩散作"血气"点缀。
+            // sendParticles 默认广播 32 格内的玩家，足够看清。
+            double px = mob.getX();
+            double py = mob.getY() + mob.getBbHeight() * 0.5;
+            double pz = mob.getZ();
+            level.sendParticles(new net.minecraft.core.particles.ShriekParticleOption(0),
+                    px, py, pz, 28, 1.5, 0.5, 1.5, 0.02);
+            level.sendParticles(new net.minecraft.core.particles.DustParticleOptions(
+                            new org.joml.Vector3f(0.55F, 0.05F, 0.05F), 0.8F),
+                    px, py, pz, 10, 1.0, 0.4, 1.0, 0.02);
 
             // 追加 8~12 只到现有波次（含该玩家的血债波次）
             int reinforce = 8 + RANDOM.nextInt(5);

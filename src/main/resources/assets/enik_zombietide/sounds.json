@@ -63,12 +63,12 @@
       {
         "name": "enik_zombietide:screamer_1",
         "stream": true,
-        "attenuation_distance": 64
+        "attenuation_distance": 128
       },
       {
         "name": "enik_zombietide:screamer_2",
         "stream": true,
-        "attenuation_distance": 64
+        "attenuation_distance": 128
       }
     ]
   }
