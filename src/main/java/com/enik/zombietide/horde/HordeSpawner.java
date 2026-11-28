@@ -62,9 +62,9 @@ public class HordeSpawner {
     public static final String SCREAMER_KEY = "zombietide_screamer";
     /** 尖啸者生成概率 */
     private static final float SCREAMER_CHANCE = 0.05F;
-    /** 尖啸者体积倍率（Attributes.SCALE，原版模型/材质包自动跟随）
-     *  <p>v0.2.98：1.4 → 1.7。用户反馈 1.4 在僵尸群里"不明显"，1.7 约高出普通僵尸半头到一头。 */
-    private static final double SCREAMER_SCALE = 1.7D;
+    /** 尖啸者体积倍率（Attributes.SCALE，原版模型/材质包自动跟随）。
+     *  <p>v0.2.99：1.7 → 1.4。用户实测 1.7 太大，1.4 合适。辨识度靠头顶 SOUL 粒子 + 尖叫粒子。 */
+    private static final double SCREAMER_SCALE = 1.4D;
     /** 尖啸者上次尖叫的游戏 tick（NBT，0 = 从未叫过） */
     public static final String SCREAMER_LAST_TICK_KEY = "zombietide_screamer_last_tick";
     /** 同一只尖啸者的尖叫冷却：120 秒 = 2400 tick。
