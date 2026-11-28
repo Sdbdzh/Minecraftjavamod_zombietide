@@ -295,10 +295,10 @@
   "zombietide.settings.atmo.item6.name": "Persistent Red Border",
   "zombietide.settings.atmo.item6.desc": "Red vignette during hordes, stronger with more nearby horde zombies",
   "zombietide.settings.atmo.item6.tip": "Visual only, fades away when zombies disperse.",
-  "zombietide.settings.spawn.item13.name": "Screamer Cooldown Base (s)",
-  "zombietide.settings.spawn.item13.desc": "Base cooldown between screams in seconds",
-  "zombietide.settings.spawn.item13.tip": "Default 100s. Range 10-600. Actual cooldown is base +/- jitter. World-level setting.",
-  "zombietide.settings.spawn.item14.name": "Screamer Cooldown Jitter (s)",
-  "zombietide.settings.spawn.item14.desc": "Random +/- seconds added to base cooldown",
-  "zombietide.settings.spawn.item14.tip": "Default 20s (80-120s range). Range 0-300, auto-clamped below base. World-level setting."
+  "zombietide.settings.spawn.item13.name": "Screamer Cooldown Min (s)",
+  "zombietide.settings.spawn.item13.desc": "Minimum cooldown between screams in seconds",
+  "zombietide.settings.spawn.item13.tip": "Default 80s. Range 10-600. Actual cooldown is random between min and max. World-level setting.",
+  "zombietide.settings.spawn.item14.name": "Screamer Cooldown Max (s)",
+  "zombietide.settings.spawn.item14.desc": "Maximum cooldown between screams in seconds",
+  "zombietide.settings.spawn.item14.tip": "Default 120s. Range 10-600, auto-clamped to min if smaller. World-level setting."
 }

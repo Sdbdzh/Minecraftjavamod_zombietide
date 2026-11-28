@@ -424,13 +424,12 @@ public class HordeSpawner {
             if (pending > 0L && now >= pending) {
                 tag.putLong(SCREAMER_PENDING_KEY, 0L);
                 tag.putLong(SCREAMER_LAST_TICK_KEY, now);
-                // 【v0.2.124】从世界配置读冷却（秒→tick），写入 NBT 持久化
-                int baseSec = Math.max(10, config.screamerCooldownBase());
-                int jitterSec = Math.max(0, Math.min(baseSec - 1, config.screamerCooldownJitter()));
-                long baseTicks = baseSec * 20L;
-                long jitterTicks = jitterSec * 20L;
-                tag.putLong(SCREAMER_COOLDOWN_NBT_KEY,
-                        baseTicks - jitterTicks + RANDOM.nextInt((int) (jitterTicks * 2L + 1)));
+                // 【v0.2.125】从世界配置读冷却最小/最大秒数（秒→tick），区间内随机
+                int minSec = Math.max(10, config.screamerCooldownMin());
+                int maxSec = Math.max(minSec, config.screamerCooldownMax());
+                int spanTicks = (maxSec - minSec) * 20;
+                long cooldownTicks = minSec * 20L + (spanTicks > 0 ? RANDOM.nextInt(spanTicks + 1) : 0L);
+                tag.putLong(SCREAMER_COOLDOWN_NBT_KEY, cooldownTicks);
 
                 // 爆发：SHRIEK 向外炸开 + 三层 SONIC_BOOM 同心波 + 暗红尘雾
                 level.sendParticles(new net.minecraft.core.particles.ShriekParticleOption(0),

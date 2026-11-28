@@ -130,8 +130,8 @@ public record ZombietideConfig(
             float distanceWeight,
             float darkWeight,
             boolean screamerEnabled,
-            int screamerCooldownBase,
-            int screamerCooldownJitter
+            int screamerCooldownMin,
+            int screamerCooldownMax
     ) {
         public static final Codec<SpawnConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.INT.fieldOf("batchTick").forGetter(SpawnConfig::batchTick),
@@ -145,8 +145,8 @@ public record ZombietideConfig(
                 Codec.FLOAT.fieldOf("distanceWeight").forGetter(SpawnConfig::distanceWeight),
                 Codec.FLOAT.fieldOf("darkWeight").forGetter(SpawnConfig::darkWeight),
                 Codec.BOOL.optionalFieldOf("screamerEnabled", true).forGetter(SpawnConfig::screamerEnabled),
-                Codec.INT.optionalFieldOf("screamerCooldownBase", 100).forGetter(SpawnConfig::screamerCooldownBase),
-                Codec.INT.optionalFieldOf("screamerCooldownJitter", 20).forGetter(SpawnConfig::screamerCooldownJitter)
+                Codec.INT.optionalFieldOf("screamerCooldownMin", 80).forGetter(SpawnConfig::screamerCooldownMin),
+                Codec.INT.optionalFieldOf("screamerCooldownMax", 120).forGetter(SpawnConfig::screamerCooldownMax)
         ).apply(instance, SpawnConfig::new));
 
         /**
@@ -154,22 +154,22 @@ public record ZombietideConfig(
          * 半径本身就是最远落点距离。
          */
         public static SpawnConfig defaults() {
-            return new SpawnConfig(200, 4, 2, 150, 150, true, 60, 120, 0.6f, 0.6f, true, 100, 20);
+            return new SpawnConfig(200, 4, 2, 150, 150, true, 60, 120, 0.6f, 0.6f, true, 80, 120);
         }
 
-        public SpawnConfig withBatchTick(int v) { return new SpawnConfig(v, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownBase, screamerCooldownJitter); }
-        public SpawnConfig withBatchSize(int v) { return new SpawnConfig(batchTick, v, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownBase, screamerCooldownJitter); }
-        public SpawnConfig withVillagerBatchSize(int v) { return new SpawnConfig(batchTick, batchSize, v, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownBase, screamerCooldownJitter); }
-        public SpawnConfig withPlayerRadius(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, v, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownBase, screamerCooldownJitter); }
-        public SpawnConfig withVillagerRadius(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, v, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownBase, screamerCooldownJitter); }
-        public SpawnConfig withSpawnByBiome(boolean v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, v, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownBase, screamerCooldownJitter); }
-        public SpawnConfig withMinSpawnDist(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, v, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownBase, screamerCooldownJitter); }
-        public SpawnConfig withSpawnAttempts(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, v, distanceWeight, darkWeight, screamerEnabled, screamerCooldownBase, screamerCooldownJitter); }
-        public SpawnConfig withDistanceWeight(float v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, v, darkWeight, screamerEnabled, screamerCooldownBase, screamerCooldownJitter); }
-        public SpawnConfig withDarkWeight(float v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, v, screamerEnabled, screamerCooldownBase, screamerCooldownJitter); }
-        public SpawnConfig withScreamerEnabled(boolean v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, v, screamerCooldownBase, screamerCooldownJitter); }
-        public SpawnConfig withScreamerCooldownBase(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, v, screamerCooldownJitter); }
-        public SpawnConfig withScreamerCooldownJitter(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownBase, v); }
+        public SpawnConfig withBatchTick(int v) { return new SpawnConfig(v, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownMin, screamerCooldownMax); }
+        public SpawnConfig withBatchSize(int v) { return new SpawnConfig(batchTick, v, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownMin, screamerCooldownMax); }
+        public SpawnConfig withVillagerBatchSize(int v) { return new SpawnConfig(batchTick, batchSize, v, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownMin, screamerCooldownMax); }
+        public SpawnConfig withPlayerRadius(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, v, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownMin, screamerCooldownMax); }
+        public SpawnConfig withVillagerRadius(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, v, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownMin, screamerCooldownMax); }
+        public SpawnConfig withSpawnByBiome(boolean v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, v, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownMin, screamerCooldownMax); }
+        public SpawnConfig withMinSpawnDist(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, v, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownMin, screamerCooldownMax); }
+        public SpawnConfig withSpawnAttempts(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, v, distanceWeight, darkWeight, screamerEnabled, screamerCooldownMin, screamerCooldownMax); }
+        public SpawnConfig withDistanceWeight(float v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, v, darkWeight, screamerEnabled, screamerCooldownMin, screamerCooldownMax); }
+        public SpawnConfig withDarkWeight(float v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, v, screamerEnabled, screamerCooldownMin, screamerCooldownMax); }
+        public SpawnConfig withScreamerEnabled(boolean v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, v, screamerCooldownMin, screamerCooldownMax); }
+        public SpawnConfig withScreamerCooldownMin(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, v, screamerCooldownMax); }
+        public SpawnConfig withScreamerCooldownMax(int v) { return new SpawnConfig(batchTick, batchSize, villagerBatchSize, playerRadius, villagerRadius, spawnByBiome, minSpawnDist, spawnAttempts, distanceWeight, darkWeight, screamerEnabled, screamerCooldownMin, v); }
     }
 
     public record WorldConfig(
@@ -325,8 +325,8 @@ public record ZombietideConfig(
     public float distanceWeight() { return spawn.distanceWeight(); }
     public float darkWeight() { return spawn.darkWeight(); }
     public boolean screamerEnabled() { return spawn.screamerEnabled(); }
-    public int screamerCooldownBase() { return spawn.screamerCooldownBase(); }
-    public int screamerCooldownJitter() { return spawn.screamerCooldownJitter(); }
+    public int screamerCooldownMin() { return spawn.screamerCooldownMin(); }
+    public int screamerCooldownMax() { return spawn.screamerCooldownMax(); }
 
     public int globalCap() { return world.globalCap(); }
     public boolean daylightBurn() { return world.daylightBurn(); }
@@ -429,8 +429,8 @@ public record ZombietideConfig(
     public ZombietideConfig withDistanceWeight(float v) { return withSpawn(spawn.withDistanceWeight(v)); }
     public ZombietideConfig withDarkWeight(float v) { return withSpawn(spawn.withDarkWeight(v)); }
     public ZombietideConfig withScreamerEnabled(boolean v) { return withSpawn(spawn.withScreamerEnabled(v)); }
-    public ZombietideConfig withScreamerCooldownBase(int v) { return withSpawn(spawn.withScreamerCooldownBase(v)); }
-    public ZombietideConfig withScreamerCooldownJitter(int v) { return withSpawn(spawn.withScreamerCooldownJitter(v)); }
+    public ZombietideConfig withScreamerCooldownMin(int v) { return withSpawn(spawn.withScreamerCooldownMin(v)); }
+    public ZombietideConfig withScreamerCooldownMax(int v) { return withSpawn(spawn.withScreamerCooldownMax(v)); }
 
     // WorldConfig wither
     public ZombietideConfig withGlobalCap(int v) { return withWorld(world.withGlobalCap(v)); }
