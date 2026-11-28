@@ -234,7 +234,7 @@ public class HordeSpawner {
 
     /** 每 tick 更新尸潮刷怪状态（分批生成）+ 更新四散僵尸计时器 */
     public static void update(ServerLevel level, ZombietideConfig config) {
-        // 【v0.3.00】尖啸者检查：每 5 tick 扫一次（三段式粒子需要更细的时间粒度）
+        // 【v0.2.100】尖啸者检查：每 5 tick 扫一次（三段式粒子需要更细的时间粒度）
         if (level.getGameTime() % 5L == 0L) {
             checkScreamers(level, config);
         }
