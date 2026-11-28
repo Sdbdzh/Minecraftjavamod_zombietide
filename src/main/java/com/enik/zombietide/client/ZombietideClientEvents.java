@@ -41,6 +41,8 @@ public class ZombietideClientEvents {
     public static void onLoggingOut(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
         ZombietideHud.clearAllSynced();
         ZombietideAtmosphere.reset();
+        // 【v0.2.137】清空上一台服务器的权限，避免换服后误判为 OP
+        com.enik.zombietide.network.ClientPermission.reset();
     }
 
     /** 按键输入：按下设置键时，仅在游戏内打开模组设置界面（game bus）；防止重复打开多个设置界面

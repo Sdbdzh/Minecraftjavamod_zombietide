@@ -66,6 +66,8 @@ public class ZombietideServerEvents {
         HordeBgmScheduler.onPlayerLogout(event.getEntity().getUUID());
         HordeThreatDetector.onPlayerLogout(event.getEntity().getUUID());
         HordeOmenScheduler.onPlayerLogout(event.getEntity().getUUID());
+        // 【v0.2.137】权限下发缓存清理
+        ModMessages.clearPermissionCache(event.getEntity().getUUID());
     }
 
     /** 玩家登入：将当前配置发送给客户端，同步模组天数 */
@@ -80,6 +82,8 @@ public class ZombietideServerEvents {
         ZombietideConfigData data = ConfigManager.getConfigData(level);
         ZombietideConfig config = data.getConfig();
         ModMessages.broadcastConfig(config);
+        // 【v0.2.137】权限是每人不同的，不能随配置广播——单独下发给刚登录的玩家
+        ModMessages.sendPermission(player);
         
         // 【调试】打印完整配置信息到日志
         EnikZombietide.LOGGER.info("=== Zombietide 玩家加入配置同步 ===");
@@ -245,6 +249,11 @@ public class ZombietideServerEvents {
 
         // 尸潮威胁检测（v0.2.86）：玩家被尸潮僵尸锁定 → 氛围/音频统一激活（3 秒去抖）
         HordeThreatDetector.onServerTick(overworld, data.getConfig(), overworld.getGameTime());
+
+        // 【v0.2.137】权限实时刷新：op/deop 后每 20 tick 比对一次，变化才发包
+        if (overworld.getGameTime() % 20L == 0L) {
+            ModMessages.refreshPermissions();
+        }
 
         // 定制背景音乐调度（drone 由威胁态驱动，v0.2.86）
         HordeBgmScheduler.onServerTick(overworld, data.getConfig());

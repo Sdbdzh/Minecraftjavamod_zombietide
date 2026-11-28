@@ -227,8 +227,16 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
     protected void init() {
         super.init();
         this.worldLoaded = this.minecraft != null && this.minecraft.level != null && this.minecraft.player != null;
+        // 【v0.2.137】兜底：单人/局域网世界若登录事件未下发权限包，本地玩家即房主。
+        // 专用服务器绝不能走这条分支——权限必须由服务端下发。
+        if (this.minecraft != null && this.minecraft.hasSingleplayerServer()
+                && !com.enik.zombietide.network.ClientPermission.received()) {
+            com.enik.zombietide.network.ClientPermission.set(4, true);
+        }
         this.hudConfig = ClientHudConfig.get();
         this.dayGradientRed = ClientHudConfig.dayGradientRed();
+        // 【v0.2.137】若默认页对当前权限不可见，回退到第一个可见分类
+        this.currentTab = resolveInitialTab();
         this.scrollOffset = 0;
         this.rebuildWidgets();
     }
@@ -371,10 +379,12 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         // 滑动范围完全由「图片绘制宽度 - 屏幕宽度」决定
         float maxScroll = Math.max(0.0F, drawW - w);
 
-        int tabCount = SettingsCategory.values().length;
-        // 进度 0 = 第一个分页（图片左边缘）；1 = 最后一个分页（图片右边缘）；中间按比例
+        // 【v0.2.137】按可见分类计算进度，普通玩家只滚本机配置那一段
+        java.util.List<SettingsCategory> visible = visibleCategories();
+        int tabCount = visible.size();
+        int tabIndex = visible.indexOf(this.currentTab);
         float progress = tabCount <= 1 ? 0.0F
-                : this.currentTab.ordinal() / (float) (tabCount - 1);
+                : (tabIndex < 0 ? 0 : tabIndex) / (float) (tabCount - 1);
         float target = maxScroll * progress;
 
         if (!this.bgScrollReady) {
@@ -404,6 +414,13 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         // 标题垂直居中于 56px 顶栏（原 y=6 在加高后过于靠上）
         guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, (CONTENT_TOP - 8) / 2, 0xFFFFFF);
 
+        // 【v0.2.137】左上角权限标识：房主 / OP N / 普通玩家
+        int permissionX = 8;
+        int permissionY = (CONTENT_TOP - 8) / 2;
+        guiGraphics.drawString(this.font,
+                Component.literal(com.enik.zombietide.network.ClientPermission.label()),
+                permissionX, permissionY, 0xFFFFFF, false);
+
         // 【P4】搜索框（固定顶栏右侧）
         if (this.searchBox != null) {
             // 搜索框垂直居中于顶栏
@@ -423,13 +440,14 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         // ===== 左侧分类栏：Sodium 风格扁平项（自绘，无原版按钮纹理） =====
         // 对齐《设置页重构方案》3.1：分类名左对齐 + 选项数量右对齐灰字；
         // 选中 = 淡橙底 + 左侧 3px 实橙条；未选中悬停 = 淡白底。
-        SettingsCategory[] cats = SettingsCategory.values();
-        for (int i = 0; i < cats.length; i++) {
+        java.util.List<SettingsCategory> cats = visibleCategories();
+        for (int i = 0; i < cats.size(); i++) {
+            SettingsCategory cat = cats.get(i);
             int ix = SIDEBAR_X;
             int iy = sidebarItemY(i);
             int iw = SIDEBAR_WIDTH;
             int ih = SIDEBAR_ITEM_H;
-            boolean selected = i == this.currentTab.ordinal();
+            boolean selected = cat == this.currentTab;
             boolean hovered = mouseX >= ix && mouseX < ix + iw
                     && mouseY >= iy && mouseY < iy + ih;
 
@@ -440,9 +458,9 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
                 guiGraphics.fill(ix, iy, ix + iw, iy + ih, 0x26FFFFFF);
             }
 
-            guiGraphics.drawString(this.font, (selected ? "§f§l" : "§7") + tr(cats[i].key()),
+            guiGraphics.drawString(this.font, (selected ? "§f§l" : "§7") + tr(cat.key()),
                     ix + 10, iy + 7, 0xFFFFFF, false);
-            String cnt = String.valueOf(optionCountOf(cats[i]));
+            String cnt = String.valueOf(optionCountOf(cat));
             guiGraphics.drawString(this.font, "§8" + cnt,
                     ix + iw - 9 - this.font.width(cnt), iy + 7, 0xFFFFFF, false);
         }
@@ -642,13 +660,13 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
 
         if (button == 0) {
             // 侧栏分类（自绘，按矩形命中）
-            SettingsCategory[] clickCats = SettingsCategory.values();
-            for (int i = 0; i < clickCats.length; i++) {
+            java.util.List<SettingsCategory> clickCats = visibleCategories();
+            for (int i = 0; i < clickCats.size(); i++) {
                 int iy = sidebarItemY(i);
                 if (mouseX >= SIDEBAR_X && mouseX < SIDEBAR_X + SIDEBAR_WIDTH
                         && mouseY >= iy && mouseY < iy + SIDEBAR_ITEM_H) {
                     this.setFocused(null);
-                    this.currentTab = clickCats[i];
+                    this.currentTab = clickCats.get(i);
                     this.scrollOffset = 0;
                     clearSearch();
                     this.rebuildWidgets();
@@ -768,6 +786,39 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
+    // ==================== 权限过滤（v0.2.137） ====================
+
+    /**
+     * 判断某个分类对当前玩家是否可见。
+     * <p>存档级配置（玩家/村民/生成/世界/警告）只有 OP2+ 或单机房主能改——
+     * 普通玩家连标签栏按钮都看不到，就像不存在一样。
+     * 本机配置（HUD/氛围）纯客户端，人人可见。
+     * <p>权限包未收到时按普通玩家处理（保守，避免误显示）。
+     */
+    private boolean isCategoryVisible(SettingsCategory cat) {
+        return switch (cat) {
+            case PLAYER, VILLAGER, SPAWN, WORLD, WARNING ->
+                    com.enik.zombietide.network.ClientPermission.canModifyWorldConfig();
+            case HUD, ATMO -> true;
+        };
+    }
+
+    /** 当前玩家可见的分类（按枚举顺序） */
+    private java.util.List<SettingsCategory> visibleCategories() {
+        java.util.List<SettingsCategory> out = new ArrayList<>();
+        for (SettingsCategory cat : SettingsCategory.values()) {
+            if (isCategoryVisible(cat)) out.add(cat);
+        }
+        return out;
+    }
+
+    /** 若当前分类因权限不可见，回退到第一个可见分类 */
+    private SettingsCategory resolveInitialTab() {
+        if (isCategoryVisible(this.currentTab)) return this.currentTab;
+        java.util.List<SettingsCategory> visible = visibleCategories();
+        return visible.isEmpty() ? SettingsCategory.HUD : visible.get(0);
+    }
+
     // ==================== 搜索（P4） ====================
 
     private boolean isSearching() {
@@ -784,7 +835,7 @@ public class ZombietideSettingsScreen extends Screen implements SettingsHost {
         }
         String q = this.searchQuery.trim().toLowerCase(Locale.ROOT);
         List<SettingRow> out = new ArrayList<>();
-        for (SettingsCategory cat : SettingsCategory.values()) {
+        for (SettingsCategory cat : visibleCategories()) {
             for (SettingRow row : SettingsRegistry.rowsFor(cat)) {
                 if (row instanceof SettingRow.OptionRow optRow) {
                     OptionEntry e = optRow.entry();

@@ -30,12 +30,19 @@ import java.util.UUID;
 @EventBusSubscriber(modid = EnikZombietide.MODID, bus = EventBusSubscriber.Bus.MOD)
 public class ModMessages {
 
+    /** 【v0.2.137】权限下发缓存：UUID -> "level:host"，只在变化时发包，避免每 tick 刷屏 */
+    private static final java.util.Map<java.util.UUID, String> LAST_PERMISSION_SENT =
+            new java.util.HashMap<>();
+
     /** 客户端 -> 服务端：请求同步配置（独立 ID，避免与下行方向冲突） */
     public static final ResourceLocation CONFIG_TO_SERVER_ID = ResourceLocation.fromNamespaceAndPath(
             "enik_zombietide", "config_to_server");
     /** 服务端 -> 客户端：广播配置 */
     public static final ResourceLocation CONFIG_TO_CLIENT_ID = ResourceLocation.fromNamespaceAndPath(
             "enik_zombietide", "config_to_client");
+    /** 【v0.2.137】服务端 -> 客户端：当前玩家权限（单独发，不能随广播配置） */
+    public static final ResourceLocation PERMISSION_ID = ResourceLocation.fromNamespaceAndPath(
+            "enik_zombietide", "permission");
 
     /** 客户端 -> 服务端：请求同步配置 */
     public record ConfigToServerPayload(ZombietideConfig config) implements CustomPacketPayload {
@@ -56,6 +63,26 @@ public class ModMessages {
 
         public static final StreamCodec<FriendlyByteBuf, ConfigToClientPayload> STREAM_CODEC =
                 ConfigCodec.STREAM_CODEC.map(ConfigToClientPayload::new, ConfigToClientPayload::config);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * 【v0.2.137】服务端 -> 客户端：当前玩家的服务端权限。
+     * <p>{@code level} = 0~4；{@code host} = 单机房主。
+     * <p>单独发给每个玩家——配置广播是全员相同的，权限却是每人不同的。
+     */
+    public record PermissionPayload(int level, boolean host) implements CustomPacketPayload {
+        public static final Type<PermissionPayload> TYPE = new Type<>(PERMISSION_ID);
+
+        public static final StreamCodec<FriendlyByteBuf, PermissionPayload> STREAM_CODEC =
+                StreamCodec.composite(
+                        net.minecraft.network.codec.ByteBufCodecs.VAR_INT, PermissionPayload::level,
+                        net.minecraft.network.codec.ByteBufCodecs.BOOL, PermissionPayload::host,
+                        PermissionPayload::new);
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
@@ -536,6 +563,13 @@ public class ModMessages {
                                 ZombietideHud.onConfigReceived(payload.config());
                             });
                         })
+                // 【v0.2.137】服务端 -> 客户端：当前玩家权限
+                .playToClient(PermissionPayload.TYPE, PermissionPayload.STREAM_CODEC,
+                        (payload, context) -> {
+                            context.enqueueWork(() -> {
+                                ClientPermission.set(payload.level(), payload.host());
+                            });
+                        })
                 // 服务端 -> 客户端：玩家模组天数同步
                 .playToClient(PlayerModDayPayload.TYPE, PlayerModDayPayload.STREAM_CODEC,
                         (payload, context) -> {
@@ -598,6 +632,49 @@ public class ModMessages {
     }
 
     /** 服务端主动广播配置给所有在线客户端（例如服务器启动时同步给新登录玩家） */
+    /**
+     * 【v0.2.137】给单个玩家下发权限（登录时调用；与配置广播分开）。
+     * <p>判定口径必须与 ConfigToServerPayload 的校验一致：
+     * 单机房主（UUID 匹配 singleplayerProfile）或 OP 2+。
+     */
+    public static void sendPermission(ServerPlayer player) {
+        sendPermissionIfChanged(player, true);
+    }
+
+    /**
+     * 【v0.2.137】op/deop 后实时刷新：每 20 tick 比对一次，变化才发。
+     */
+    public static void refreshPermissions() {
+        if (ServerLifecycleHooks.getCurrentServer() == null) return;
+        for (ServerPlayer player : ServerLifecycleHooks.getCurrentServer().getPlayerList().getPlayers()) {
+            sendPermissionIfChanged(player, false);
+        }
+    }
+
+    private static void sendPermissionIfChanged(ServerPlayer player, boolean force) {
+        net.minecraft.server.MinecraftServer server = player.server;
+        boolean isHost = server.isSingleplayer()
+                && server.getSingleplayerProfile() != null
+                && player.getUUID().equals(server.getSingleplayerProfile().getId());
+        // ServerPlayer 只暴露 hasPermissions(int)，从高到低反推等级
+        int level = 0;
+        for (int candidate = 4; candidate >= 1; candidate--) {
+            if (player.hasPermissions(candidate)) {
+                level = candidate;
+                break;
+            }
+        }
+        String key = level + ":" + isHost;
+        if (!force && key.equals(LAST_PERMISSION_SENT.get(player.getUUID()))) return;
+        LAST_PERMISSION_SENT.put(player.getUUID(), key);
+        PacketDistributor.sendToPlayer(player, new PermissionPayload(level, isHost));
+    }
+
+    /** 玩家登出时清缓存 */
+    public static void clearPermissionCache(java.util.UUID playerId) {
+        LAST_PERMISSION_SENT.remove(playerId);
+    }
+
     public static void broadcastConfig(ZombietideConfig config) {
         if (ServerLifecycleHooks.getCurrentServer() != null) {
             PacketDistributor.sendToAllPlayers(new ConfigToClientPayload(config));
